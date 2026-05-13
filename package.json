@@ -1,4 +1,16 @@
 {
+  "name": "quantagent",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "lint": "oxlint apps/web",
+    "lint:fix": "oxlint --fix apps/web",
+    "fmt": "oxfmt apps/web",
+    "fmt:check": "oxfmt --check apps/web"
+  },
   "dependencies": {
     "@heroui/react": "^3.0.4",
     "@heroui/styles": "^3.0.4",
@@ -12,6 +24,7 @@
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.5.0",
     "oxfmt": "^0.49.0",
+    "oxlint": "^1.64.0",
     "postcss": "^8.5.14",
     "tailwindcss": "^4.3.0"
   }
