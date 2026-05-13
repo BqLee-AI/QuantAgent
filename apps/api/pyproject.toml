@@ -1,0 +1,21 @@
+[project]
+name = "quantagent_api"
+version = "0.1.0"
+description = "QuantAgent API service"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi[standard]>=0.115.0",
+    "pydantic-settings>=2.6.0",
+]
+
+[project.scripts]
+api = "quantagent_api.main:run"
+
+[tool.uv.build-backend]
+module-root = ""
+module-name = "quantagent_api"
+
+[build-system]
+requires = ["uv_build>=0.11.14,<0.12"]
+build-backend = "uv_build"
