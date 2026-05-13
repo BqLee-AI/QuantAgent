@@ -4,7 +4,6 @@
     "@heroui/styles": "^3.0.4",
     "@tailwindcss/vite": "^4.3.0",
     "@tanstack/react-router": "^1.169.2",
-    "@tanstack/react-router-devtools": "^1.166.13",
     "framer-motion": "^12.38.0",
     "zod": "^4.4.3"
   },
