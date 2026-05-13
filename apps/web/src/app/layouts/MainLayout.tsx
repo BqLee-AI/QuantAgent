@@ -18,17 +18,17 @@ function Breadcrumbs() {
   if (matches.length === 0) return null
 
   return (
-    <nav className="flex items-center gap-1.5 text-sm text-gray-500">
-      <Link to="/" className="hover:text-gray-900">
+    <nav className="flex items-center gap-1.5 text-body-sm text-muted">
+      <Link to="/" className="transition-colors hover:text-ink">
         Home
       </Link>
       {matches.map((segment, i) => (
         <span key={i} className="flex items-center gap-1.5">
-          <span className="text-gray-300">/</span>
+          <span className="text-hairline-dark">/</span>
           <span
             className={cn(
               'capitalize',
-              i === matches.length - 1 ? 'text-gray-900 font-medium' : 'hover:text-gray-900',
+              i === matches.length - 1 ? 'font-medium text-ink' : 'transition-colors hover:text-ink',
             )}
           >
             {segment}
@@ -49,22 +49,22 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
       {/* Mobile overlay */}
       {open && (
         <div
-          className="fixed inset-0 z-40 bg-black/30 md:hidden"
+          className="fixed inset-0 z-40 bg-ink/20 backdrop-blur-[2px] md:hidden"
           onClick={onClose}
         />
       )}
 
       <aside
         className={cn(
-          'fixed left-0 top-0 z-50 flex h-screen w-[240px] flex-col border-r border-gray-200 bg-white transition-transform md:static md:z-30 md:translate-x-0',
+          'fixed left-0 top-0 z-50 flex h-screen w-[248px] flex-col border-r border-hairline-light bg-canvas-light transition-transform md:static md:z-30 md:translate-x-0',
           open ? 'translate-x-0' : '-translate-x-full',
         )}
       >
-        <div className="flex h-[56px] items-center gap-2.5 border-b border-gray-200 px-5">
-          <span className="text-lg font-bold text-blue-500">◆</span>
-          <span className="text-base font-bold text-gray-900">QuantAgent</span>
+        <div className="flex h-16 items-center gap-2.5 border-b border-hairline-light px-5">
+          <span className="text-lg font-bold text-primary">◆</span>
+          <span className="text-base font-semibold text-ink">QuantAgent</span>
           <button
-            className="ml-auto text-gray-400 hover:text-gray-600 md:hidden"
+            className="ml-auto text-muted transition-colors hover:text-ink md:hidden"
             onClick={onClose}
           >
             ✕
@@ -81,13 +81,13 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
                 to={item.to}
                 onClick={onClose}
                 className={cn(
-                  'flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  'flex items-center gap-2.5 rounded-lg border border-transparent px-3 py-2.5 text-body-md font-medium transition-colors',
                   isActive
-                    ? 'bg-blue-50 text-blue-600'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900',
+                    ? 'border-hairline-light bg-surface-card text-ink'
+                    : 'text-muted-strong hover:bg-surface-soft hover:text-ink',
                 )}
               >
-                <span className="text-base">{item.icon}</span>
+                <span className={cn('text-base', isActive ? 'text-primary' : 'text-muted')}>{item.icon}</span>
                 {item.label}
               </Link>
             )
@@ -103,12 +103,12 @@ export function MainLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
 
   return (
-    <div className="min-h-screen bg-gray-50 md:flex">
+    <div className="min-h-screen bg-surface-soft md:flex">
       <Sidebar open={drawerOpen} onClose={() => setDrawerOpen(false)} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-[56px] items-center border-b border-gray-200 bg-white px-4 md:px-6">
+        <header className="sticky top-0 z-20 flex h-16 items-center border-b border-hairline-light bg-canvas-light/95 px-4 backdrop-blur md:px-6">
           <button
-            className="mr-3 text-gray-600 hover:text-gray-900 md:hidden"
+            className="mr-3 text-muted-strong transition-colors hover:text-ink md:hidden"
             onClick={() => setDrawerOpen(true)}
           >
             ☰
