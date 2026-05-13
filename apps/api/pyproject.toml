@@ -5,8 +5,8 @@ description = "QuantAgent API service"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi[standard]>=0.115.0",
-    "pydantic-settings>=2.6.0",
+    "fastapi[standard]>=0.136.1",
+    "pydantic-settings>=2.14.1",
 ]
 
 [project.scripts]
