@@ -1,14 +1,14 @@
 @config "../tailwind.config.ts";
-@import "@heroui/styles";
+@import '@heroui/styles';
 
 :root {
   color-scheme: light;
 
   --qa-font-display:
-    "BinanceNova", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    'BinanceNova', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
     Arial, sans-serif;
   --qa-font-numeric:
-    "BinancePlex", "IBM Plex Sans", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+    'BinancePlex', 'IBM Plex Sans', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco,
     Consolas, monospace;
 
   --qa-color-primary: #3b82f6;
