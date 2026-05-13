@@ -5,25 +5,11 @@
   color-scheme: light;
 
   --qa-font-display:
-    "BinanceNova",
-    Inter,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Segoe UI",
-    Roboto,
-    "Helvetica Neue",
-    Arial,
-    sans-serif;
+    "BinanceNova", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
   --qa-font-numeric:
-    "BinancePlex",
-    "IBM Plex Sans",
-    "JetBrains Mono",
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Monaco,
-    Consolas,
-    monospace;
+    "BinancePlex", "IBM Plex Sans", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
 
   --qa-color-primary: #3b82f6;
   --qa-color-primary-active: #2563eb;
@@ -194,7 +180,11 @@
   }
 
   .qa-badge-approval-expiring {
-    background: color-mix(in srgb, var(--qa-color-approval-expiring) 14%, var(--qa-color-canvas-light));
+    background: color-mix(
+      in srgb,
+      var(--qa-color-approval-expiring) 14%,
+      var(--qa-color-canvas-light)
+    );
     color: var(--qa-color-approval-expiring);
   }
 
