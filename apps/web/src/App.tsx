@@ -1,11 +1,14 @@
-import { Button } from '@heroui/react'
+import { createRouter, RouterProvider } from '@tanstack/react-router'
+import { routeTree } from './routeTree.gen'
 
-function App() {
-  return (
-    <div className="flex min-h-screen items-center justify-center">
-      <Button>QuantAgent Start</Button>
-    </div>
-  )
+const router = createRouter({ routeTree })
+
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: typeof router
+  }
 }
 
-export default App
+export default function App() {
+  return <RouterProvider router={router} />
+}
