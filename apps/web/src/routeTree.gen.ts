@@ -11,7 +11,6 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as SettingsIndexRouteImport } from './routes/settings/index'
-import { Route as RuntimeIndexRouteImport } from './routes/runtime/index'
 import { Route as PluginsIndexRouteImport } from './routes/plugins/index'
 import { Route as EventsIndexRouteImport } from './routes/events/index'
 import { Route as ApprovalsIndexRouteImport } from './routes/approvals/index'
@@ -24,11 +23,6 @@ const IndexRoute = IndexRouteImport.update({
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
   id: '/settings/',
   path: '/settings/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RuntimeIndexRoute = RuntimeIndexRouteImport.update({
-  id: '/runtime/',
-  path: '/runtime/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PluginsIndexRoute = PluginsIndexRouteImport.update({
@@ -52,7 +46,6 @@ export interface FileRoutesByFullPath {
   '/approvals/': typeof ApprovalsIndexRoute
   '/events/': typeof EventsIndexRoute
   '/plugins/': typeof PluginsIndexRoute
-  '/runtime/': typeof RuntimeIndexRoute
   '/settings/': typeof SettingsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -60,7 +53,6 @@ export interface FileRoutesByTo {
   '/approvals': typeof ApprovalsIndexRoute
   '/events': typeof EventsIndexRoute
   '/plugins': typeof PluginsIndexRoute
-  '/runtime': typeof RuntimeIndexRoute
   '/settings': typeof SettingsIndexRoute
 }
 export interface FileRoutesById {
@@ -69,28 +61,14 @@ export interface FileRoutesById {
   '/approvals/': typeof ApprovalsIndexRoute
   '/events/': typeof EventsIndexRoute
   '/plugins/': typeof PluginsIndexRoute
-  '/runtime/': typeof RuntimeIndexRoute
   '/settings/': typeof SettingsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/approvals/'
-    | '/events/'
-    | '/plugins/'
-    | '/runtime/'
-    | '/settings/'
+  fullPaths: '/' | '/approvals/' | '/events/' | '/plugins/' | '/settings/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/approvals' | '/events' | '/plugins' | '/runtime' | '/settings'
-  id:
-    | '__root__'
-    | '/'
-    | '/approvals/'
-    | '/events/'
-    | '/plugins/'
-    | '/runtime/'
-    | '/settings/'
+  to: '/' | '/approvals' | '/events' | '/plugins' | '/settings'
+  id: '__root__' | '/' | '/approvals/' | '/events/' | '/plugins/' | '/settings/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -98,7 +76,6 @@ export interface RootRouteChildren {
   ApprovalsIndexRoute: typeof ApprovalsIndexRoute
   EventsIndexRoute: typeof EventsIndexRoute
   PluginsIndexRoute: typeof PluginsIndexRoute
-  RuntimeIndexRoute: typeof RuntimeIndexRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
@@ -116,13 +93,6 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings/'
       preLoaderRoute: typeof SettingsIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/runtime/': {
-      id: '/runtime/'
-      path: '/runtime'
-      fullPath: '/runtime/'
-      preLoaderRoute: typeof RuntimeIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/plugins/': {
@@ -154,7 +124,6 @@ const rootRouteChildren: RootRouteChildren = {
   ApprovalsIndexRoute: ApprovalsIndexRoute,
   EventsIndexRoute: EventsIndexRoute,
   PluginsIndexRoute: PluginsIndexRoute,
-  RuntimeIndexRoute: RuntimeIndexRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }
 export const routeTree = rootRouteImport
