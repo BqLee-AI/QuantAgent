@@ -10,4 +10,4 @@ app.include_router(health_router, prefix=settings.API_V1_PREFIX)
 def run() -> None:
     import uvicorn
 
-    uvicorn.run("quantagent_api.main:app", host="0.0.0.0", port=8000)
+    uvicorn.run("quantagent_api.main:app", host=settings.HOST, port=settings.PORT)
