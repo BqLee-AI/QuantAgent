@@ -8,6 +8,7 @@ export const Route = createFileRoute('/settings/')({
   component: SettingsPage,
 })
 
+/** App settings — application configuration and user preferences. */
 function SettingsPage() {
   return (
     <div>

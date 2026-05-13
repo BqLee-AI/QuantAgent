@@ -8,6 +8,7 @@ export const Route = createFileRoute('/runtime/')({
   component: RuntimePage,
 })
 
+/** Runtime dashboard — shows agent run status and tool invocation overview. */
 function RuntimePage() {
   return (
     <div>

@@ -8,6 +8,7 @@ export const Route = createFileRoute('/events/')({
   component: EventsPage,
 })
 
+/** Events inbox page — lists incoming market events for review. */
 function EventsPage() {
   return (
     <div>

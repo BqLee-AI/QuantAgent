@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { to: '/settings' as const, label: 'Settings', icon: '⚙' },
 ] as const
 
+/** Renders breadcrumb navigation derived from the current URL pathname. */
 function Breadcrumbs() {
   const router = useRouterState()
   const matches = router.location.pathname.split('/').filter(Boolean)
@@ -38,6 +39,7 @@ function Breadcrumbs() {
   )
 }
 
+/** Responsive sidebar: always visible on desktop, drawer on mobile. */
 function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouterState()
   const currentPath = router.location.pathname
@@ -96,6 +98,7 @@ function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   )
 }
 
+/** Application shell with sidebar navigation, breadcrumb header, and scrollable content area. */
 export function MainLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
 

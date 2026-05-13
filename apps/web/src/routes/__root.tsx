@@ -12,6 +12,7 @@ export const Route = createRootRoute({
   ),
 })
 
+/** Root route component — renders the shared layout and dev-only tools. */
 function RootComponent() {
   return (
     <>

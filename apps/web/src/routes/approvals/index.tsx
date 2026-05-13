@@ -8,6 +8,7 @@ export const Route = createFileRoute('/approvals/')({
   component: ApprovalsPage,
 })
 
+/** Approval center — lists pending human-in-the-loop decisions. */
 function ApprovalsPage() {
   return (
     <div>

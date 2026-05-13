@@ -9,6 +9,7 @@ declare module '@tanstack/react-router' {
   }
 }
 
+/** Application entry component — bootstraps TanStack Router with the generated route tree. */
 export default function App() {
   return <RouterProvider router={router} />
 }

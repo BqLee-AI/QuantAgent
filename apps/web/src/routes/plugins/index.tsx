@@ -8,6 +8,7 @@ export const Route = createFileRoute('/plugins/')({
   component: PluginsPage,
 })
 
+/** Plugin management — lists installed source, industry, and executor plugins. */
 function PluginsPage() {
   return (
     <div>
