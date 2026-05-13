@@ -34,3 +34,10 @@ logs/
 # Editor
 .idea/
 .vscode/
+
+node_modules
+.turbo
+dist
+build
+.next
+coverage
