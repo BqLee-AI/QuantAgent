@@ -12,17 +12,53 @@ export interface AppProvidersProps extends PropsWithChildren {
   queryClient: QueryClient;
 }
 
+function deepMergeRecord(
+  base: Record<string, unknown>,
+  override: Record<string, unknown>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...base };
+
+  for (const [key, value] of Object.entries(override)) {
+    const baseValue = result[key];
+
+    if (
+      baseValue &&
+      value &&
+      typeof baseValue === 'object' &&
+      typeof value === 'object' &&
+      !Array.isArray(baseValue) &&
+      !Array.isArray(value)
+    ) {
+      result[key] = deepMergeRecord(
+        baseValue as Record<string, unknown>,
+        value as Record<string, unknown>,
+      );
+      continue;
+    }
+
+    result[key] = value;
+  }
+
+  return result;
+}
+
 export function createAppQueryClient(
   config: QueryClientConfig = {},
 ): QueryClient {
-  return new QueryClient({
-    defaultOptions: {
+  const { defaultOptions: customDefaultOptions, ...clientConfig } = config;
+  const defaultOptions = deepMergeRecord(
+    {
       queries: {
         staleTime: 30_000,
         retry: 1,
       },
     },
-    ...config,
+    (customDefaultOptions ?? {}) as Record<string, unknown>,
+  ) as NonNullable<QueryClientConfig['defaultOptions']>;
+
+  return new QueryClient({
+    ...clientConfig,
+    defaultOptions,
   });
 }
 
