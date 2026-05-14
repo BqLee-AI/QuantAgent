@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { PlaceholderPanel } from '../../app/components/PlaceholderPanel'
 
 export const Route = createFileRoute('/settings/')({
   component: SettingsPage,
@@ -21,14 +22,5 @@ function SettingsPage() {
         <PlaceholderPanel title="Secrets" copy="Secret references and policy-controlled management entry points." />
       </section>
     </>
-  )
-}
-
-function PlaceholderPanel({ title, copy }: { title: string; copy: string }) {
-  return (
-    <article className="placeholder-panel">
-      <h2 className="placeholder-panel-title">{title}</h2>
-      <p className="placeholder-panel-copy">{copy}</p>
-    </article>
   )
 }

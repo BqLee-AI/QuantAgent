@@ -1,4 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
+import { PlaceholderPanel } from '../../app/components/PlaceholderPanel'
 
 export const Route = createFileRoute('/events/')({
   component: EventsPage,
@@ -21,14 +22,5 @@ function EventsPage() {
         <PlaceholderPanel title="Resolved" copy="Completed events with decisions, audit records, or approvals." />
       </section>
     </>
-  )
-}
-
-function PlaceholderPanel({ title, copy }: { title: string; copy: string }) {
-  return (
-    <article className="placeholder-panel">
-      <h2 className="placeholder-panel-title">{title}</h2>
-      <p className="placeholder-panel-copy">{copy}</p>
-    </article>
   )
 }
