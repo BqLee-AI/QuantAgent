@@ -1,8 +1,10 @@
 from fastapi import APIRouter
 
+from quantagent_api.responses import ApiResponse
+
 router = APIRouter()
 
 
 @router.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> ApiResponse[dict[str, str]]:
+    return ApiResponse.success({"status": "ok"})
