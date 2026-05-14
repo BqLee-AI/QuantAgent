@@ -1,9 +1,7 @@
-import { bootstrapApp } from './app/bootstrap';
+import { createRoot } from "react-dom/client";
+import { RouterProvider } from '@tanstack/react-router'
 
-const container = document.getElementById('root');
+import { router } from './app/router'
+import './styles.css'
 
-if (!container) {
-  throw new Error('Root container #root was not found.');
-}
-
-bootstrapApp(container);
+createRoot(document.getElementById('root')!).render(<RouterProvider router={router} />)

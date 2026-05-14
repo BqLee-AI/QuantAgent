@@ -1,15 +1,20 @@
-import {
-  createRootRoute,
-  createRouter,
-} from '@tanstack/react-router';
-import App from '../App';
+import { createRouter } from '@tanstack/react-router'
 
-const rootRoute = createRootRoute({
-  component: App,
-});
+import { routeTree } from '../routeTree.gen'
 
-export function createAppRouter() {
-  return createRouter({
-    routeTree: rootRoute,
-  });
+export type RouterContext = {
+  capabilities: Set<string>
+}
+
+export const router = createRouter({
+  routeTree,
+  context: {
+    capabilities: new Set<string>(),
+  },
+})
+
+declare module '@tanstack/react-router' {
+  interface Register {
+    router: typeof router
+  }
 }
