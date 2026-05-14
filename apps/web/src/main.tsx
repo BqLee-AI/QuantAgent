@@ -1,5 +1,9 @@
-import { createRoot } from "react-dom/client";
+import { bootstrapApp } from './app/bootstrap';
 
-import App from './App'
+const container = document.getElementById('root');
 
-createRoot(document.getElementById('root')!).render(<App />)
+if (!container) {
+  throw new Error('Root container #root was not found.');
+}
+
+bootstrapApp(container);
