@@ -25,11 +25,20 @@ build/
 coverage/
 
 # Runtime data and local secrets
-runtime/
+runtime/plugins/*
+runtime/config/*
+runtime/data/*
+runtime/logs/*
+!runtime/plugins/.gitkeep
+!runtime/config/.gitkeep
+!runtime/data/.gitkeep
+!runtime/logs/.gitkeep
 
 # Logs
 *.log
 logs/
+!runtime/logs/
+!runtime/logs/.gitkeep
 
 # Editor
 .idea/
