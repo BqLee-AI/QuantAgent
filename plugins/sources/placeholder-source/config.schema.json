@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quantagent.local/schemas/plugins/sources/placeholder-source/config.schema.json",
+  "title": "Placeholder Source Plugin Config",
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
+}

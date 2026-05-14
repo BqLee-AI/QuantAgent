@@ -1,0 +1,9 @@
+id: quantagent.placeholder.source
+name: Placeholder Source
+type: source
+version: 0.1.0
+entrypoint: placeholder_source:plugin
+description: Placeholder source plugin.
+capabilities:
+  - source.fetch
+config_schema: config.schema.json
