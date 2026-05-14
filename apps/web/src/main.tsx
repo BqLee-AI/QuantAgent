@@ -1,3 +1,3 @@
-import { createRoot } from 'react-dom/client'
+import { createRoot } from "react-dom/client";
 
-createRoot(document.getElementById('root')!).render(<div>QuantAgent</div>)
+createRoot(document.getElementById("root")!).render(<div>QuantAgent</div>);
