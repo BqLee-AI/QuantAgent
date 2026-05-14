@@ -6,12 +6,16 @@ export type RouterContext = {
   capabilities: Set<string>
 }
 
-export const router = createRouter({
-  routeTree,
-  context: {
-    capabilities: new Set<string>(),
-  },
-})
+export function createAppRouter() {
+  return createRouter({
+    routeTree,
+    context: {
+      capabilities: new Set<string>(),
+    },
+  })
+}
+
+export const router = createAppRouter()
 
 declare module '@tanstack/react-router' {
   interface Register {
