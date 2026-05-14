@@ -44,3 +44,7 @@ logs/
 # Editor
 .idea/
 .vscode/
+
+# AI tool local state
+.claude/
+.codex/
