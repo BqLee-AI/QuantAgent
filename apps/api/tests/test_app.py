@@ -10,6 +10,10 @@ from fastapi.testclient import TestClient
 class ApiAppTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.client = TestClient(create_app())
+        self.client.__enter__()
+
+    def tearDown(self) -> None:
+        self.client.__exit__(None, None, None)
 
     def test_health_uses_envelope_and_request_id(self) -> None:
         response = self.client.get("/api/v1/health", headers={"X-Request-ID": "req-123"})
