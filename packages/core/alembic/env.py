@@ -17,6 +17,9 @@ target_metadata = Base.metadata
 
 
 def get_url() -> str:
+    # Keep Alembic on the same configuration path as the application:
+    # DATABASE_URL comes from environment variables first, then .env, then the
+    # local-development default declared in Settings.
     return settings.DATABASE_URL
 
 
