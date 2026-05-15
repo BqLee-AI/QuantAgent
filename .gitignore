@@ -47,4 +47,6 @@ logs/
 
 # AI tool local state
 .claude/
-.codex/
+.codex/*
+!.codex/skills/
+!.codex/skills/**
