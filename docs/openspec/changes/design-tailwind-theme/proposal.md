@@ -12,6 +12,26 @@ DESIGN.md 已定义完整的视觉规范（色彩、排版、间距、圆角、�
 - 用 CSS 变量替换 styles.css 和 MainLayout 中的硬编码颜色值。
 - 替换字体栈为 Inter（BinanceNova 的开源替代）+ JetBrains Mono（BinancePlex 的替代）。
 
+## Font Implementation Details
+
+- 生产环境字体使用本地托管，不依赖 CDN。Inter 与 JetBrains Mono 均采用 variable font 的 `woff2` 文件，减少多字重请求数量；CDN 只可用于本地快速验证，不进入提交。
+- 字体文件放置在 `apps/web/public/fonts/`：
+  - `apps/web/public/fonts/inter/InterVariable.woff2`
+  - `apps/web/public/fonts/inter/InterVariable-Italic.woff2`
+  - `apps/web/public/fonts/inter/OFL.txt`
+  - `apps/web/public/fonts/jetbrains-mono/JetBrainsMonoVariable.woff2`
+  - `apps/web/public/fonts/jetbrains-mono/JetBrainsMonoVariable-Italic.woff2`
+  - `apps/web/public/fonts/jetbrains-mono/OFL.txt`
+- `apps/web/index.html` 需要在 `<head>` 中为首屏字体添加 preload：
+  - `<link rel="preload" href="/fonts/inter/InterVariable.woff2" as="font" type="font/woff2" crossorigin />`
+  - `<link rel="preload" href="/fonts/jetbrains-mono/JetBrainsMonoVariable.woff2" as="font" type="font/woff2" crossorigin />`
+- `apps/web/src/styles.css` 通过 `@font-face` 注册 `Inter` 和 `JetBrains Mono`，设置 `font-display: swap`；不需要额外 FontFace API runtime loading，除非后续出现按路由延迟加载字体的性能需求。
+- `docs/openspec/changes/design-tailwind-theme/specs/design-tailwind-theme/spec.md` 记录字体托管与加载要求，`docs/openspec/changes/design-tailwind-theme/tasks.md` 记录资产、`index.html`、`styles.css` 和许可证检查任务。
+- 许可证检查清单：
+  - Inter 使用 SIL Open Font License 1.1，允许项目内自托管和商业/非商业使用；保留 `OFL.txt`。
+  - JetBrains Mono 使用 SIL Open Font License 1.1，允许项目内自托管和商业/非商业使用；保留 `OFL.txt`。
+  - 如修改字体文件，不使用保留字体名发布修改版；当前 change 只分发未修改字体文件。
+
 ## Out Of Scope
 
 - 动画和过渡时序。

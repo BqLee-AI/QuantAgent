@@ -27,9 +27,15 @@
 ## 5. 字体栈更新
 
 - [x] 更新 `:root` 的 font-family 为 Inter + JetBrains Mono 回退栈。
+- [ ] 将 Inter variable font 文件添加到 `apps/web/public/fonts/inter/InterVariable.woff2` 和 `InterVariable-Italic.woff2`。
+- [ ] 将 JetBrains Mono variable font 文件添加到 `apps/web/public/fonts/jetbrains-mono/JetBrainsMonoVariable.woff2` 和 `JetBrainsMonoVariable-Italic.woff2`。
+- [ ] 在两个字体目录保留对应 `OFL.txt`，确认 Inter 与 JetBrains Mono 均为 SIL Open Font License 1.1 且以未修改字体文件分发。
+- [ ] 在 `apps/web/index.html` 的 `<head>` 中 preload `/fonts/inter/InterVariable.woff2` 和 `/fonts/jetbrains-mono/JetBrainsMonoVariable.woff2`，使用 `rel="preload"`、`as="font"`、`type="font/woff2"`、`crossorigin`。
+- [ ] 在 `apps/web/src/styles.css` 添加 Inter 与 JetBrains Mono 的 `@font-face`，使用 `font-display: swap`，不添加 FontFace API runtime loading。
 
 ## 6. Verification
 
 - [x] 确认 `bun run build` 通过。
 - [x] 确认修改 CSS 变量后全站颜色同步变化。
 - [x] 确认 HeroUI 组件使用正确的主题色。
+- [ ] 确认 `apps/web/index.html`、`apps/web/src/styles.css`、`apps/web/public/fonts/**` 与 `spec.md` 的字体加载要求一致。

@@ -64,6 +64,33 @@ styles.css 和 MainLayout 中的硬编码颜色值 SHALL 替换为 CSS 变量或
 - **THEN** body 文本使用 Inter 字体栈
 - **AND** 数字/价格文本可通过 `.font-mono` 使用 JetBrains Mono
 
+#### Scenario: Font assets hosted locally
+
+- **WHEN** 开发者检查字体资产
+- **THEN** Inter variable font 文件存在于 `apps/web/public/fonts/inter/InterVariable.woff2`
+- **AND** Inter italic variable font 文件存在于 `apps/web/public/fonts/inter/InterVariable-Italic.woff2`
+- **AND** JetBrains Mono variable font 文件存在于 `apps/web/public/fonts/jetbrains-mono/JetBrainsMonoVariable.woff2`
+- **AND** JetBrains Mono italic variable font 文件存在于 `apps/web/public/fonts/jetbrains-mono/JetBrainsMonoVariable-Italic.woff2`
+- **AND** 对应目录保留 `OFL.txt`
+
+#### Scenario: Font loading wired through HTML and CSS
+
+- **WHEN** 开发者检查 `apps/web/index.html`
+- **THEN** `<head>` 预加载 `/fonts/inter/InterVariable.woff2`
+- **AND** `<head>` 预加载 `/fonts/jetbrains-mono/JetBrainsMonoVariable.woff2`
+- **AND** 两个 preload link 均使用 `rel="preload"`、`as="font"`、`type="font/woff2"` 和 `crossorigin`
+- **WHEN** 开发者检查 `apps/web/src/styles.css`
+- **THEN** 存在 `@font-face` 注册 `Inter` 和 `JetBrains Mono`
+- **AND** 每个 `@font-face` 使用 `font-display: swap`
+- **AND** 不引入 FontFace API runtime loading，除非后续明确需要按路由延迟加载字体
+
+#### Scenario: Font licensing is compatible
+
+- **WHEN** 开发者检查字体来源记录
+- **THEN** Inter 标记为 SIL Open Font License 1.1
+- **AND** JetBrains Mono 标记为 SIL Open Font License 1.1
+- **AND** 字体以未修改文件分发，不使用保留字体名发布修改版
+
 ### Requirement: Build Verification
 
 所有改动后 `bun run build` SHALL 通过。
