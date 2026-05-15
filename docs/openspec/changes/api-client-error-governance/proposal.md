@@ -20,11 +20,12 @@
   - `get<T>` / `post<TBody, TResponse>` / `put` / `patch` / `del` 方法
   - `requestEnvelope<T>()` 方法返回完整 `{ code, data, msg }` envelope
   - baseURL 默认 `/api/v1`，timeout 10s
-  - 自动鉴权注入（Bearer token）
+  - `authEnabled=true` 时注入 `Authorization: Bearer <token>`，默认开发阶段关闭
   - code === 0 时自动解包返回 `T`；code !== 0 时抛 `ApiError`
   - 401 静默刷新（共享 refresh promise，避免并发刷新）
   - AbortController signal 支持
   - Trace header（仅 TODO 预留 `X-Request-Id` / `X-Trace-Id`）
+  - 内部请求前处理 pipeline（auth 注入、trace TODO）和响应后处理 pipeline（envelope 解包、ApiError 转换、401 refresh），不暴露 Axios 风格可插拔 interceptor API
 - **`apps/web/src/shared/api/index.ts`**：统一导出。
 - **`packages/contracts`**：预留类型入口（`.gitkeep` 已存在），不实现生成流程。
 
@@ -33,9 +34,8 @@
 - 不引入 Axios 依赖（使用原生 Fetch）。
 - Trace header 只预留 TODO，不实现真实 trace ID 生成逻辑。
 - 不实现 UI 层 toast/modal 弹窗（error registry 只定义行为映射，UI 消费留给后续 issue）。
-- 不修改 DESIGN.md。
-- 不实现请求去重（dedup），TanStack Query 已内置此能力。
-- 不实现 request interceptor / response interceptor 模式（Fetch 无拦截器概念，通过 wrapper 函数实现等价逻辑）。
+- 不实现跨业务的全局请求缓存/去重；TanStack Query 负责 query 层重复请求合并。apiClient 仅实现 401 refresh 并发去重，避免多个 401 同时触发多次 refresh。非 Query 场景的通用请求去重后续单独设计。
+- 不暴露 Axios 风格可插拔 interceptor API；在 Fetch wrapper 内实现等价的请求前处理和响应后处理 pipeline，包括 auth 注入、trace TODO、envelope 解包、ApiError 转换和 401 refresh。
 - 后端 error code 类型定义待与后端对齐，本 change 只定义前端侧框架。
 
 ## Success Criteria
@@ -46,6 +46,16 @@
 - 401 响应触发静默刷新，并发请求共享同一 refresh promise。
 - Token Auth 默认关闭，可通过配置开启。
 - `bun run build --filter=web` 通过。
+
+## Testing Strategy
+
+- 单元测试覆盖 token provider、ApiError、error registry。
+- fetch mock 测试覆盖：成功解包、完整 envelope 返回、业务错误（code !== 0）、HTTP 错误（非 2xx）、timeout abort、AbortController signal abort。
+- 401 refresh 测试覆盖：单请求刷新重放、并发 401 共享 refreshPromise、刷新失败清 token + 调用 onUnauthorized。
+- auth 开关测试覆盖：默认不注入 Authorization、authEnabled=true 时注入 Bearer token。
+- trace header 只验证 TODO 注释或预留函数位置，不验证真实 header。
+- 类型验证通过 `bun run build --filter=web`。
+- 若仓库尚未配置测试框架，本 change 应补充最小测试运行能力（vitest 或等价工具），确保 401 并发 refresh 等关键路径有自动化验证。
 
 ## Open Questions
 
