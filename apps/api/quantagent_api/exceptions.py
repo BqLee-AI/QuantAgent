@@ -38,7 +38,7 @@ def _error_payload(
             retryable=retryable,
         ),
     )
-    return JSONResponse(status_code=status_code, content=body.model_dump())
+    return JSONResponse(status_code=status_code, content=body.model_dump(mode="json"))
 
 
 def register_exception_handlers(app: FastAPI) -> None:
