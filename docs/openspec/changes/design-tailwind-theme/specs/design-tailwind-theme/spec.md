@@ -27,6 +27,8 @@ Tailwind v4 的 @theme 指令 SHALL 注册语义化 utility class，引用 CSS �
 - **WHEN** 开发者编写 `text-ink` 或 `bg-primary`
 - **THEN** 生成的 CSS 引用对应的 CSS 变量
 - **AND** 渲染结果与 DESIGN.md 定义的色值一致
+- **AND** `text-ink` 引用的 CSS 变量计算值等于 DESIGN.md 的 `{colors.ink}`（#181a20）
+- **AND** `bg-primary` 引用的 CSS 变量计算值等于 DESIGN.md 的 `{colors.primary}`（#3b82f6）
 
 #### Scenario: Spacing and radius utilities
 
