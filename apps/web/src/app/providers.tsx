@@ -6,7 +6,7 @@ import {
   type QueryClientConfig,
 } from '@tanstack/react-query';
 import { RuntimeConfigProvider, type RuntimeConfig } from '../shared/config';
-import { heroUITheme } from '../shared/styles/heroui-theme';
+import { heroUITheme } from '../styles/heroui-theme';
 
 export interface AppProvidersProps extends PropsWithChildren {
   config: RuntimeConfig;
