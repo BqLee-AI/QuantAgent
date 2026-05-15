@@ -4,28 +4,28 @@
 
 ### Requirement: CSS Variable Token Layer
 
-styles.css SHALL 定义 CSS 变量覆盖 DESIGN.md 的所有设计 token，包括色彩、排版、间距、圆角和阴影。
+styles.css SHALL 定义 `--qa-*` 原始 CSS 变量覆盖 DESIGN.md 的所有设计 token，包括色彩、排版、间距、圆角和阴影。
 
 #### Scenario: Color tokens defined
 
 - **WHEN** 开发者检查 styles.css
-- **THEN** 存在 `--color-*` 变量覆盖 DESIGN.md Colors 部分的所有色值
+- **THEN** 存在 `--qa-color-*` 原始变量覆盖 DESIGN.md Colors 部分的所有色值
 - **AND** 变量命名与 DESIGN.md 的 token 名称语义对应
 
 #### Scenario: Typography tokens defined
 
 - **WHEN** 开发者检查 styles.css
-- **THEN** 存在 `--font-*` 变量定义字体栈（Inter + JetBrains Mono）
-- **AND** 存在 `--text-*` 变量定义各排版层级的 size、weight、line-height
+- **THEN** 存在 `--qa-font-*` 原始变量定义字体栈（Inter + JetBrains Mono）
 
 ### Requirement: Tailwind Theme Integration
 
-Tailwind v4 的 @theme 指令 SHALL 注册语义化 utility class，引用 CSS 变量。
+Tailwind v4 的 @theme 指令 SHALL 注册语义化 utility class，并从 `--qa-*` 原始变量映射到 Tailwind 的 `--color-*`、`--font-*` 等主题变量。
 
 #### Scenario: Semantic color utilities available
 
 - **WHEN** 开发者编写 `text-ink` 或 `bg-primary`
-- **THEN** 生成的 CSS 引用对应的 CSS 变量
+- **THEN** 生成的 CSS 引用对应的 Tailwind 主题 CSS 变量
+- **AND** `@theme` 中不存在 `--color-* : var(--color-*)` 或 `--font-* : var(--font-*)` 形式的自引用映射
 - **AND** 渲染结果与 DESIGN.md 定义的色值一致
 - **AND** `text-ink` 引用的 CSS 变量计算值等于 DESIGN.md 的 `{colors.ink}`（#181a20）
 - **AND** `bg-primary` 引用的 CSS 变量计算值等于 DESIGN.md 的 `{colors.primary}`（#3b82f6）

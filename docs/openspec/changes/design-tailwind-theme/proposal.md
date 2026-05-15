@@ -6,10 +6,10 @@ DESIGN.md 已定义完整的视觉规范（色彩、排版、间距、圆角、�
 
 ## What Changes
 
-- 在 styles.css 中定义 CSS 变量，覆盖 DESIGN.md 的色彩、排版、间距、圆角、阴影 token。
-- 在 Tailwind v4 的 @theme 指令中注册语义化 utility class（如 `text-ink`、`bg-canvas`、`rounded-card`）。
+- 在 `apps/web/src/styles/tokens.css` 中定义 `--qa-*` 原始 CSS 变量，覆盖 DESIGN.md 的色彩、排版、间距、圆角、阴影 token。
+- 在 `apps/web/src/styles/tailwind-theme.css` 的 Tailwind v4 @theme 指令中注册语义化 utility class（如 `text-ink`、`bg-canvas`、`rounded-card`），从 `--qa-*` 映射到 Tailwind `--color-*` / `--font-*` 主题变量，避免自引用 token。
 - 配置 HeroUI 主题，使 primary、danger 等语义与 DESIGN.md 对齐。
-- 用 CSS 变量替换 styles.css 和 MainLayout 中的硬编码颜色值。
+- 用 CSS 变量替换 `apps/web/src/styles/**` 和 MainLayout 中的硬编码颜色值。
 - 替换字体栈为 Inter（BinanceNova 的开源替代）+ JetBrains Mono（BinancePlex 的替代）。
 
 ## Font Implementation Details
