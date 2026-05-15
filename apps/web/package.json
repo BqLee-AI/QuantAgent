@@ -1,0 +1,39 @@
+{
+  "name": "web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@heroui/react": "^3.0.4",
+    "@heroui/system": "^2.4.28",
+    "@tanstack/react-query": "^5.100.10",
+    "@tanstack/react-router": "^1.169.2",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.38.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.0",
+    "@tanstack/react-query-devtools": "^5.100.10",
+    "@tanstack/router-devtools": "^1.166.13",
+    "@tanstack/router-plugin": "^1.167.35",
+    "@types/node": "^25.7.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.14",
+    "tailwindcss": "^4.3.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.0.12"
+  }
+}

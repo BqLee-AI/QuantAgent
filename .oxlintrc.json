@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["import", "typescript", "unicorn", "react"],
+  "rules": {
+    "eqeqeq": "warn",
+    "no-console": "warn",
+    "import/no-cycle": "error",
+    "react/self-closing-comp": "warn"
+  },
+  "settings": {
+    "react": {
+      "version": "19.0"
+    }
+  }
+}

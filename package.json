@@ -1,7 +1,19 @@
 {
-  "dependencies": {
-    "@heroui/react": "^3.0.4",
-    "@heroui/styles": "^3.0.4",
-    "@tanstack/react-router": "^1.169.2"
+  "name": "quantagent",
+  "private": true,
+  "packageManager": "bun@1.3.14",
+  "workspaces": ["apps/web"],
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "oxlint apps/web",
+    "lint:fix": "oxlint --fix apps/web",
+    "fmt": "oxfmt apps/web",
+    "fmt:check": "oxfmt --check apps/web"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.49.0",
+    "oxlint": "^1.64.0",
+    "turbo": "^2.9.12"
   }
 }
