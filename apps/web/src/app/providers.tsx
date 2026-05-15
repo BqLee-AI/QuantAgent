@@ -1,4 +1,4 @@
-import type { PropsWithChildren } from 'react';
+import type { CSSProperties, PropsWithChildren } from 'react';
 import { HeroUIProvider } from '@heroui/system';
 import {
   QueryClient,
@@ -6,6 +6,18 @@ import {
   type QueryClientConfig,
 } from '@tanstack/react-query';
 import { RuntimeConfigProvider, type RuntimeConfig } from '../shared/config';
+
+type HeroUIThemeVars = CSSProperties & Record<`--${string}`, string>;
+
+const heroUITheme: HeroUIThemeVars = {
+  '--accent': '#3b82f6',
+  '--accent-foreground': '#ffffff',
+  '--focus': '#3b82f6',
+  '--success': '#0ecb81',
+  '--success-foreground': '#181a20',
+  '--danger': '#f6465d',
+  '--danger-foreground': '#ffffff',
+};
 
 export interface AppProvidersProps extends PropsWithChildren {
   config: RuntimeConfig;
@@ -69,9 +81,11 @@ export function AppProviders({
 }: AppProvidersProps) {
   return (
     <RuntimeConfigProvider value={config}>
-      <HeroUIProvider>
-        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-      </HeroUIProvider>
+      <div className="heroui-theme" data-theme="light" style={heroUITheme}>
+        <HeroUIProvider>
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        </HeroUIProvider>
+      </div>
     </RuntimeConfigProvider>
   );
 }

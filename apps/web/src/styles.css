@@ -25,6 +25,7 @@
   --color-muted: #6b7280;
   --color-muted-strong: #4b5563;
   --color-on-primary: #ffffff;
+  --color-topbar: rgb(from var(--color-canvas) r g b / 0.92);
 
   /* Trading */
   --color-trading-up: #0ecb81;
@@ -97,6 +98,12 @@ body {
   color: var(--color-ink);
   background: var(--color-canvas);
   font-family: var(--font-sans);
+}
+
+.heroui-theme {
+  min-height: 100vh;
+  background: var(--color-canvas);
+  color: var(--color-ink);
 }
 
 button,
@@ -190,7 +197,7 @@ select {
   min-width: 0;
   padding: 0 var(--spacing-lg);
   border-bottom: 1px solid var(--color-hairline);
-  background: rgb(255 255 255 / 0.92);
+  background: var(--color-topbar);
   backdrop-filter: blur(10px);
 }
 
