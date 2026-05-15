@@ -50,6 +50,34 @@
   --qa-spacing-xxl: 48px;
   --qa-spacing-section: 80px;
 
+  /* Typography Scale */
+  --qa-text-hero-display: 64px;
+  --qa-text-hero-display-lh: 1.1;
+  --qa-text-display-lg: 48px;
+  --qa-text-display-lg-lh: 1.1;
+  --qa-text-display-md: 40px;
+  --qa-text-display-md-lh: 1.15;
+  --qa-text-display-sm: 32px;
+  --qa-text-display-sm-lh: 1.2;
+  --qa-text-title-lg: 24px;
+  --qa-text-title-lg-lh: 1.3;
+  --qa-text-title-md: 20px;
+  --qa-text-title-md-lh: 1.35;
+  --qa-text-title-sm: 16px;
+  --qa-text-title-sm-lh: 1.4;
+  --qa-text-body-md: 14px;
+  --qa-text-body-md-lh: 1.5;
+  --qa-text-body-sm: 13px;
+  --qa-text-body-sm-lh: 1.5;
+  --qa-text-caption: 12px;
+  --qa-text-caption-lh: 1.4;
+
+  /* Font Weights */
+  --qa-font-weight-regular: 400;
+  --qa-font-weight-medium: 500;
+  --qa-font-weight-semibold: 600;
+  --qa-font-weight-bold: 700;
+
   /* Radius */
   --qa-radius-xs: 2px;
   --qa-radius-sm: 4px;
