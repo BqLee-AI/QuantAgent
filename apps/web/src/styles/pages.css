@@ -1,12 +1,12 @@
 .page-header {
   display: grid;
-  gap: var(--spacing-xs);
+  gap: var(--qa-spacing-xs);
   max-width: 920px;
 }
 
 .page-kicker {
   margin: 0;
-  color: var(--color-trading-up);
+  color: var(--qa-color-trading-up);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0;
@@ -15,14 +15,14 @@
 
 .page-title {
   margin: 0;
-  color: var(--color-ink);
+  color: var(--qa-color-ink);
   font-size: 28px;
   line-height: 1.2;
 }
 
 .page-description {
   margin: 0;
-  color: var(--color-muted);
+  color: var(--qa-color-muted);
   font-size: 15px;
   line-height: 1.6;
 }
@@ -31,26 +31,26 @@
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
-  margin-top: var(--spacing-lg);
+  margin-top: var(--qa-spacing-lg);
 }
 
 .placeholder-panel {
   min-height: 120px;
   padding: 18px;
-  border: 1px solid var(--color-hairline);
-  border-radius: var(--radius-lg);
-  background: var(--color-canvas);
+  border: 1px solid var(--qa-color-hairline);
+  border-radius: var(--qa-radius-lg);
+  background: var(--qa-color-canvas);
 }
 
 .placeholder-panel-title {
-  margin: 0 0 var(--spacing-xs);
-  color: var(--color-ink);
+  margin: 0 0 var(--qa-spacing-xs);
+  color: var(--qa-color-ink);
   font-size: 15px;
 }
 
 .placeholder-panel-copy {
   margin: 0;
-  color: var(--color-muted);
+  color: var(--qa-color-muted);
   font-size: 14px;
   line-height: 1.5;
 }

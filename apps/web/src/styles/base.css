@@ -5,15 +5,15 @@
 body {
   margin: 0;
   min-width: 320px;
-  color: var(--color-ink);
-  background: var(--color-canvas);
-  font-family: var(--font-sans);
+  color: var(--qa-color-ink);
+  background: var(--qa-color-canvas);
+  font-family: var(--qa-font-sans);
 }
 
 .heroui-theme {
   min-height: 100vh;
-  background: var(--color-canvas);
-  color: var(--color-ink);
+  background: var(--qa-color-canvas);
+  color: var(--qa-color-ink);
 }
 
 button,
