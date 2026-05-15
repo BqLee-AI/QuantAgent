@@ -16,63 +16,79 @@
 #### Scenario: Request config type defined
 
 - **WHEN** 开发者导入 `RequestConfig`
-- **THEN** 类型支持 `signal?: AbortSignal`、`timeout?: number`、`headers?: Record<string, string>`
+- **THEN** 类型兼容 Axios request config 的必要字段（signal、timeout、headers、params）
 - **AND** 支持 `params?: Record<string, string | number | boolean>`（URL query 参数）
 
 #### Scenario: Client config type defined
 
 - **WHEN** 开发者导入 `ApiClientConfig`
-- **THEN** 类型包含 `baseURL: string`（默认 `/api/v1`）、`timeout: number`（默认 10000ms）
-- **AND** 包含 `authEnabled: boolean`（默认 `false`）
-- **AND** 包含 `tokenProvider?: TokenProvider`
-- **AND** 包含 `refreshToken?: (context: RefreshTokenContext) => Promise<TokenRefreshResult>`
-- **AND** `RefreshTokenContext` 至少包含 `accessToken: string | null` 和最小请求上下文 `{ method, url }`
-- **AND** `TokenRefreshResult` 至少包含 `accessToken: string`
-- **AND** 包含 `onUnauthorized?: () => void`（刷新失败回调）
+- **THEN** 类型包含 `baseURL?: string`（默认 `/api/v1`）、`timeout?: number`（默认 10000ms）
+- **AND** 包含 `withCredentials?: boolean`（默认 `true`）
+- **AND** 包含 `headers?: Record<string, string>`（默认 headers）
+- **AND** 包含 `onUnauthorized?: (error: ApiError) => void`（401 回调）
+- **AND** 包含 `recoverUnauthorized?: () => Promise<void>`（可选会话恢复函数）
+- **AND** 不包含 `authEnabled`、`tokenProvider`、`refreshToken` 字段
 
-### Requirement: Token Management
+### Requirement: Axios Client Instance
 
-`apps/web/src/shared/api/token.ts` SHALL 封装 token 存取与 provider 抽象。
+apiClient SHALL 使用 Axios 作为 HTTP 传输层。
 
-#### Scenario: Token provider abstraction
+#### Scenario: Default Axios config
 
-- **WHEN** 开发者使用默认 token provider
-- **THEN** 默认从 `localStorage` 读写 access token
-- **AND** 可通过配置切换为 `sessionStorage`
+- **WHEN** 使用 `createApiClient()` 不传参
+- **THEN** 创建的 Axios instance 的 `baseURL` 为 `/api/v1`
+- **AND** `timeout` 为 10000ms
+- **AND** `withCredentials` 为 `true`
 
-#### Scenario: Token provider browser safety
+#### Scenario: Custom Axios config
 
-- **WHEN** `window` 或 `Storage` 不可用（如 SSR 或测试环境）
-- **THEN** 默认 token provider 不抛错
-- **AND** `getToken` 返回 `null`，`setToken` / `clearToken` 为 no-op
+- **WHEN** 开发者传入自定义 config
+- **THEN** 自定义值覆盖默认值
+- **AND** 未指定的字段保持默认值
 
-#### Scenario: Token auth switch
+#### Scenario: No raw fetch
 
-- **WHEN** `ApiClientConfig.authEnabled` 为 `false`（默认）
-- **THEN** 请求不注入 `Authorization` header
-- **WHEN** `authEnabled` 为 `true`
-- **THEN** 请求自动注入 `Authorization: Bearer <token>`
+- **WHEN** 开发者检查 `client.ts`
+- **THEN** 不存在直接使用 `fetch()` 或 `globalThis.fetch()` 的调用
+- **AND** 所有 HTTP 请求通过 Axios instance 发出
 
-### Requirement: API Client
+### Requirement: Request Interceptors
 
-`apps/web/src/shared/api/client.ts` SHALL 基于 Fetch 封装强类型 HTTP 客户端。
+apiClient SHALL 在 Axios instance 上注册 request interceptor。
 
-**响应处理双模式**：
-- HTTP 层 `fetch()` 的 `response` 是原始 Response 对象；`response` 经 `.json()` 解析后得到业务 envelope `{ code, data, msg }`。
-- 默认模式（`get<T>`/`post<T>`/等）：`code === 0` 时解包返回 `data`（类型 `T`），`code !== 0` 时抛 `ApiError`。
-- Envelope 模式（`requestEnvelope<T>`）：返回完整 `ApiResponse<T>`，业务代码可按 `code`/`msg` 自行处理。
-- 注意区分 `fetch Response.data`（不存在，Response body 需 `.json()` 解析）与业务 `envelope.data`。
+#### Scenario: No Authorization header injection
+
+- **WHEN** 请求发送
+- **THEN** 不注入 `Authorization: Bearer <token>` header
+- **AND** 不读取 localStorage / sessionStorage 中的 token
+
+#### Scenario: Trace header TODO
+
+- **WHEN** 开发者检查 request interceptor 代码
+- **THEN** 存在 TODO 注释标注 `X-Request-Id` / `X-Trace-Id` 注入位置
+- **AND** 不存在实际的 trace ID 生成逻辑
+
+#### Scenario: Custom headers passthrough
+
+- **WHEN** 开发者通过 config 传入自定义 headers
+- **THEN** headers 被合并到请求中
+
+### Requirement: Response Interceptors
+
+apiClient SHALL 在 Axios instance 上注册 response interceptor，处理 envelope 解包和错误转换。
+
+**关键区分**：Axios 的 `response.data` 是 HTTP 响应体，即业务 envelope `{ code, data, msg }`。envelope 的 `data` 字段才是业务数据。`get<T>()` 默认返回 `envelope.data`，`requestEnvelope<T>()` 返回完整 `response.data`。
 
 #### Scenario: GET request with auto-unpack
 
 - **WHEN** 开发者调用 `apiClient.get<User>('/me')`
-- **AND** 后端返回 `{ code: 0, data: { id: 1, name: "..." }, msg: "ok" }`
+- **AND** Axios `response.data` 为 `{ code: 0, data: { id: 1, name: "..." }, msg: "ok" }`
 - **THEN** 返回值类型为 `Promise<User>`，运行时值为 `{ id: 1, name: "..." }`
 
 #### Scenario: GET request with envelope
 
 - **WHEN** 开发者调用 `apiClient.requestEnvelope<User>('/me')`
-- **AND** 后端返回 `{ code: 0, data: { id: 1 }, msg: "ok" }`
+- **AND** Axios `response.data` 为 `{ code: 0, data: { id: 1 }, msg: "ok" }`
 - **THEN** 返回值类型为 `Promise<ApiResponse<User>>`，包含完整 `{ code, data, msg }`
 
 #### Scenario: POST request
@@ -83,67 +99,62 @@
 
 #### Scenario: Business error throws ApiError
 
-- **WHEN** 后端返回 `{ code: 40001, data: null, msg: "参数错误" }`
+- **WHEN** Axios `response.data` 为 `{ code: 40001, data: null, msg: "参数错误" }`（HTTP 200）
 - **THEN** 抛出 `ApiError`，`code` 为 40001，`msg` 为 "参数错误"
 
 #### Scenario: HTTP error throws ApiError
 
-- **WHEN** HTTP 响应状态码为 500
+- **WHEN** Axios 收到 HTTP 500 响应
 - **THEN** 抛出 `ApiError`，`status` 为 500
-- **AND** 尝试解析响应体中的 `code`/`msg`，解析失败则使用默认消息
+- **AND** 尝试解析 `error.response.data` 中的 `code`/`msg`，解析失败则使用默认消息
 
-#### Scenario: Timeout
+#### Scenario: Network error throws ApiError
 
-- **WHEN** 请求超过配置的 timeout（默认 10s）
-- **THEN** 请求被 AbortController 取消
-- **AND** 抛出 `ApiError`，标记为超时错误
+- **WHEN** Axios 抛出网络错误（无响应）
+- **THEN** 转换为 `ApiError`，包含合理的默认 `code` 和 `msg`
 
-#### Scenario: Request cancellation
+### Requirement: 401 Cookie Session Handling
 
-- **WHEN** 开发者传入 `signal: AbortSignal`
-- **THEN** signal 触发时请求被取消
+apiClient SHALL 集中处理 401 会话过期，不实现 Bearer token refresh。
 
-#### Scenario: Trace headers reserved
+#### Scenario: 401 triggers onUnauthorized
 
-- **WHEN** 开发者检查 client.ts 代码
-- **THEN** 存在 TODO 注释标注 `X-Request-Id` / `X-Trace-Id` 注入位置
-- **AND** 不存在实际的 trace ID 生成逻辑
+- **WHEN** 请求返回 HTTP 401
+- **THEN** 创建 `ApiError`，`status` 为 401
+- **AND** 调用 `onUnauthorized(error)` 回调（如已配置）
+- **AND** 抛出该 `ApiError`
 
-#### Scenario: Internal pipeline (no interceptor API)
+#### Scenario: 401 with recoverUnauthorized
 
-- **WHEN** 开发者检查 client.ts 代码
-- **THEN** 请求前处理（auth 注入、trace TODO）和响应后处理（envelope 解包、ApiError 转换、401 refresh）在 wrapper 函数内部实现
-- **AND** 不暴露 Axios 风格的 `interceptors.request.use()` / `interceptors.response.use()` API
-
-### Requirement: 401 Silent Refresh
-
-apiClient SHALL 在收到 401 响应时自动尝试 Token 刷新。
-
-#### Scenario: Single 401 triggers refresh
-
-- **WHEN** 请求返回 401 且 `refreshToken` 函数已配置
-- **THEN** 使用当前 token 上下文调用 `refreshToken(context)` 获取新 access token
-- **AND** 刷新成功后使用新 token 重放原请求
+- **WHEN** 请求返回 HTTP 401 且配置了 `recoverUnauthorized`
+- **THEN** 执行 `recoverUnauthorized()`
+- **AND** 恢复成功后使用新 Cookie 重放原请求
 - **AND** 返回重放请求的结果
 
-#### Scenario: Concurrent 401 shares refresh
+#### Scenario: Concurrent 401 shares recover
 
-- **WHEN** 多个请求同时收到 401
-- **THEN** 仅触发一次 `refreshToken` 调用
-- **AND** 所有并发请求等待同一 refresh promise
-- **AND** 刷新成功后所有请求均使用新 token 重放
+- **WHEN** 多个请求同时收到 401 且配置了 `recoverUnauthorized`
+- **THEN** 仅执行一次 `recoverUnauthorized` 调用
+- **AND** 所有并发请求等待同一 recover promise
+- **AND** 恢复成功后所有请求均重放
 
-#### Scenario: Refresh failure
+#### Scenario: Recover failure
 
-- **WHEN** `refreshToken` 调用失败
-- **THEN** 清理已存储的 access token
+- **WHEN** `recoverUnauthorized` 调用失败
+- **THEN** 不重放请求
 - **AND** 调用 `onUnauthorized` 回调（如已配置）
 - **AND** 抛出 `ApiError`
 
-#### Scenario: No refresh function configured
+#### Scenario: No recoverUnauthorized configured
 
-- **WHEN** 请求返回 401 且未配置 `refreshToken`
-- **THEN** 直接抛出 `ApiError`，不尝试刷新
+- **WHEN** 请求返回 401 且未配置 `recoverUnauthorized`
+- **THEN** 直接调用 `onUnauthorized` 并抛出 `ApiError`，不尝试恢复
+
+#### Scenario: No token storage access
+
+- **WHEN** 开发者检查 401 处理代码
+- **THEN** 不存在 localStorage / sessionStorage 读写 token 的逻辑
+- **AND** 不存在 Authorization header 注入逻辑
 
 ### Requirement: ApiError
 
@@ -159,11 +170,19 @@ apiClient SHALL 在收到 401 响应时自动尝试 Token 刷新。
 - **AND** 包含 `status?: number`（HTTP 状态码）
 - **AND** 继承自 `Error`
 
+#### Scenario: Axios error to ApiError conversion
+
+- **WHEN** Axios 抛出错误
+- **THEN** 存在转换函数将 AxiosError 转为 ApiError
+- **AND** 保留原始 Axios error 作为 cause
+
 #### Scenario: Error registry
 
 - **WHEN** 开发者检查 `errors.ts`
 - **THEN** 存在 `ErrorRegistry`，将业务错误码映射到 UI 行为类型
 - **AND** 行为类型包含 `toast | modal | silent | redirect` 联合类型
+- **AND** registry 不直接弹 UI，只返回默认行为描述
+- **AND** UI 消费由上层接入
 - **AND** 存在 TODO 标注需与后端对齐实际 error code 类型
 
 ### Requirement: Contracts Package Entry
@@ -180,10 +199,30 @@ apiClient SHALL 在收到 401 响应时自动尝试 Token 刷新。
 
 apiClient 及其依赖模块 SHALL 有自动化测试覆盖。
 
-#### Scenario: Success unwrap test
+#### Scenario: Axios instance config test
 
-- **WHEN** fetch mock 返回 `{ code: 0, data: { ... }, msg: "ok" }`
-- **THEN** `apiClient.get<T>(url)` 返回 `data` 部分
+- **WHEN** 创建默认 apiClient
+- **THEN** Axios instance 的 baseURL、timeout、withCredentials 符合默认值
+
+#### Scenario: No Authorization injection test
+
+- **WHEN** 发送请求
+- **THEN** 请求 headers 中不包含 `Authorization`
+
+#### Scenario: Trace TODO exists test
+
+- **WHEN** 检查 request interceptor 代码
+- **THEN** 存在 trace header TODO 注释
+
+#### Scenario: Custom header passthrough test
+
+- **WHEN** 传入自定义 headers
+- **THEN** 请求包含该 headers
+
+#### Scenario: Success unpack test
+
+- **WHEN** Axios mock `response.data` 为 `{ code: 0, data: { ... }, msg: "ok" }`
+- **THEN** `apiClient.get<T>(url)` 返回 `envelope.data` 部分
 
 #### Scenario: Envelope return test
 
@@ -192,44 +231,38 @@ apiClient 及其依赖模块 SHALL 有自动化测试覆盖。
 
 #### Scenario: Business error test
 
-- **WHEN** fetch mock 返回 `{ code: 40001, data: null, msg: "参数错误" }`
+- **WHEN** `response.data` 为 `{ code: 40001, data: null, msg: "参数错误" }`
 - **THEN** 抛出 `ApiError` 且 `code === 40001`
 
 #### Scenario: HTTP error test
 
-- **WHEN** fetch mock 返回 HTTP 500
+- **WHEN** Axios 返回 HTTP 500
 - **THEN** 抛出 `ApiError` 且 `status === 500`
 
-#### Scenario: Auth disabled by default test
+#### Scenario: Network error test
 
-- **WHEN** `authEnabled` 为默认值 `false`
-- **THEN** 请求 headers 中不包含 `Authorization`
+- **WHEN** Axios 抛出网络错误
+- **THEN** 转换为 `ApiError`
 
-#### Scenario: Auth enabled injects Bearer test
+#### Scenario: 401 calls onUnauthorized test
 
-- **WHEN** `authEnabled = true` 且 token provider 返回有效 token
-- **THEN** 请求 headers 包含 `Authorization: Bearer <token>`
+- **WHEN** 收到 401 且未配置 recoverUnauthorized
+- **THEN** 调用 `onUnauthorized` 并抛出 `ApiError`
 
-#### Scenario: Abort signal cancels request test
+#### Scenario: Recover success replays test
 
-- **WHEN** 传入 `AbortSignal` 并触发 abort
-- **THEN** 请求被取消
+- **WHEN** 收到 401 且 `recoverUnauthorized` 成功
+- **THEN** 使用新 Cookie 重放原请求并返回结果
 
-#### Scenario: Timeout aborts request test
-
-- **WHEN** 请求超过 timeout
-- **THEN** 请求被 AbortController 取消并抛出超时错误
-
-#### Scenario: Concurrent 401 shares one refresh test
+#### Scenario: Concurrent 401 one recover test
 
 - **WHEN** 多个请求同时收到 401
-- **THEN** `refreshToken` 仅被调用一次
-- **AND** 所有请求使用新 token 重放
+- **THEN** `recoverUnauthorized` 仅被调用一次
 
-#### Scenario: Refresh failure clears token test
+#### Scenario: Recover failure test
 
-- **WHEN** `refreshToken` 调用失败
-- **THEN** token 被清理、`onUnauthorized` 被调用、抛出 `ApiError`
+- **WHEN** `recoverUnauthorized` 调用失败
+- **THEN** 不重放请求，调用 `onUnauthorized`，抛出 `ApiError`
 
 #### Scenario: Error registry maps codes test
 
