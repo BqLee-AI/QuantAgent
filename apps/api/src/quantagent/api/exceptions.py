@@ -95,7 +95,7 @@ def register_exception_handlers(app: FastAPI) -> None:
             if status_code >= 500:
                 message = "Internal Server Error"
             else:
-                message = exc.detail if isinstance(exc.detail, str) else str(status_code)
+                message = exc.detail if isinstance(exc.detail, str) else "HTTP Error"
         return _error_payload(
             status_code=status_code,
             response_code=response_code,
