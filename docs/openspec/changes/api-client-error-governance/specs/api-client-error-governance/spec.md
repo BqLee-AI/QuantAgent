@@ -9,8 +9,9 @@
 #### Scenario: Envelope type defined
 
 - **WHEN** 开发者导入 `ApiResponse`
-- **THEN** 类型包含 `code: number`、`data: T`、`msg: string`
+- **THEN** 类型包含 `code: number`、`data: T | null`、`msg: string`
 - **AND** 可选字段包含 `request_id?: string`、`trace_id?: string`
+- **NOTE** 错误响应常见 `{ code, data: null, msg }`，`data` 必须支持 null
 
 #### Scenario: Request config type defined
 
@@ -24,7 +25,9 @@
 - **THEN** 类型包含 `baseURL: string`（默认 `/api/v1`）、`timeout: number`（默认 10000ms）
 - **AND** 包含 `authEnabled: boolean`（默认 `false`）
 - **AND** 包含 `tokenProvider?: TokenProvider`
-- **AND** 包含 `refreshToken?: (token: string) => Promise<{ accessToken: string }>`
+- **AND** 包含 `refreshToken?: (context: RefreshTokenContext) => Promise<TokenRefreshResult>`
+- **AND** `RefreshTokenContext` 至少包含 `accessToken: string | null` 和最小请求上下文 `{ method, url }`
+- **AND** `TokenRefreshResult` 至少包含 `accessToken: string`
 - **AND** 包含 `onUnauthorized?: () => void`（刷新失败回调）
 
 ### Requirement: Token Management
@@ -37,6 +40,12 @@
 - **THEN** 默认从 `localStorage` 读写 access token
 - **AND** 可通过配置切换为 `sessionStorage`
 
+#### Scenario: Token provider browser safety
+
+- **WHEN** `window` 或 `Storage` 不可用（如 SSR 或测试环境）
+- **THEN** 默认 token provider 不抛错
+- **AND** `getToken` 返回 `null`，`setToken` / `clearToken` 为 no-op
+
 #### Scenario: Token auth switch
 
 - **WHEN** `ApiClientConfig.authEnabled` 为 `false`（默认）
@@ -47,6 +56,12 @@
 ### Requirement: API Client
 
 `apps/web/src/shared/api/client.ts` SHALL 基于 Fetch 封装强类型 HTTP 客户端。
+
+**响应处理双模式**：
+- HTTP 层 `fetch()` 的 `response` 是原始 Response 对象；`response` 经 `.json()` 解析后得到业务 envelope `{ code, data, msg }`。
+- 默认模式（`get<T>`/`post<T>`/等）：`code === 0` 时解包返回 `data`（类型 `T`），`code !== 0` 时抛 `ApiError`。
+- Envelope 模式（`requestEnvelope<T>`）：返回完整 `ApiResponse<T>`，业务代码可按 `code`/`msg` 自行处理。
+- 注意区分 `fetch Response.data`（不存在，Response body 需 `.json()` 解析）与业务 `envelope.data`。
 
 #### Scenario: GET request with auto-unpack
 
@@ -94,6 +109,12 @@
 - **THEN** 存在 TODO 注释标注 `X-Request-Id` / `X-Trace-Id` 注入位置
 - **AND** 不存在实际的 trace ID 生成逻辑
 
+#### Scenario: Internal pipeline (no interceptor API)
+
+- **WHEN** 开发者检查 client.ts 代码
+- **THEN** 请求前处理（auth 注入、trace TODO）和响应后处理（envelope 解包、ApiError 转换、401 refresh）在 wrapper 函数内部实现
+- **AND** 不暴露 Axios 风格的 `interceptors.request.use()` / `interceptors.response.use()` API
+
 ### Requirement: 401 Silent Refresh
 
 apiClient SHALL 在收到 401 响应时自动尝试 Token 刷新。
@@ -101,7 +122,7 @@ apiClient SHALL 在收到 401 响应时自动尝试 Token 刷新。
 #### Scenario: Single 401 triggers refresh
 
 - **WHEN** 请求返回 401 且 `refreshToken` 函数已配置
-- **THEN** 使用当前 token 调用 `refreshToken` 获取新 access token
+- **THEN** 使用当前 token 上下文调用 `refreshToken(context)` 获取新 access token
 - **AND** 刷新成功后使用新 token 重放原请求
 - **AND** 返回重放请求的结果
 
@@ -154,6 +175,66 @@ apiClient SHALL 在收到 401 响应时自动尝试 Token 刷新。
 - **WHEN** 开发者检查 `packages/contracts`
 - **THEN** 目录存在（当前仅 `.gitkeep`）
 - **AND** `apps/web/src/shared/api/types.ts` 包含注释说明后续可从 `@quantagent/contracts` 导入类型
+
+### Requirement: API Client Tests
+
+apiClient 及其依赖模块 SHALL 有自动化测试覆盖。
+
+#### Scenario: Success unwrap test
+
+- **WHEN** fetch mock 返回 `{ code: 0, data: { ... }, msg: "ok" }`
+- **THEN** `apiClient.get<T>(url)` 返回 `data` 部分
+
+#### Scenario: Envelope return test
+
+- **WHEN** 使用 `requestEnvelope<T>(url)`
+- **THEN** 返回完整 `{ code, data, msg }`
+
+#### Scenario: Business error test
+
+- **WHEN** fetch mock 返回 `{ code: 40001, data: null, msg: "参数错误" }`
+- **THEN** 抛出 `ApiError` 且 `code === 40001`
+
+#### Scenario: HTTP error test
+
+- **WHEN** fetch mock 返回 HTTP 500
+- **THEN** 抛出 `ApiError` 且 `status === 500`
+
+#### Scenario: Auth disabled by default test
+
+- **WHEN** `authEnabled` 为默认值 `false`
+- **THEN** 请求 headers 中不包含 `Authorization`
+
+#### Scenario: Auth enabled injects Bearer test
+
+- **WHEN** `authEnabled = true` 且 token provider 返回有效 token
+- **THEN** 请求 headers 包含 `Authorization: Bearer <token>`
+
+#### Scenario: Abort signal cancels request test
+
+- **WHEN** 传入 `AbortSignal` 并触发 abort
+- **THEN** 请求被取消
+
+#### Scenario: Timeout aborts request test
+
+- **WHEN** 请求超过 timeout
+- **THEN** 请求被 AbortController 取消并抛出超时错误
+
+#### Scenario: Concurrent 401 shares one refresh test
+
+- **WHEN** 多个请求同时收到 401
+- **THEN** `refreshToken` 仅被调用一次
+- **AND** 所有请求使用新 token 重放
+
+#### Scenario: Refresh failure clears token test
+
+- **WHEN** `refreshToken` 调用失败
+- **THEN** token 被清理、`onUnauthorized` 被调用、抛出 `ApiError`
+
+#### Scenario: Error registry maps codes test
+
+- **WHEN** 查询已知业务错误码
+- **THEN** registry 返回对应的 `{ behavior, message? }`
 
 ### Requirement: Build Verification
 
