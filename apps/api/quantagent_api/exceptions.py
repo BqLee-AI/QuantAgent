@@ -92,7 +92,10 @@ def register_exception_handlers(app: FastAPI) -> None:
             message = "Method Not Allowed"
         else:
             error_key = "HTTP_ERROR"
-            message = exc.detail if isinstance(exc.detail, str) else str(status_code)
+            if status_code >= 500:
+                message = "Internal Server Error"
+            else:
+                message = exc.detail if isinstance(exc.detail, str) else str(status_code)
         return _error_payload(
             status_code=status_code,
             response_code=response_code,
