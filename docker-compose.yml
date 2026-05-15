@@ -1,0 +1,38 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: quantagent-api:local
+    environment:
+      APP_ENV: local
+      DATABASE_URL: postgresql+psycopg://quantagent:quantagent@db:5432/quantagent
+      HOST: 0.0.0.0
+      PORT: 8000
+      RUNTIME_DIR: /app/runtime
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: quantagent
+      POSTGRES_USER: quantagent
+      POSTGRES_PASSWORD: quantagent
+    ports:
+      - "${DB_PORT:-15432}:5432"
+    volumes:
+      - quantagent-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U quantagent -d quantagent"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  quantagent-db:
