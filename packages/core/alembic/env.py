@@ -7,6 +7,7 @@ from sqlalchemy import engine_from_config, pool
 
 from quantagent.core.config.settings import settings
 from quantagent.core.db.base import Base
+from quantagent.core.db.session import require_database_url
 
 config = context.config
 
@@ -18,9 +19,9 @@ target_metadata = Base.metadata
 
 def get_url() -> str:
     # Keep Alembic on the same configuration path as the application:
-    # DATABASE_URL comes from environment variables first, then .env, then the
-    # local-development default declared in Settings.
-    return settings.DATABASE_URL
+    # DATABASE_URL comes from environment variables or .env and is required
+    # before running migrations.
+    return require_database_url(settings.DATABASE_URL)
 
 
 def run_migrations_offline() -> None:

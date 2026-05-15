@@ -9,9 +9,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     APP_ENV: str = "development"
-    # Local-development fallback only. Deployments should override this through
-    # DATABASE_URL in the environment or .env instead of relying on this value.
-    DATABASE_URL: str = "postgresql+psycopg://quantagent:quantagent@localhost:5432/quantagent"
+    DATABASE_URL: str | None = None
     RUNTIME_DIR: Path = Path("runtime")
     LOG_LEVEL: str = "INFO"
 

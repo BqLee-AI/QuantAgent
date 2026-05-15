@@ -7,7 +7,7 @@ from sqlalchemy.engine import Engine
 
 from quantagent.core.config.settings import Settings
 from quantagent.core.db.base import Base
-from quantagent.core.db.session import create_session_factory, create_sync_engine
+from quantagent.core.db.session import create_session_factory, create_sync_engine, require_database_url
 
 
 class CorePackageTestCase(unittest.TestCase):
@@ -24,9 +24,18 @@ class CorePackageTestCase(unittest.TestCase):
         self.assertEqual(settings.RUNTIME_DIR, Path("/tmp/quantagent-runtime"))
         self.assertEqual(settings.LOG_LEVEL, "DEBUG")
 
+    def test_database_url_has_no_hardcoded_default(self) -> None:
+        settings = Settings(_env_file=None)
+
+        self.assertIsNone(settings.DATABASE_URL)
+
     def test_base_metadata_is_importable(self) -> None:
         self.assertIsNotNone(Base.metadata)
         self.assertEqual(Base.metadata.tables, {})
+
+    def test_database_url_is_required_for_default_engine(self) -> None:
+        with self.assertRaisesRegex(ValueError, "DATABASE_URL must be configured"):
+            require_database_url()
 
     def test_sync_engine_and_session_factory_are_importable(self) -> None:
         engine = create_sync_engine("sqlite:///:memory:")
