@@ -10,11 +10,11 @@ dependencies = [
 ]
 
 [project.scripts]
-api = "quantagent_api.main:run"
+api = "quantagent.api.main:run"
 
 [tool.uv.build-backend]
-module-root = ""
-module-name = "quantagent_api"
+module-root = "src"
+module-name = "quantagent.api"
 
 [build-system]
 requires = ["uv_build>=0.11.14,<0.12"]

@@ -6,6 +6,7 @@ import {
   type QueryClientConfig,
 } from '@tanstack/react-query';
 import { RuntimeConfigProvider, type RuntimeConfig } from '../shared/config';
+import { heroUITheme } from '../styles/heroui-theme';
 
 export interface AppProvidersProps extends PropsWithChildren {
   config: RuntimeConfig;
@@ -69,9 +70,11 @@ export function AppProviders({
 }: AppProvidersProps) {
   return (
     <RuntimeConfigProvider value={config}>
-      <HeroUIProvider>
-        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-      </HeroUIProvider>
+      <div className="heroui-theme" data-theme="light" style={heroUITheme}>
+        <HeroUIProvider>
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        </HeroUIProvider>
+      </div>
     </RuntimeConfigProvider>
   );
 }
