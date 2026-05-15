@@ -14,12 +14,15 @@ styles.css SHALL 定义 `--qa-*` 原始 CSS 变量覆盖 DESIGN.md 的所有设�
 
 #### Scenario: Typography tokens defined
 
-- **WHEN** 开发者检查 styles.css
+- **WHEN** 开发者检查 `apps/web/src/styles/tokens.css`
 - **THEN** 存在 `--qa-font-*` 原始变量定义字体栈（Inter + JetBrains Mono）
+- **AND** 存在 `--qa-text-*` 原始变量定义 DESIGN.md 各排版层级的 font-size（hero-display、display-lg/md/sm、title-lg/md/sm、body-md/sm、caption）
+- **AND** 每层级有对应的 `--qa-text-{level}-lh` 定义 line-height
+- **AND** 存在 `--qa-font-weight-*` 原始变量定义字重（regular/medium/semibold/bold）
 
 ### Requirement: Tailwind Theme Integration
 
-Tailwind v4 的 @theme 指令 SHALL 注册语义化 utility class，并从 `--qa-*` 原始变量映射到 Tailwind 的 `--color-*`、`--font-*` 等主题变量。
+Tailwind v4 的 @theme 指令 SHALL 注册语义化 utility class，并从 `--qa-*` 原始变量映射到 Tailwind 主题变量。注册范围包括：`--color-*`、`--font-*`（family）、`--font-weight-*`、`--text-*`（size+line-height）、`--spacing-*`、`--radius-*`、`--shadow-*`。
 
 #### Scenario: Semantic color utilities available
 
@@ -29,6 +32,17 @@ Tailwind v4 的 @theme 指令 SHALL 注册语义化 utility class，并从 `--qa
 - **AND** 渲染结果与 DESIGN.md 定义的色值一致
 - **AND** `text-ink` 引用的 CSS 变量计算值等于 DESIGN.md 的 `{colors.ink}`（#181a20）
 - **AND** `bg-primary` 引用的 CSS 变量计算值等于 DESIGN.md 的 `{colors.primary}`（#3b82f6）
+
+#### Scenario: Typography scale utilities available
+
+- **WHEN** 开发者编写 `text-title-lg` 或 `text-body-md`
+- **THEN** 对应的 font-size 与 DESIGN.md typography 层级一致
+- **AND** 自动附带该层级的 line-height（通过 `--text-{name}--line-height`）
+
+#### Scenario: Shadow utilities available
+
+- **WHEN** 开发者编写 `shadow-card` 或 `shadow-elevated`
+- **THEN** 对应的 box-shadow 与 DESIGN.md elevation token 一致
 
 #### Scenario: Spacing and radius utilities
 

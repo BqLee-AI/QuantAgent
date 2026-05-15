@@ -3,7 +3,7 @@
 ## 1. CSS Variable Token Layer
 
 - [x] 在 `apps/web/src/styles/tokens.css` 中定义 `:root` `--qa-*` CSS 变量，覆盖 DESIGN.md 的色彩 token（brand、surface、hairline、text、trading、info）。
-- [x] 定义排版 token（font-family、font-size、font-weight、line-height）。
+- [x] 定义排版 token（font-family：`--qa-font-*`、font-size + line-height：`--qa-text-*`/`--qa-text-{level}-lh`、font-weight：`--qa-font-weight-*`）。
 - [x] 定义间距 token（4px 基础单元及各级别）。
 - [x] 定义圆角 token（xs 到 pill）。
 - [x] 定义阴影/elevation token。
@@ -11,9 +11,12 @@
 ## 2. Tailwind v4 @theme 配置
 
 - [x] 在 `apps/web/src/styles/tailwind-theme.css` 中使用 `@theme` 指令注册语义化颜色 utility（`--color-*`），并从 `--qa-*` 原始变量映射，避免 `--color-*` 自引用。
-- [x] 注册排版 utility（`--font-*`、`--text-*`）。
-- [x] 注册间距 utility（`--spacing-*`）。
-- [x] 注册圆角 utility（`--radius-*`）。
+- [x] 注册字体 family utility（`--font-sans`、`--font-mono`）映射 `--qa-font-*`。
+- [x] 注册字重 utility（`--font-weight-regular/medium/semibold/bold`）映射 `--qa-font-weight-*`。
+- [x] 注册排版 scale utility（`--text-hero-display` 到 `--text-caption`），含 `--line-height` 伴随变量。
+- [x] 注册间距 utility（`--spacing-xxs` 到 `--spacing-section`）映射 `--qa-spacing-*`。
+- [x] 注册圆角 utility（`--radius-xs` 到 `--radius-pill`）映射 `--qa-radius-*`。
+- [x] 注册阴影 utility（`--shadow-card`、`--shadow-elevated`）映射 `--qa-shadow-*`。
 
 ## 3. HeroUI 主题同步
 
