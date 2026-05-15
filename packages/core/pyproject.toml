@@ -1,0 +1,19 @@
+[project]
+name = "quantagent-core"
+version = "0.1.0"
+description = "Shared QuantAgent core infrastructure"
+requires-python = ">=3.11"
+dependencies = [
+    "alembic>=1.17.2",
+    "pydantic-settings>=2.14.1",
+    "psycopg[binary]>=3.3.2",
+    "sqlalchemy>=2.0.44",
+]
+
+[tool.uv.build-backend]
+module-root = "src"
+module-name = "quantagent.core"
+
+[build-system]
+requires = ["uv_build>=0.11.14,<0.12"]
+build-backend = "uv_build"
