@@ -54,3 +54,137 @@
   font-size: 14px;
   line-height: 1.5;
 }
+
+.app-error-screen {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: var(--qa-spacing-lg);
+  background:
+    radial-gradient(circle at top, rgba(15, 118, 110, 0.08), transparent 32%),
+    var(--qa-color-canvas);
+}
+
+.app-error-card {
+  display: grid;
+  gap: 14px;
+  width: min(100%, 640px);
+  padding: 28px;
+  border: 1px solid var(--qa-color-hairline);
+  border-radius: 16px;
+  background: var(--qa-color-canvas);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+}
+
+.app-error-kicker {
+  margin: 0;
+  color: var(--qa-color-trading-up);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.app-error-title {
+  margin: 0;
+  color: var(--qa-color-ink);
+  font-size: 28px;
+  line-height: 1.2;
+}
+
+.app-error-copy {
+  margin: 0;
+  color: var(--qa-color-muted);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.app-error-summary {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--qa-color-surface);
+}
+
+.app-error-summary-label {
+  margin: 0;
+  color: var(--qa-color-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.app-error-summary-value {
+  margin: 0;
+  color: var(--qa-color-ink);
+  font-size: 15px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.app-error-meta {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.app-error-meta-item {
+  display: grid;
+  gap: 4px;
+}
+
+.app-error-meta-label {
+  color: var(--qa-color-muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.app-error-meta-value {
+  margin: 0;
+  color: var(--qa-color-ink);
+  font-size: 14px;
+  word-break: break-word;
+}
+
+.app-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.app-error-button,
+.app-error-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.app-error-button {
+  border: 1px solid var(--qa-color-primary);
+  background: var(--qa-color-primary);
+  color: var(--qa-color-on-primary);
+  cursor: pointer;
+}
+
+.app-error-button:hover {
+  background: var(--qa-color-primary-active);
+}
+
+.app-error-link {
+  border: 1px solid var(--qa-color-hairline);
+  background: var(--qa-color-canvas);
+  color: var(--qa-color-ink);
+}
+
+.app-error-link:hover {
+  background: var(--qa-color-surface-elevated);
+}
