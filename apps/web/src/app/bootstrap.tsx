@@ -1,7 +1,11 @@
 import { StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { RouterProvider } from '@tanstack/react-router';
-import { AppErrorBoundary, StartupErrorFallback } from './error-boundary';
+import {
+  AppErrorBoundary,
+  AppErrorScreen,
+  createAppErrorDetails,
+} from './error-boundary';
 import { AppProviders, createAppQueryClient } from './providers';
 import { createAppRouter } from './router';
 import { loadRuntimeConfig, type RuntimeConfig } from '../shared/config';
@@ -16,8 +20,14 @@ function toStartupError(error: unknown, fallbackMessage: string): Error {
   return error instanceof Error ? error : new Error(fallbackMessage);
 }
 
-function renderStartupError(root: Root, error: Error): void {
-  root.render(<StartupErrorFallback error={error} />);
+function renderStartupError(root: Root, error: Error, description: string): void {
+  root.render(
+    <AppErrorScreen
+      title="QuantAgent 启动失败"
+      description={description}
+      error={createAppErrorDetails(error)}
+    />,
+  );
 }
 
 export function bootstrapApp(
@@ -36,22 +46,47 @@ export function bootstrapApp(
       'Failed to load runtime config before app bootstrap.',
     );
 
-    renderStartupError(root, startupError);
+    renderStartupError(
+      root,
+      startupError,
+      '应用在启动或初始化阶段遇到错误。',
+    );
 
     return root;
   }
 
-  const queryClient = options.queryClient ?? createAppQueryClient();
-  const router = options.router ?? createAppRouter();
-  const app = (
-    <AppProviders config={config} queryClient={queryClient}>
-      <AppErrorBoundary fallback={(error) => <StartupErrorFallback error={error} />}>
-        <RouterProvider router={router} />
-      </AppErrorBoundary>
-    </AppProviders>
-  );
+  try {
+    const queryClient = options.queryClient ?? createAppQueryClient();
+    const router = options.router ?? createAppRouter();
+    const app = (
+      <AppProviders config={config} queryClient={queryClient}>
+        <AppErrorBoundary
+          fallback={(error) => (
+            <AppErrorScreen
+              title="QuantAgent 遇到错误"
+              description="应用在渲染时发生异常。"
+              error={error}
+            />
+          )}
+        >
+          <RouterProvider router={router} />
+        </AppErrorBoundary>
+      </AppProviders>
+    );
 
-  root.render(config.mode === 'production' ? app : <StrictMode>{app}</StrictMode>);
+    root.render(config.mode === 'production' ? app : <StrictMode>{app}</StrictMode>);
+  } catch (error) {
+    const startupError = toStartupError(
+      error,
+      'Failed to initialize the app shell before bootstrap.',
+    );
+
+    renderStartupError(
+      root,
+      startupError,
+      '应用在启动或初始化阶段遇到错误。',
+    );
+  }
 
   return root;
 }
