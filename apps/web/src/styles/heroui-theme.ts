@@ -3,11 +3,11 @@ import type { CSSProperties } from 'react';
 type HeroUIThemeVars = CSSProperties & Record<`--${string}`, string>;
 
 export const heroUITheme: HeroUIThemeVars = {
-  '--accent': '#3b82f6',
-  '--accent-foreground': '#ffffff',
-  '--focus': '#3b82f6',
-  '--success': '#0ecb81',
-  '--success-foreground': '#181a20',
-  '--danger': '#f6465d',
-  '--danger-foreground': '#ffffff',
+  '--accent': 'var(--qa-color-primary)',
+  '--accent-foreground': 'var(--qa-color-on-primary)',
+  '--focus': 'var(--qa-color-primary)',
+  '--success': 'var(--qa-color-trading-up)',
+  '--success-foreground': 'var(--qa-color-ink)',
+  '--danger': 'var(--qa-color-trading-down)',
+  '--danger-foreground': 'var(--qa-color-on-primary)',
 };
