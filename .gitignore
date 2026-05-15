@@ -21,6 +21,7 @@ venv/
 node_modules/
 dist/
 build/
+.turbo/
 .vite/
 coverage/
 
@@ -43,3 +44,7 @@ logs/
 # Editor
 .idea/
 .vscode/
+
+# AI tool local state
+.claude/
+.codex/
