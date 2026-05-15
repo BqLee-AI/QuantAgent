@@ -22,8 +22,8 @@ QuantAgent 是一套事件驱动的量化智能系统，围绕外部事件采集
 - `apps/api/`：FastAPI API 入口，负责 HTTP 边界，不承载核心领域逻辑。
 - `apps/worker/`：后台任务入口预留，后续承载抓取、路由和长耗时任务。
 - `apps/scheduler/`：定时任务入口预留，后续承载周期性调度。
-- `packages/quant/core/`：核心基础包边界，后续承载共享配置、数据库、错误和领域基础能力。
-- `packages/quant/agent/`：Agent 与 workflow 包边界预留。
-- `packages/quant/plugin-sdk/`：插件开发 SDK 包边界预留。
-- `packages/quant/adapters/`：官方 adapter 包边界预留。
+- `packages/core/`：核心基础包，承载共享配置、数据库、Alembic、错误和领域基础能力。
+- `packages/agent/`：Agent 与 workflow 包边界预留。
+- `packages/plugin-sdk/`：插件开发 SDK 包边界预留。
+- `packages/adapters/`：官方 adapter 包边界预留。
 - `packages/contracts/`：跨前后端契约与生成物边界预留。

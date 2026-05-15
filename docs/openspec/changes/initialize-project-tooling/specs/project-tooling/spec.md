@@ -10,7 +10,7 @@
 
 - **WHEN** 开发者在 initialize-project-tooling change 完成后检查仓库
 - **THEN** `apps/api`、`apps/web`、`apps/worker`、`apps/scheduler` 存在
-- **AND** `packages/quant/core`、`packages/quant/agent`、`packages/quant/plugin-sdk`、`packages/quant/adapters`、`packages/contracts` 存在
+- **AND** `packages/core`、`packages/agent`、`packages/plugin-sdk`、`packages/adapters`、`packages/contracts` 存在
 - **AND** `plugins/sources`、`plugins/industries`、`plugins/strategies`、`plugins/notifications`、`plugins/executors` 存在
 - **AND** `runtime/plugins`、`runtime/config`、`runtime/data`、`runtime/logs` 存在
 - **AND** `infra/docker` 和 `infra/compose` 存在
