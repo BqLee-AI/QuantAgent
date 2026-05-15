@@ -197,77 +197,110 @@ apiClient SHALL 集中处理 401 会话过期，不实现 Bearer token refresh�
 
 ### Requirement: API Client Tests
 
-apiClient 及其依赖模块 SHALL 有自动化测试覆盖。
+apiClient 及其依赖模块 SHALL 有自动化测试覆盖。测试分为三个层次，依赖 #56（Vitest Node Runner）和 #55（API Mock 框架）。
 
-#### Scenario: Axios instance config test
+#### Tier 1: 纯逻辑单测（#56 Vitest Node）
+
+不依赖浏览器、不依赖 Axios 运行时。
+
+##### Scenario: ApiError construction test
+
+- **WHEN** 创建 ApiError 实例
+- **THEN** code、msg、request_id、trace_id、status 字段正确保留
+- **AND** 继承自 Error
+
+##### Scenario: AxiosError to ApiError conversion test
+
+- **WHEN** 传入模拟的 AxiosError
+- **THEN** 转换函数生成包含原始信息的 ApiError
+- **AND** 保留原始 error 作为 cause
+
+##### Scenario: Error registry maps codes test
+
+- **WHEN** 查询已知业务错误码
+- **THEN** registry 返回对应的 `{ behavior, message? }`
+
+##### Scenario: No token storage logic test
+
+- **WHEN** 检查 apiClient 全部源码
+- **THEN** 不存在 localStorage / sessionStorage 读写 token 的逻辑
+
+#### Tier 2: Interceptor 行为测试（#56 Vitest Node + mock Axios instance）
+
+使用 #55 的 `mockEnvelope.ts` 构造测试数据，mock Axios instance 验证 interceptor 行为。
+
+##### Scenario: Axios instance config test
 
 - **WHEN** 创建默认 apiClient
 - **THEN** Axios instance 的 baseURL、timeout、withCredentials 符合默认值
 
-#### Scenario: No Authorization injection test
+##### Scenario: No Authorization injection test
 
 - **WHEN** 发送请求
 - **THEN** 请求 headers 中不包含 `Authorization`
 
-#### Scenario: Trace TODO exists test
+##### Scenario: Trace TODO exists test
 
 - **WHEN** 检查 request interceptor 代码
 - **THEN** 存在 trace header TODO 注释
 
-#### Scenario: Custom header passthrough test
+##### Scenario: Custom header passthrough test
 
 - **WHEN** 传入自定义 headers
 - **THEN** 请求包含该 headers
 
-#### Scenario: Success unpack test
+##### Scenario: Success unpack test
 
-- **WHEN** Axios mock `response.data` 为 `{ code: 0, data: { ... }, msg: "ok" }`
+- **WHEN** mock Axios `response.data` 为 `{ code: 0, data: { ... }, msg: "ok" }`（引用 #55 `mockApiSuccess`）
 - **THEN** `apiClient.get<T>(url)` 返回 `envelope.data` 部分
 
-#### Scenario: Envelope return test
+##### Scenario: Envelope return test
 
 - **WHEN** 使用 `requestEnvelope<T>(url)`
 - **THEN** 返回完整 `{ code, data, msg }`
 
-#### Scenario: Business error test
+##### Scenario: Business error test
 
-- **WHEN** `response.data` 为 `{ code: 40001, data: null, msg: "参数错误" }`
+- **WHEN** `response.data` 为 `{ code: 40001, data: null, msg: "参数错误" }`（引用 #55 `mockApiError`）
 - **THEN** 抛出 `ApiError` 且 `code === 40001`
 
-#### Scenario: HTTP error test
+##### Scenario: HTTP error test
 
-- **WHEN** Axios 返回 HTTP 500
+- **WHEN** mock Axios 返回 HTTP 500
 - **THEN** 抛出 `ApiError` 且 `status === 500`
 
-#### Scenario: Network error test
+##### Scenario: Network error test
 
-- **WHEN** Axios 抛出网络错误
+- **WHEN** mock Axios 抛出网络错误
 - **THEN** 转换为 `ApiError`
 
-#### Scenario: 401 calls onUnauthorized test
+##### Scenario: 401 calls onUnauthorized test
 
-- **WHEN** 收到 401 且未配置 recoverUnauthorized
+- **WHEN** mock 返回 401 且未配置 recoverUnauthorized
 - **THEN** 调用 `onUnauthorized` 并抛出 `ApiError`
 
-#### Scenario: Recover success replays test
+##### Scenario: Recover success replays test
 
-- **WHEN** 收到 401 且 `recoverUnauthorized` 成功
+- **WHEN** mock 返回 401 且 `recoverUnauthorized` 成功
 - **THEN** 使用新 Cookie 重放原请求并返回结果
 
-#### Scenario: Concurrent 401 one recover test
+##### Scenario: Concurrent 401 one recover test
 
-- **WHEN** 多个请求同时收到 401
+- **WHEN** 多个请求同时收到 mock 401
 - **THEN** `recoverUnauthorized` 仅被调用一次
 
-#### Scenario: Recover failure test
+##### Scenario: Recover failure test
 
 - **WHEN** `recoverUnauthorized` 调用失败
 - **THEN** 不重放请求，调用 `onUnauthorized`，抛出 `ApiError`
 
-#### Scenario: Error registry maps codes test
+#### Tier 3: 浏览器集成测试（#53 Playwright + #55 route-mock）
 
-- **WHEN** 查询已知业务错误码
-- **THEN** registry 返回对应的 `{ behavior, message? }`
+可后续 issue 承接，不阻塞本 issue 完成。
+
+- 真实浏览器中 apiClient 请求被 Playwright route mock 拦截并返回 #55 mockEnvelope 数据。
+- 并发 401 recover 在真实浏览器环境下验证。
+- apiClient 与 TanStack Query 集成的页面级行为。
 
 ### Requirement: Build Verification
 

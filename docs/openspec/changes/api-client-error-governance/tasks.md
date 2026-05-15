@@ -53,19 +53,33 @@
 
 ## 7. Tests
 
-- [ ] 测试 Axios instance 默认 baseURL、timeout、withCredentials
-- [ ] 测试不注入 Authorization header
-- [ ] 测试 trace TODO 位置存在
-- [ ] 测试自定义 header 透传
-- [ ] 测试 `code === 0` 自动返回 `envelope.data`
-- [ ] 测试 `requestEnvelope` 返回完整 envelope
-- [ ] 测试 `code !== 0` 抛 ApiError
-- [ ] 测试 HTTP / Axios error 转 ApiError
-- [ ] 测试 401 调用 onUnauthorized
-- [ ] 测试 `recoverUnauthorized` 成功后重放请求
-- [ ] 测试并发 401 只调用一次 `recoverUnauthorized`
-- [ ] 测试 `recoverUnauthorized` 失败后抛 ApiError
-- [ ] 测试 error registry 业务码映射到默认 UI 行为
+### Tier 1: 纯逻辑单测（依赖 #56 Vitest Node Runner）
+
+- [ ] ApiError 构造和字段验证
+- [ ] AxiosError → ApiError 转换函数测试
+- [ ] ErrorRegistry 业务码 → UI 行为映射测试
+- [ ] 确认源码中不存在 localStorage / sessionStorage token 读写逻辑
+
+### Tier 2: Interceptor 行为测试（依赖 #56 + #55 mockEnvelope.ts）
+
+- [ ] Axios instance 默认 baseURL、timeout、withCredentials
+- [ ] 不注入 Authorization header
+- [ ] trace TODO 位置存在
+- [ ] 自定义 header 透传
+- [ ] `code === 0` 自动返回 `envelope.data`（引用 #55 `mockApiSuccess`）
+- [ ] `requestEnvelope` 返回完整 envelope
+- [ ] `code !== 0` 抛 ApiError（引用 #55 `mockApiError`）
+- [ ] HTTP / Axios error 转 ApiError
+- [ ] 401 调用 onUnauthorized
+- [ ] `recoverUnauthorized` 成功后重放请求
+- [ ] 并发 401 只调用一次 `recoverUnauthorized`
+- [ ] `recoverUnauthorized` 失败后抛 ApiError
+
+### Tier 3: 浏览器集成测试（依赖 #53 Playwright + #55 route-mock，可后续 issue）
+
+- [ ] 真实浏览器中 apiClient 请求被 Playwright route mock 拦截
+- [ ] 并发 401 recover 在真实浏览器环境下验证
+- [ ] apiClient 与 TanStack Query 集成的页面级行为
 
 ## 8. Verification
 
