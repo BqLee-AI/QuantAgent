@@ -53,14 +53,37 @@
 
 ## Testing Strategy
 
-- Axios instance config 测试：baseURL、timeout、withCredentials。
-- Request interceptor 测试：不注入 Authorization、trace TODO 位置存在、自定义 header 透传。
-- Response interceptor 测试：`response.data` envelope 解包返回 `envelope.data`、`requestEnvelope` 返回完整 envelope、`code !== 0` 抛 ApiError、Axios network error 转 ApiError。
-- 401 handling 测试：401 调用 onUnauthorized、配置 recoverUnauthorized 时执行恢复并重放、并发 401 只调用一次 recoverUnauthorized、recover 失败抛 ApiError。
-- 确认没有 localStorage/sessionStorage token provider 逻辑。
-- ErrorRegistry 测试：业务码映射到默认 UI 行为。
-- 类型验证通过 `bun run build --filter=web`。
-- 若仓库尚未配置测试框架，本 change 应补充最小测试运行能力（vitest 或等价工具）。
+本 change 的测试依赖以下基础设施 issue，不自建测试框架：
+
+- **#56（Vitest Node Runner）**：支撑 Tier 1 纯逻辑单测和 Tier 2 interceptor 行为测试。
+- **#53（Playwright 浏览器测试）**：支撑 Tier 3 浏览器集成测试。
+- **#55（API Mock 框架）**：提供 `mockEnvelope.ts` 纯数据构造函数（Tier 1/2 共用）和 Playwright `route-mock.ts`（Tier 3 使用）。
+
+测试分三个层次：
+
+**Tier 1 — 纯逻辑单测（#56 Vitest Node，本 issue 内完成）**：
+- ApiError 构造和字段验证
+- AxiosError → ApiError 转换函数
+- ErrorRegistry 业务码 → UI 行为映射
+- 类型编译通过（`bun run build --filter=web`）
+
+**Tier 2 — Interceptor 行为测试（#56 Vitest Node + mock Axios，本 issue 内完成）**：
+- Axios instance 默认 config（baseURL、timeout、withCredentials）
+- 不注入 Authorization header
+- code === 0 自动解包返回 envelope.data
+- requestEnvelope 返回完整 envelope
+- code !== 0 抛 ApiError
+- HTTP / network error 转 ApiError
+- 401 调用 onUnauthorized
+- recoverUnauthorized 成功后重放请求
+- recoverUnauthorized 失败后抛 ApiError
+- 并发 401 只调用一次 recoverUnauthorized
+- Mock 数据构造引用 #55 的 `mockEnvelope.ts` helper
+
+**Tier 3 — 浏览器集成测试（#53 Playwright + #55 route-mock，可后续 issue 承接）**：
+- 真实浏览器中 apiClient 请求被 Playwright route mock 拦截
+- 并发 401 recover 在真实浏览器环境下验证
+- apiClient 与 TanStack Query 集成的页面级行为
 
 ## Open Questions
 
