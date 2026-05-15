@@ -1,0 +1,75 @@
+@theme {
+  /* Colors */
+  --color-primary: var(--qa-color-primary);
+  --color-primary-active: var(--qa-color-primary-active);
+  --color-primary-disabled: var(--qa-color-primary-disabled);
+  --color-canvas: var(--qa-color-canvas);
+  --color-surface-soft: var(--qa-color-surface-soft);
+  --color-surface-card: var(--qa-color-surface-card);
+  --color-surface-elevated: var(--qa-color-surface-elevated);
+  --color-hairline: var(--qa-color-hairline);
+  --color-hairline-strong: var(--qa-color-hairline-strong);
+  --color-border-strong: var(--qa-color-border-strong);
+  --color-ink: var(--qa-color-ink);
+  --color-body: var(--qa-color-body);
+  --color-muted: var(--qa-color-muted);
+  --color-muted-strong: var(--qa-color-muted-strong);
+  --color-on-primary: var(--qa-color-on-primary);
+  --color-trading-up: var(--qa-color-trading-up);
+  --color-trading-down: var(--qa-color-trading-down);
+  --color-info: var(--qa-color-info);
+
+  /* Font Families */
+  --font-sans: var(--qa-font-sans);
+  --font-mono: var(--qa-font-mono);
+
+  /* Font Weights */
+  --font-weight-regular: var(--qa-font-weight-regular);
+  --font-weight-medium: var(--qa-font-weight-medium);
+  --font-weight-semibold: var(--qa-font-weight-semibold);
+  --font-weight-bold: var(--qa-font-weight-bold);
+
+  /* Typography Scale */
+  --text-hero-display: var(--qa-text-hero-display);
+  --text-hero-display--line-height: var(--qa-text-hero-display-lh);
+  --text-display-lg: var(--qa-text-display-lg);
+  --text-display-lg--line-height: var(--qa-text-display-lg-lh);
+  --text-display-md: var(--qa-text-display-md);
+  --text-display-md--line-height: var(--qa-text-display-md-lh);
+  --text-display-sm: var(--qa-text-display-sm);
+  --text-display-sm--line-height: var(--qa-text-display-sm-lh);
+  --text-title-lg: var(--qa-text-title-lg);
+  --text-title-lg--line-height: var(--qa-text-title-lg-lh);
+  --text-title-md: var(--qa-text-title-md);
+  --text-title-md--line-height: var(--qa-text-title-md-lh);
+  --text-title-sm: var(--qa-text-title-sm);
+  --text-title-sm--line-height: var(--qa-text-title-sm-lh);
+  --text-body-md: var(--qa-text-body-md);
+  --text-body-md--line-height: var(--qa-text-body-md-lh);
+  --text-body-sm: var(--qa-text-body-sm);
+  --text-body-sm--line-height: var(--qa-text-body-sm-lh);
+  --text-caption: var(--qa-text-caption);
+  --text-caption--line-height: var(--qa-text-caption-lh);
+
+  /* Spacing */
+  --spacing-xxs: var(--qa-spacing-xxs);
+  --spacing-xs: var(--qa-spacing-xs);
+  --spacing-sm: var(--qa-spacing-sm);
+  --spacing-md: var(--qa-spacing-md);
+  --spacing-lg: var(--qa-spacing-lg);
+  --spacing-xl: var(--qa-spacing-xl);
+  --spacing-xxl: var(--qa-spacing-xxl);
+  --spacing-section: var(--qa-spacing-section);
+
+  /* Radius */
+  --radius-xs: var(--qa-radius-xs);
+  --radius-sm: var(--qa-radius-sm);
+  --radius-md: var(--qa-radius-md);
+  --radius-lg: var(--qa-radius-lg);
+  --radius-xl: var(--qa-radius-xl);
+  --radius-pill: var(--qa-radius-pill);
+
+  /* Shadows */
+  --shadow-card: var(--qa-shadow-card);
+  --shadow-elevated: var(--qa-shadow-elevated);
+}

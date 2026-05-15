@@ -1,0 +1,7 @@
+@import '@heroui/react/styles';
+@import './tokens.css';
+@import './tailwind-theme.css';
+@import './base.css';
+@import './layout.css';
+@import './pages.css';
+@import './responsive.css';

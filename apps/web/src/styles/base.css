@@ -1,0 +1,24 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  color: var(--qa-color-ink);
+  background: var(--qa-color-canvas);
+  font-family: var(--qa-font-sans);
+}
+
+.heroui-theme {
+  min-height: 100vh;
+  background: var(--qa-color-canvas);
+  color: var(--qa-color-ink);
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}

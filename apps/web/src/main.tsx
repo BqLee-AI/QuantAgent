@@ -1,5 +1,5 @@
 import { bootstrapApp } from './app/bootstrap';
-import './styles.css'
+import './styles/index.css'
 
 const container = document.getElementById('root');
 

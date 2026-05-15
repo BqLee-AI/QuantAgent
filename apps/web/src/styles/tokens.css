@@ -1,0 +1,88 @@
+/* Design Tokens (from DESIGN.md) */
+
+:root {
+  /* Brand */
+  --qa-color-primary: #3b82f6;
+  --qa-color-primary-active: #2563eb;
+  --qa-color-primary-disabled: #93c5fd;
+
+  /* Surface */
+  --qa-color-canvas: #ffffff;
+  --qa-color-surface-soft: #fafafa;
+  --qa-color-surface-card: #f5f5f5;
+  --qa-color-surface-elevated: #e5e7eb;
+
+  /* Hairlines */
+  --qa-color-hairline: #e5e7eb;
+  --qa-color-hairline-strong: #d1d5db;
+  --qa-color-border-strong: #cdd1d6;
+
+  /* Text */
+  --qa-color-ink: #181a20;
+  --qa-color-body: #374151;
+  --qa-color-muted: #6b7280;
+  --qa-color-muted-strong: #4b5563;
+  --qa-color-on-primary: #ffffff;
+  --qa-color-topbar: rgb(from var(--qa-color-canvas) r g b / 0.92);
+
+  /* Trading */
+  --qa-color-trading-up: #0ecb81;
+  --qa-color-trading-down: #f6465d;
+
+  /* Info */
+  --qa-color-info: #3b82f6;
+
+  /* Elevation */
+  --qa-shadow-card: 0 1px 3px rgb(0 0 0 / 0.06);
+  --qa-shadow-elevated: 0 4px 12px rgb(0 0 0 / 0.08);
+
+  /* Typography */
+  --qa-font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "BlinkMacSystemFont", "Segoe UI", sans-serif;
+  --qa-font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+
+  /* Spacing */
+  --qa-spacing-xxs: 4px;
+  --qa-spacing-xs: 8px;
+  --qa-spacing-sm: 12px;
+  --qa-spacing-md: 16px;
+  --qa-spacing-lg: 24px;
+  --qa-spacing-xl: 32px;
+  --qa-spacing-xxl: 48px;
+  --qa-spacing-section: 80px;
+
+  /* Typography Scale */
+  --qa-text-hero-display: 64px;
+  --qa-text-hero-display-lh: 1.1;
+  --qa-text-display-lg: 48px;
+  --qa-text-display-lg-lh: 1.1;
+  --qa-text-display-md: 40px;
+  --qa-text-display-md-lh: 1.15;
+  --qa-text-display-sm: 32px;
+  --qa-text-display-sm-lh: 1.2;
+  --qa-text-title-lg: 24px;
+  --qa-text-title-lg-lh: 1.3;
+  --qa-text-title-md: 20px;
+  --qa-text-title-md-lh: 1.35;
+  --qa-text-title-sm: 16px;
+  --qa-text-title-sm-lh: 1.4;
+  --qa-text-body-md: 14px;
+  --qa-text-body-md-lh: 1.5;
+  --qa-text-body-sm: 13px;
+  --qa-text-body-sm-lh: 1.5;
+  --qa-text-caption: 12px;
+  --qa-text-caption-lh: 1.4;
+
+  /* Font Weights */
+  --qa-font-weight-regular: 400;
+  --qa-font-weight-medium: 500;
+  --qa-font-weight-semibold: 600;
+  --qa-font-weight-bold: 700;
+
+  /* Radius */
+  --qa-radius-xs: 2px;
+  --qa-radius-sm: 4px;
+  --qa-radius-md: 6px;
+  --qa-radius-lg: 8px;
+  --qa-radius-xl: 12px;
+  --qa-radius-pill: 9999px;
+}
