@@ -7,6 +7,10 @@ description: Use when the user wants Codex to draft, create, refine, or batch-cr
 
 这个 skill 用于把粗略需求、代码上下文、讨论记录、规格文档或待办项转成可接手的 GitHub issue。默认面向当前本地仓库，也可以按用户指定的 `owner/repo` 创建。
 
+## 核心立场
+
+每一个创建的 issue 必须是一个 **可独立接手、可独立验收的工作单元**。不是需求转储，不是备忘录，不是讨论帖。如果原始输入包含多个独立问题，先拆分再创建，不要糊成一个大 issue。issue 的边界、验收口径和未决问题必须在创建前想清楚，而不是留给接手者脑补。
+
 ## 先确认目标仓库
 
 优先从当前 git 仓库推断远端：
@@ -109,7 +113,13 @@ gh auth status
 
 ## 验证要求
 
-列出必要且足够的测试、lint、typecheck、smoke、复现验证或人工校验。
+分层列出验证项，与风险级别匹配：
+
+- **必须通过**（阻塞合并）：typecheck、lint、核心路径单测
+- **应当通过**（本 issue 范围内完成）：功能相关的集成测试、边界用例
+- **可后续补充**（不阻塞本 issue 关闭）：浏览器集成测试、性能回归、可访问性检查
+
+不要把重型验证提前塞进低风险 issue。验证的深度应与改动的影响范围成正比。
 ```
 
 正文默认使用用户语言；如果仓库既有 issue 都使用另一种语言，跟随仓库风格。
@@ -143,13 +153,14 @@ gh label list --repo OWNER/REPO --limit 200
 2. 使用显式 `--repo`、`--title`、`--body-file`、`--label` 创建 issue。
 3. 创建后立即回读 issue，核对标题、URL、正文摘要和标签。
 4. 如果标签缺失或挂错，在确认仓库标签存在后用 `gh issue edit` 修正。
+5. 标签验证：对比实际挂载的标签与预期标签列表。如果 GitHub 静默忽略了不存在的标签（`gh issue create` 对无效 `--label` 不报错），必须用 `gh issue view --json labels` 的输出来确认标签已正确挂载，缺失的标签用 `gh issue edit` 补挂。
 
 示例：
 
 ```bash
 gh issue create \
   --repo OWNER/REPO \
-  --title "[DEV] short actionable title" \
+  --title "feat(scope): 简短中文描述" \
   --body-file issue.md \
   --label enhancement \
   --label priority:medium

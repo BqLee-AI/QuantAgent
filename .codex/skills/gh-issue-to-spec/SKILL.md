@@ -54,7 +54,12 @@ gh issue view ISSUE --repo OWNER/REPO --json number,title,body,labels,url,state,
 
 如果 issue 是一包大功能或多个独立问题，不要直接写成一个大 spec。先拆成建议的 spec/issue 边界，征求用户确认。
 
-如果关键边界模糊，先问 1-3 个会改变 spec 结构的问题；不要问低价值偏好题。
+如果关键边界模糊，使用结构化提问协议：
+
+1. **只问会改变 spec 结构的问题**：如果答案不会影响 proposal.md 的目标/非目标/范围划分，或不会改变 tasks.md 的依赖关系，不要问。
+2. **最多 3 个问题**：一次提问不超过 3 个，按影响面从大到小排列。先问清楚会改变整个 spec 方向的问题。
+3. **提供默认建议**：每个问题附带一个合理默认值，用户可以快速确认而不是从零思考。例如："401 恢复策略默认用 cookie session refresh，是否需要支持其他方式？"
+4. **不要问偏好题**：命名风格、文件组织方式、注释密度等低价值偏好不作为阻塞问题。
 
 ## 选择 spec 形态
 
@@ -178,6 +183,8 @@ gh issue view ISSUE --repo OWNER/REPO --json number,title,body,labels,url,state,
 - [ ] R1. Review <artifact/result> before implementation continues.
 ```
 
+**与 OpenSpec 的兼容**：当仓库使用 OpenSpec change 包结构时，tasks.md 即为 change 目录下的 `tasks.md`。上述 Task Graph 格式直接写入该文件，不需要额外转换。每个 checkbox 对应 OpenSpec tasks 中的一个待办项，实现完成后直接在文件中勾选。
+
 ## 审核门槛
 
 写入 spec 后必须停下，向用户返回：
@@ -197,13 +204,16 @@ gh issue view ISSUE --repo OWNER/REPO --json number,title,body,labels,url,state,
 
 如果用户之后批准实现：
 
-- 重新读取已落地的 spec，而不是只依赖聊天摘要。
-- 用计划跟踪机制把任务图转成执行计划。
-- 先处理阻塞路径。
-- 可并行任务只有在写入边界清晰且互不重叠时才拆给子 Agent。
-- 实现完成后同步更新 spec/tasks 状态，记录验证结果。
+1. **重新读取 spec**：从磁盘重新读取已落地的 spec 文件（proposal.md、design.md、tasks.md），不依赖聊天上下文中的摘要。
+2. **任务图 → 执行计划**：将 tasks.md 中的任务图转为执行计划，使用计划跟踪机制。
+3. **执行顺序**：
+   - 先处理阻塞路径（Blocking Path），后续任务的正确性依赖前置任务完成。
+   - 可并行任务（Parallelizable Work）只有在写入边界清晰且互不重叠时才拆给子 Agent 并行执行。
+4. **审核点触发**：遇到 Review Point 时暂停，将中间结果展示给用户确认后再继续。
+5. **状态同步**：每个任务完成后，立即在 tasks.md 中勾选对应 checkbox。发现 spec 与实际实现有偏差时，回写 spec 而不是静默偏离。
+6. **验证闭环**：实现完成后，运行 tasks.md §8（Verification）中的所有检查项。将验证结果记录到 spec 或 PR description 中。
 
-这个 skill 的默认结束点是 spec 审核，不是代码实现。
+这个 skill 的默认结束点是 spec 审核，不是代码实现。实现阶段的启动需要用户明确批准。
 
 ## 护栏
 
@@ -215,6 +225,17 @@ gh issue view ISSUE --repo OWNER/REPO --json number,title,body,labels,url,state,
 - 不要把任务写成没有依赖关系、没有写入边界的清单。
 - 不要假设所有仓库都使用 OpenSpec；先看本仓库约定。
 - 不要创建与仓库现有 spec 体系冲突的新目录，除非仓库没有任何约定。
+
+## 实现后验证清单
+
+如果用户批准实现且实现完成后，运行以下验证：
+
+1. **Spec 一致性**：实际代码实现是否与 proposal.md 中的目标和范围一致。如有偏差，spec 是否已同步更新。
+2. **Tasks 完成度**：tasks.md 中所有 checkbox 是否已勾选。未勾选项是否有说明（如标记为后续 issue）。
+3. **构建通过**：`bun run build` 或仓库等效构建命令通过。
+4. **测试通过**：tasks.md 中声明的验证项是否全部执行且通过。
+5. **未决问题闭环**：proposal.md 中的 Open Questions 是否都已解决或转为新的 issue。
+6. **文件写入边界**：实际修改的文件是否在 tasks.md 声明的写入边界内，有无越界修改。
 
 ## 完成后返回
 
