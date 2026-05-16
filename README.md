@@ -38,13 +38,17 @@ cp .env.example .env
 
 `.env.example` 只提供本地开发样例，不包含真实密钥；真实 `.env` 不提交到仓库。
 
+`docker-compose.yml` 通过环境变量插值读取配置，默认值只放在 `.env.example` 中。宿主机访问数据库使用 `DATABASE_URL`，API 容器内部访问数据库使用 `API_DATABASE_URL`。
+
 启动本地 PostgreSQL 17：
 
 ```bash
 docker compose up -d db
 ```
 
-Compose 内部连接地址为 `db:5432`；宿主机默认通过 `localhost:15432` 访问，避免和本机已有 PostgreSQL 的 `5432` 端口冲突。如需改端口，可以在 `.env` 中设置 `DB_PORT`。
+Compose 内部连接地址为 `db:5432`；`.env.example` 中宿主机端口示例为 `15432`，避免和本机已有 PostgreSQL 的 `5432` 端口冲突。如需改端口，可以在 `.env` 中设置 `DB_PORT`。
+
+API 服务端口从 `.env` 中的 `API_PORT` 读取，`.env.example` 中示例为 `8000`。
 
 构建并启动后端 API 与数据库：
 

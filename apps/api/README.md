@@ -22,7 +22,9 @@ docker compose up --build api
 docker compose up -d db
 ```
 
-`db` 容器内端口为 `5432`，宿主机默认映射到 `15432`，可通过 `.env` 中的 `DB_PORT` 调整。
+`db` 容器内端口为 `5432`，宿主机映射端口从 `.env` 中的 `DB_PORT` 读取，`.env.example` 中示例为 `15432`。
+
+Compose 中的 API 容器通过 `API_DATABASE_URL` 连接 `db:5432`；宿主机本地工具通过 `DATABASE_URL` 连接 `localhost:15432`。
 
 ## 说明
 
