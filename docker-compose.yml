@@ -6,14 +6,14 @@ services:
       target: runtime
     image: quantagent-api:local
     environment:
-      APP_ENV: ${APP_ENV:?APP_ENV is required}
-      DATABASE_URL: ${API_DATABASE_URL:?API_DATABASE_URL is required}
-      HOST: ${API_HOST:?API_HOST is required}
-      PORT: ${API_PORT:?API_PORT is required}
-      RUNTIME_DIR: ${API_RUNTIME_DIR:?API_RUNTIME_DIR is required}
-      LOG_LEVEL: ${LOG_LEVEL:?LOG_LEVEL is required}
+      APP_ENV: ${APP_ENV:-local}
+      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://quantagent:quantagent@db:5432/quantagent}
+      HOST: ${API_HOST:-0.0.0.0}
+      PORT: ${API_PORT:-8000}
+      RUNTIME_DIR: ${API_RUNTIME_DIR:-/app/runtime}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
-      - "${API_PORT:?API_PORT is required}:8000"
+      - "${API_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -21,11 +21,11 @@ services:
   db:
     image: postgres:17
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
-      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-quantagent}
+      POSTGRES_USER: ${POSTGRES_USER:-quantagent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quantagent}
     ports:
-      - "${DB_PORT:?DB_PORT is required}:5432"
+      - "${DB_HOST:-127.0.0.1}:${DB_PORT:-15432}:5432"
     volumes:
       - quantagent-db:/var/lib/postgresql/data
     healthcheck:
