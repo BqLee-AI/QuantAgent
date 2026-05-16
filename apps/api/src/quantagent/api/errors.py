@@ -54,3 +54,15 @@ class InternalError(AppError):
             error_key="INTERNAL_ERROR",
             details=details,
         )
+
+
+class ServiceUnavailableError(AppError):
+    def __init__(self, message: str = "Service Unavailable", *, details: dict[str, Any] | None = None) -> None:
+        super().__init__(
+            message,
+            status_code=503,
+            error_code=50300,
+            error_key="SERVICE_UNAVAILABLE",
+            details=details,
+            retryable=True,
+        )
