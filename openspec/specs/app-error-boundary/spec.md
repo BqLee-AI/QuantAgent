@@ -1,6 +1,10 @@
-# 应用级错误边界与兜底错误页 Specification
+# 应用级错误边界与兜底错误页
 
-## ADDED Requirements
+## Purpose
+
+定义 Web 应用在启动阶段与运行阶段的最小错误兜底能力，确保根部异常不会导致整页白屏，并为用户提供受控、简短且不泄露敏感信息的恢复入口。
+
+## Requirements
 
 ### Requirement: Root-Level Error Boundary
 
@@ -52,4 +56,3 @@
 - **WHEN** 应用展示未知错误
 - **THEN** 页面 SHALL 仅显示简短摘要和可选的错误标识
 - **AND** 不应直接展示完整堆栈或内部配置
-
