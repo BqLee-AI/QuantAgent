@@ -57,3 +57,12 @@ docker compose up --build api
 ```
 
 API 容器使用根目录 `Dockerfile` 的分步构建，最终镜像只包含运行后端所需的 Python 虚拟环境。
+
+服务器或本地需要执行数据库迁移时，先构建镜像，再显式运行一次性迁移服务：
+
+```bash
+docker compose build api
+docker compose --profile migration run --rm migrate
+```
+
+`migrate` 服务默认不会随 `docker compose up api` 自动运行，避免本地启动 API 时隐式修改数据库结构。

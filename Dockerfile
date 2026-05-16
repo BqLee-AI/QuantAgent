@@ -14,6 +14,8 @@ RUN uv sync --locked --no-dev --no-editable --no-install-project --package quant
 
 COPY apps/api/src ./apps/api/src
 COPY packages/core/src ./packages/core/src
+COPY packages/core/alembic.ini ./packages/core/alembic.ini
+COPY packages/core/alembic ./packages/core/alembic
 
 RUN uv sync --locked --no-dev --no-editable --package quantagent-api
 
@@ -28,6 +30,8 @@ ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 
 COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /app/packages/core/alembic.ini /app/packages/core/alembic.ini
+COPY --from=builder /app/packages/core/alembic /app/packages/core/alembic
 
 RUN useradd --create-home --shell /usr/sbin/nologin quantagent \
     && mkdir -p /app/runtime \

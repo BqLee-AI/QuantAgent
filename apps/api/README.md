@@ -26,6 +26,12 @@ docker compose up -d db
 
 Compose 中的 API 容器通过 `API_DATABASE_URL` 连接 `db:5432`；宿主机本地工具通过 `DATABASE_URL` 连接 `localhost:15432`。
 
+需要执行 Alembic 迁移时，从仓库根目录运行：
+
+```bash
+docker compose --profile migration run --rm migrate
+```
+
 ## 说明
 
 - 默认会返回统一的 `code/data/msg/error` 响应信封。

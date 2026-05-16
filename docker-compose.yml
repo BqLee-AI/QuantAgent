@@ -18,6 +18,25 @@ services:
       db:
         condition: service_healthy
 
+  migrate:
+    image: quantagent-api:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    profiles:
+      - migration
+    working_dir: /app/packages/core
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:-postgresql+psycopg://quantagent:quantagent@db:5432/quantagent}
+      RUNTIME_DIR: ${API_RUNTIME_DIR:-/app/runtime}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      db:
+        condition: service_healthy
+
   db:
     image: postgres:17
     environment:
