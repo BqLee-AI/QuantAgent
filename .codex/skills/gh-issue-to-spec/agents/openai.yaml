@@ -1,4 +1,0 @@
-interface:
-  display_name: "GitHub Issue To Spec"
-  short_description: "Convert GitHub issues into durable specs before implementation"
-  default_prompt: "Convert this GitHub issue into a repository spec artifact for review before implementation."

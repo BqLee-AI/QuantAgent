@@ -1,4 +1,0 @@
-interface:
-  display_name: "GitHub Issue Global"
-  short_description: "Create well-scoped GitHub issues with gh CLI"
-  default_prompt: "Create a GitHub issue from the request, using repository context and gh CLI."
