@@ -48,7 +48,7 @@ docker compose up -d db
 
 Compose 内部连接地址为 `db:5432`；宿主机默认绑定 `127.0.0.1:15432`，避免和本机已有 PostgreSQL 的 `5432` 端口冲突，也避免暴露到局域网。如需调整，可以在 `.env` 中设置 `DB_HOST` 和 `DB_PORT`。
 
-API 服务默认映射到宿主机 `8000`，可通过 `.env` 中的 `API_PORT` 调整。
+API 容器内固定监听 `8000`，宿主机默认绑定 `127.0.0.1:8000`，可通过 `.env` 中的 `API_BIND_HOST` 和 `API_PORT` 调整。
 
 构建并启动后端 API 与数据库：
 
@@ -66,3 +66,5 @@ docker compose --profile migration run --rm migrate
 ```
 
 `migrate` 服务默认不会随 `docker compose up api` 自动运行，避免本地启动 API 时隐式修改数据库结构。
+
+如果修改了 `POSTGRES_DB`、`POSTGRES_USER` 或 `POSTGRES_PASSWORD`，请同步调整 `API_DATABASE_URL` 和 `MIGRATION_DATABASE_URL`。

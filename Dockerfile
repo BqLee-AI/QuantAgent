@@ -10,14 +10,14 @@ COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/README.md ./apps/api/
 COPY packages/core/pyproject.toml ./packages/core/
 
-RUN uv sync --locked --no-dev --no-editable --no-install-project --package quantagent-api
+RUN uv sync --locked --no-dev --no-editable --no-install-workspace --package quantagent-api --package quantagent-core
 
 COPY apps/api/src ./apps/api/src
 COPY packages/core/src ./packages/core/src
 COPY packages/core/alembic.ini ./packages/core/alembic.ini
 COPY packages/core/alembic ./packages/core/alembic
 
-RUN uv sync --locked --no-dev --no-editable --package quantagent-api
+RUN uv sync --locked --no-dev --no-editable --package quantagent-api --package quantagent-core
 
 FROM python:3.12-slim-bookworm AS runtime
 
