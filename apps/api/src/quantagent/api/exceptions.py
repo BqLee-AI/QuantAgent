@@ -26,6 +26,7 @@ def _error_payload(
     details: dict[str, Any] | None = None,
     retryable: bool = False,
 ) -> JSONResponse:
+    """构造项目统一使用的错误响应包裹。"""
     body = ApiResponse(
         code=response_code,
         data=None,
@@ -42,11 +43,14 @@ def _error_payload(
 
 
 def register_exception_handlers(app: FastAPI) -> None:
+    """注册异常处理器，保证框架异常和业务异常都走统一响应格式。"""
+
     @app.exception_handler(RequestValidationError)
     async def request_validation_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         request_id = get_request_id(request)
         fields = []
         for error in exc.errors():
+            # 这里只暴露整理后的校验信息，不把原始异常对象直接返回给客户端。
             fields.append(
                 {
                     "loc": [str(part) for part in error.get("loc", ())],
@@ -80,6 +84,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         request_id = get_request_id(request)
         status_code = exc.status_code
+        # 保留常见 HTTP 语义，同时映射到项目自定义的响应包裹中。
         response_code = status_code * 100
         if status_code == 400:
             error_key = "BAD_REQUEST"
@@ -109,6 +114,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         request_id = get_request_id(request)
         logger.exception("Unhandled exception", extra={"request_id": request_id})
+        # 不向客户端暴露内部异常细节，请求 ID 作为服务端排查时的关联标识。
         error = InternalError()
         return _error_payload(
             status_code=error.status_code,

@@ -4,6 +4,8 @@ from typing import Any
 
 
 class AppError(Exception):
+    """应用层异常基类，统一携带 HTTP 与响应包裹所需元信息。"""
+
     def __init__(
         self,
         message: str,
@@ -24,6 +26,8 @@ class AppError(Exception):
 
 
 class BadRequestError(AppError):
+    """客户端输入在传输层合法，但业务上不符合要求。"""
+
     def __init__(self, message: str = "Bad Request", *, details: dict[str, Any] | None = None) -> None:
         super().__init__(
             message,
@@ -35,6 +39,8 @@ class BadRequestError(AppError):
 
 
 class NotFoundError(AppError):
+    """请求的资源或路由不存在。"""
+
     def __init__(self, message: str = "Not Found", *, details: dict[str, Any] | None = None) -> None:
         super().__init__(
             message,
@@ -46,6 +52,8 @@ class NotFoundError(AppError):
 
 
 class InternalError(AppError):
+    """服务端内部异常，对外统一表现为通用 500 错误。"""
+
     def __init__(self, message: str = "Internal Server Error", *, details: dict[str, Any] | None = None) -> None:
         super().__init__(
             message,
@@ -57,6 +65,8 @@ class InternalError(AppError):
 
 
 class ServiceUnavailableError(AppError):
+    """依赖暂时不可用，调用方可在稍后重试。"""
+
     def __init__(self, message: str = "Service Unavailable", *, details: dict[str, Any] | None = None) -> None:
         super().__init__(
             message,

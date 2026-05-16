@@ -16,6 +16,8 @@ from quantagent.api.main import create_app
 
 
 class FakeSession:
+    """用于测试数据库依赖的轻量 Session 替身。"""
+
     def __init__(self, *, execute_error: Exception | None = None) -> None:
         self.execute_error = execute_error
         self.rollback_calls = 0
@@ -39,6 +41,8 @@ class FakeSession:
 
 
 class FailingSessionFactory:
+    """模拟 session factory 初始化失败的场景。"""
+
     def __init__(self, error: Exception) -> None:
         self.error = error
         self.calls = 0
@@ -49,6 +53,8 @@ class FailingSessionFactory:
 
 
 class ApiAppTestCase(unittest.TestCase):
+    """覆盖应用装配、错误响应和数据库依赖行为的集成测试。"""
+
     def setUp(self) -> None:
         self.client = TestClient(create_app(self._settings()))
         self.client.__enter__()
@@ -91,6 +97,7 @@ class ApiAppTestCase(unittest.TestCase):
         database_file.close()
         self.addCleanup(lambda: os.unlink(database_file.name))
 
+        # 使用临时 sqlite 文件验证应用生命周期内的数据库初始化和清理逻辑。
         app = create_app(self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}"))
         with TestClient(app) as client:
             response = client.get("/api/v1/ready")
@@ -203,6 +210,7 @@ class ApiAppTestCase(unittest.TestCase):
         app.state.db_session_factory = lambda: session
 
         def dependency(request: Request):
+            # 显式透传原依赖，便于验证生成器在异常路径下的回滚逻辑。
             yield from get_db_session(request)
 
         @app.get("/test-db-rollback")
@@ -243,10 +251,12 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(context.exception.message, "Database not ready")
 
     def _build_request(self, session_factory):
+        """构造带 app.state 的最小 Request 对象，供依赖函数直接测试。"""
         scope = {"type": "http", "app": SimpleNamespace(state=SimpleNamespace(db_session_factory=session_factory))}
         return Request(scope)
 
     def _settings(self, **overrides) -> Settings:
+        """生成测试默认配置，并允许按场景覆盖个别字段。"""
         baseline = {
             "APP_ENV": "development",
             "DATABASE_URL": None,

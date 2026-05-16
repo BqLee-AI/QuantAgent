@@ -11,10 +11,12 @@ from quantagent.api.routers.health import router as health_router
 
 
 def create_app(app_settings: Settings | None = None) -> FastAPI:
+    """构建 FastAPI 应用，并注册公共中间件、异常处理和路由。"""
     current_settings = app_settings or settings
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        # 将数据库初始化放在生命周期里，避免测试或脚本在创建应用时就提前建立连接。
         try:
             initialize_database(app, current_settings)
             yield
@@ -34,6 +36,7 @@ app = create_app()
 
 
 def run() -> None:
+    """使用配置中的主机和端口启动开发服务器。"""
     import uvicorn
 
     uvicorn.run("quantagent.api.main:app", host=settings.HOST, port=settings.PORT)
