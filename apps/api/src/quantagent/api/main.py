@@ -15,8 +15,8 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        initialize_database(app, current_settings)
         try:
+            initialize_database(app, current_settings)
             yield
         finally:
             shutdown_database(app)

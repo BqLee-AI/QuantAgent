@@ -131,6 +131,9 @@ class ApiAppTestCase(unittest.TestCase):
             with TestClient(app):
                 pass
 
+        self.assertIsNone(getattr(app.state, "db_engine", None))
+        self.assertIsNone(getattr(app.state, "db_session_factory", None))
+
     def test_debug_error_uses_envelope(self) -> None:
         response = self.client.get("/api/v1/debug/error")
         body = response.json()
