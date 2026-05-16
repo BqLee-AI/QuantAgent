@@ -7,10 +7,14 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi[standard]>=0.136.1",
     "pydantic-settings>=2.14.1",
+    "quantagent-core",
 ]
 
 [project.scripts]
 api = "quantagent.api.main:run"
+
+[tool.uv.sources]
+quantagent-core = { workspace = true }
 
 [tool.uv.build-backend]
 module-root = "src"
