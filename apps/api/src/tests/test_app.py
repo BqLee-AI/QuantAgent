@@ -1,15 +1,56 @@
 from __future__ import annotations
 
+import os
+import tempfile
 import unittest
+from types import SimpleNamespace
+
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.testclient import TestClient
+from sqlalchemy.exc import SQLAlchemyError
 
 from quantagent.api.config.settings import Settings
+from quantagent.api.db import get_db_session
+from quantagent.api.errors import ServiceUnavailableError
 from quantagent.api.main import create_app
-from fastapi.testclient import TestClient
+
+
+class FakeSession:
+    def __init__(self, *, execute_error: Exception | None = None) -> None:
+        self.execute_error = execute_error
+        self.rollback_calls = 0
+        self.close_calls = 0
+        self.commit_calls = 0
+        self.execute_calls = 0
+
+    def execute(self, *_args, **_kwargs) -> None:
+        self.execute_calls += 1
+        if self.execute_error is not None:
+            raise self.execute_error
+
+    def rollback(self) -> None:
+        self.rollback_calls += 1
+
+    def close(self) -> None:
+        self.close_calls += 1
+
+    def commit(self) -> None:
+        self.commit_calls += 1
+
+
+class FailingSessionFactory:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+        self.calls = 0
+
+    def __call__(self) -> FakeSession:
+        self.calls += 1
+        raise self.error
 
 
 class ApiAppTestCase(unittest.TestCase):
     def setUp(self) -> None:
-        self.client = TestClient(create_app())
+        self.client = TestClient(create_app(self._settings()))
         self.client.__enter__()
 
     def tearDown(self) -> None:
@@ -20,6 +61,75 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["X-Request-ID"], "req-123")
         self.assertEqual(response.json(), {"code": 0, "data": {"status": "ok"}, "msg": "ok", "error": None})
+
+    def test_health_stays_live_when_database_session_factory_is_broken(self) -> None:
+        failing_factory = FailingSessionFactory(SQLAlchemyError("password=secret connect failed"))
+        app = create_app(self._settings())
+        with TestClient(app) as client:
+            client.app.state.db_session_factory = failing_factory
+            response = client.get("/api/v1/health")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"code": 0, "data": {"status": "ok"}, "msg": "ok", "error": None})
+        self.assertEqual(failing_factory.calls, 0)
+
+    def test_ready_returns_service_unavailable_when_database_is_not_configured(self) -> None:
+        response = self.client.get("/api/v1/ready")
+        body = response.json()
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(body["code"], 50300)
+        self.assertEqual(body["msg"], "Database not configured")
+        self.assertEqual(body["error"]["code"], "SERVICE_UNAVAILABLE")
+        self.assertTrue(body["error"]["retryable"])
+        self.assertEqual(response.headers["X-Request-ID"], body["error"]["request_id"])
+        self.assertNotIn("DATABASE_URL", str(body))
+        self.assertNotIn("postgresql+psycopg://", str(body))
+        self.assertNotIn("traceback", str(body).lower())
+
+    def test_ready_uses_database_lifecycle_when_configured(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+
+        app = create_app(self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}"))
+        with TestClient(app) as client:
+            response = client.get("/api/v1/ready")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"code": 0, "data": {"status": "ready"}, "msg": "ok", "error": None})
+        self.assertIsNone(app.state.db_engine)
+        self.assertIsNone(app.state.db_session_factory)
+
+    def test_ready_returns_service_unavailable_when_database_query_fails(self) -> None:
+        app = create_app(self._settings())
+        with TestClient(app) as client:
+            client.app.state.db_session_factory = (
+                lambda: FakeSession(
+                    execute_error=SQLAlchemyError(
+                        "db down password=hunter2 token=abc123 traceback line 42 "
+                        "postgresql+psycopg://quantagent:quantagent@localhost:15432/quantagent"
+                    )
+                )
+            )
+            response = client.get("/api/v1/ready")
+
+        body = response.json()
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(body["code"], 50300)
+        self.assertEqual(body["msg"], "Database not ready")
+        self.assertEqual(body["error"]["code"], "SERVICE_UNAVAILABLE")
+        self.assertTrue(body["error"]["retryable"])
+        self.assertNotIn("hunter2", str(body))
+        self.assertNotIn("abc123", str(body))
+        self.assertNotIn("postgresql+psycopg://", str(body))
+        self.assertNotIn("traceback", str(body).lower())
+
+    def test_invalid_database_url_fails_app_startup(self) -> None:
+        app = create_app(self._settings(DATABASE_URL="not-a-valid-database-url"))
+
+        with self.assertRaisesRegex(Exception, "Could not parse SQLAlchemy URL"):
+            with TestClient(app):
+                pass
 
     def test_debug_error_uses_envelope(self) -> None:
         response = self.client.get("/api/v1/debug/error")
@@ -64,10 +174,87 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertRegex(response.headers["X-Request-ID"], r"^[0-9a-f]{32}$")
 
     def test_debug_routes_disabled_in_production(self) -> None:
-        production_app = create_app(Settings(APP_ENV="production"))
+        production_app = create_app(self._settings(APP_ENV="production"))
         with TestClient(production_app) as client:
             response = client.get("/api/v1/debug/success")
         self.assertEqual(response.status_code, 404)
+
+    def test_db_session_dependency_closes_session_without_auto_commit(self) -> None:
+        session = FakeSession()
+        request = self._build_request(lambda: session)
+
+        dependency = get_db_session(request)
+        resolved_session = next(dependency)
+        self.assertIs(resolved_session, session)
+
+        with self.assertRaises(StopIteration):
+            next(dependency)
+
+        self.assertEqual(session.rollback_calls, 0)
+        self.assertEqual(session.close_calls, 1)
+        self.assertEqual(session.commit_calls, 0)
+
+    def test_db_session_dependency_rolls_back_on_error(self) -> None:
+        session = FakeSession()
+        app = FastAPI()
+        app.state.db_session_factory = lambda: session
+
+        def dependency(request: Request):
+            yield from get_db_session(request)
+
+        @app.get("/test-db-rollback")
+        def test_db_rollback_route(_session=Depends(dependency)) -> None:
+            raise HTTPException(status_code=400, detail="boom")
+
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.get("/test-db-rollback")
+
+        body = response.json()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(body["detail"], "boom")
+        self.assertEqual(session.rollback_calls, 1)
+        self.assertEqual(session.close_calls, 1)
+        self.assertEqual(session.commit_calls, 0)
+
+    def test_db_session_dependency_raises_service_unavailable_without_factory(self) -> None:
+        request = self._build_request(None)
+
+        with self.assertRaises(ServiceUnavailableError) as context:
+            next(get_db_session(request))
+
+        self.assertEqual(context.exception.status_code, 503)
+        self.assertEqual(context.exception.error_code, 50300)
+        self.assertEqual(context.exception.error_key, "SERVICE_UNAVAILABLE")
+
+    def test_db_session_dependency_raises_service_unavailable_when_factory_is_not_ready(self) -> None:
+        failing_factory = FailingSessionFactory(SQLAlchemyError("connect failed"))
+        request = self._build_request(failing_factory)
+
+        with self.assertRaises(ServiceUnavailableError) as context:
+            next(get_db_session(request))
+
+        self.assertEqual(failing_factory.calls, 1)
+        self.assertEqual(context.exception.status_code, 503)
+        self.assertEqual(context.exception.error_code, 50300)
+        self.assertEqual(context.exception.error_key, "SERVICE_UNAVAILABLE")
+        self.assertEqual(context.exception.message, "Database not ready")
+
+    def _build_request(self, session_factory):
+        scope = {"type": "http", "app": SimpleNamespace(state=SimpleNamespace(db_session_factory=session_factory))}
+        return Request(scope)
+
+    def _settings(self, **overrides) -> Settings:
+        baseline = {
+            "APP_ENV": "development",
+            "DATABASE_URL": None,
+            "RUNTIME_DIR": "runtime",
+            "LOG_LEVEL": "INFO",
+            "API_V1_PREFIX": "/api/v1",
+            "HOST": "127.0.0.1",
+            "PORT": 8000,
+        }
+        baseline.update(overrides)
+        return Settings(**baseline)
 
 
 if __name__ == "__main__":
