@@ -9,6 +9,9 @@ ENV UV_COMPILE_BYTECODE=1 \
 COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/README.md ./apps/api/
 COPY packages/core/pyproject.toml ./packages/core/
+
+RUN uv sync --locked --no-dev --no-editable --no-install-project --package quantagent-api
+
 COPY apps/api/src ./apps/api/src
 COPY packages/core/src ./packages/core/src
 

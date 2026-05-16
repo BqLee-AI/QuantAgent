@@ -22,6 +22,17 @@ build
 .vite
 coverage
 
+apps/web
+docs
+examples
+plugins
+infra
+packages/agent
+packages/adapters
+packages/contracts
+packages/plugin-sdk
+packages/prompts
+
 runtime/plugins/*
 runtime/config/*
 runtime/data/*
