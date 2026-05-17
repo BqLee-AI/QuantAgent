@@ -46,9 +46,9 @@ apps/api
 apps/web
 apps/worker
 apps/scheduler
-packages/quant/core
-packages/quant/agent
-packages/quant/plugin-sdk
+packages/core
+packages/agent
+packages/plugin-sdk
 packages/contracts
 packages/prompts
 plugins/
@@ -62,9 +62,9 @@ infra/
 - `apps/web`：React + Vite 管理台。
 - `apps/worker`：事件处理、插件任务和异步作业。
 - `apps/scheduler`：周期性调度。
-- `packages/quant/core`：核心领域、registry、错误、配置和生命周期。
-- `packages/quant/agent`：AgentRuntime 和 workflow。
-- `packages/quant/plugin-sdk`：插件开发 SDK。
+- `packages/core`：核心领域、registry、错误、配置、数据库和生命周期。
+- `packages/agent`：AgentRuntime 和 workflow。
+- `packages/plugin-sdk`：插件开发 SDK。
 - `packages/contracts`：OpenAPI、JSON Schema、生成代码。
 
 ## 插件与注册

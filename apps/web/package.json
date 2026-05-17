@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint .",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -34,6 +36,7 @@
     "postcss": "^8.5.14",
     "tailwindcss": "^4.3.0",
     "typescript": "~6.0.2",
-    "vite": "^8.0.12"
+    "vite": "^8.0.12",
+    "vitest": "^4.1.6"
   }
 }

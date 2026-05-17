@@ -1,0 +1,57 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    image: quantagent-api:local
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://quantagent:quantagent@db:5432/quantagent}
+      HOST: ${API_HOST:-0.0.0.0}
+      PORT: 8000
+      RUNTIME_DIR: ${API_RUNTIME_DIR:-/app/runtime}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "${API_BIND_HOST:-127.0.0.1}:${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  migrate:
+    image: quantagent-api:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    profiles:
+      - migration
+    working_dir: /app/packages/core
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      DATABASE_URL: ${MIGRATION_DATABASE_URL:-postgresql+psycopg://quantagent:quantagent@db:5432/quantagent}
+      RUNTIME_DIR: ${API_RUNTIME_DIR:-/app/runtime}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-quantagent}
+      POSTGRES_USER: ${POSTGRES_USER:-quantagent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-quantagent}
+    ports:
+      - "${DB_HOST:-127.0.0.1}:${DB_PORT:-15432}:5432"
+    volumes:
+      - quantagent-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  quantagent-db:

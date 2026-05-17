@@ -1,4 +1,5 @@
 [tool.uv.workspace]
 members = [
   "apps/api",
+  "packages/core",
 ]

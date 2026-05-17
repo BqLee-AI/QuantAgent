@@ -3,7 +3,7 @@
 ## 1. Repository Skeleton
 
 - [ ] 创建 `apps/api`、`apps/web`、`apps/worker`、`apps/scheduler`。
-- [ ] 创建 `packages/quant/core`、`packages/quant/agent`、`packages/quant/plugin-sdk`、`packages/quant/adapters`、`packages/contracts`。
+- [ ] 创建 `packages/core`、`packages/agent`、`packages/plugin-sdk`、`packages/adapters`、`packages/contracts`。
 - [ ] 创建 `plugins/sources`、`plugins/industries`、`plugins/strategies`、`plugins/notifications`、`plugins/executors`。
 - [ ] 创建 `runtime/plugins`、`runtime/config`、`runtime/data`、`runtime/logs`。
 - [ ] 创建 `infra/docker` 和 `infra/compose`。

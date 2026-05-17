@@ -221,14 +221,17 @@ api_key_ref: secret://x_api/main
 Alembic migration 放在核心包内：
 
 ```text
-packages/quant/core/
-  src/quantagent_core/
+packages/core/
+  alembic/
+    env.py
+    script.py.mako
+    versions/
+  src/quantagent/core/
     db/
+      base.py
+      session.py
       models/
       repositories/
-  migrations/
-    env.py
-    versions/
 ```
 
 原因：

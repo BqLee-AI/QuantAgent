@@ -47,11 +47,10 @@ QuantAgent/
     scheduler/
 
   packages/
-    quant/
-      core/
-      agent/
-      plugin-sdk/
-      adapters/
+    core/
+    agent/
+    plugin-sdk/
+    adapters/
     contracts/
       openapi/
       schemas/
@@ -99,7 +98,7 @@ FastAPI 主入口，负责 HTTP API、WebSocket、认证、管理端接口和插
 - 暴露前端需要的 API。
 - 提供 WebSocket 事件流。
 - 提供插件安装、启停、配置、健康检查等管理接口。
-- 调用 `packages/quant/core` 和 `packages/quant/agent`，不直接实现复杂业务逻辑。
+- 调用 `packages/core` 和 `packages/agent`，不直接实现复杂业务逻辑。
 
 ### `apps/web`
 
@@ -140,14 +139,49 @@ React + Vite 前端管理台。
 
 ## Python 包层目录
 
-### `packages/quant/core`
+### `packages/core`
 
 核心领域包，不依赖 FastAPI，不依赖具体插件实现。
 
 建议包含：
 
 ```text
-quantagent_core/
+packages/core/
+  pyproject.toml
+  alembic.ini
+  alembic/
+    env.py
+    script.py.mako
+    versions/
+      .gitkeep
+  src/
+    quantagent/
+      core/
+        config/
+        db/
+        events/
+        registry/
+        ports/
+        factories/
+        lifecycle/
+        errors/
+        observability/
+```
+
+Python import namespace 统一使用：
+
+```python
+from quantagent.core.config.settings import settings
+from quantagent.core.db.base import Base
+from quantagent.core.db.session import create_sync_engine
+```
+
+不使用 `quantagent_core` import namespace。
+
+建议后续能力目录：
+
+```text
+quantagent/core/
   events/
   registry/
   ports/
@@ -167,14 +201,14 @@ quantagent_core/
 - 定义 factory 创建规则。
 - 定义统一错误、日志、追踪和配置读取约定。
 
-### `packages/quant/agent`
+### `packages/agent`
 
 Agent 和 workflow 包。
 
 建议包含：
 
 ```text
-quantagent_agent/
+quantagent/agent/
   workflows/
   router/
   debate/
@@ -191,14 +225,14 @@ quantagent_agent/
 - 实现 Internal Debate 和评分逻辑。
 - 调用行业插件提供的能力，但不直接耦合具体行业实现。
 
-### `packages/quant/plugin-sdk`
+### `packages/plugin-sdk`
 
 插件开发 SDK。
 
 建议包含：
 
 ```text
-quantagent_plugin_sdk/
+quantagent/plugin_sdk/
   base/
   context/
   decorators/
@@ -213,7 +247,7 @@ quantagent_plugin_sdk/
 - 提供插件基类、装饰器、上下文对象和测试工具。
 - 定义插件 manifest 和配置 schema 规范。
 
-### `packages/quant/adapters`
+### `packages/adapters`
 
 官方可复用 adapter 集合。
 
@@ -485,9 +519,9 @@ postgres container
 - `apps/api`
 - `apps/web`
 - `apps/worker`
-- `packages/quant/core`
-- `packages/quant/agent`
-- `packages/quant/plugin-sdk`
+- `packages/core`
+- `packages/agent`
+- `packages/plugin-sdk`
 - `packages/contracts`
 - `plugins/sources`
 - `plugins/industries`
