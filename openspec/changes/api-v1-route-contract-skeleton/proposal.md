@@ -33,9 +33,9 @@
 ## 目标
 
 - 固定 `apps/api` 内 API v1 的最小目录职责：`routers/`、`schemas/`、`providers/`。
-- 提供一个低风险、非业务含义的 API v1 示例资源，固定 `ApiResponse[T]`、显式 `response_model`、tags 和 OpenAPI 可见性约定。
+- 提供一个低风险、非业务含义的 API v1 示例资源，固定 `VersionResponse(service, api_version, version)`、`ApiResponse[T]`、显式 `response_model`、tags 和 OpenAPI 可见性约定。
 - 增加 sample provider 替换点，表达未来接入 core repository、runtime adapter 或更正式 service/usecase 的边界。
-- 把 API v1 router 注册收敛到共享 helper，明确常规 router 与 debug-only router 的装载方式，同时不破坏现有 FastAPI lifespan 数据库初始化与释放。
+- 把 API v1 router 注册收敛到单一共享 helper `register_api_v1_routes`，明确常规 router 与 debug-only router 的装载方式，同时不破坏现有 FastAPI lifespan 数据库初始化与释放。
 - 通过契约级测试验证 API v1 route 的 path、tag、schema、统一 envelope，以及 production 下 debug router 不暴露。
 - 在 `apps/api/README.md` 中说明如何新增一个 API v1 router，并写入最小验证命令：`cd apps/api && uv run python -m unittest discover -s src/tests`。
 
@@ -54,6 +54,8 @@
 
 - 目录采用 `routers/` + `schemas/` + `providers/`。`providers/` 在本阶段只表示替换点，不暗示 API 层已经有成熟业务 service。
 - 示例资源采用 `GET /api/v1/version`。避免使用 `runtime`、`metadata` 等容易让人误以为真实运行时或业务能力已落地的名称。
+- `VersionResponse` 字段固定为 `service`、`api_version`、`version`；其中 `service` 和 `api_version` 是稳定标识字段，`version` 是非空字符串，且不允许额外字段。
+- 标准 API v1 注册入口固定为 `quantagent.api.routers.register.register_api_v1_routes`。
 - OpenAPI 本阶段只做 FastAPI runtime schema 测试，不写入 `packages/contracts/openapi/` artifact。
 - `health` 和 `ready` 可以被纳入统一注册与契约测试，但不迁移成业务资源。
 - `ready` 是 PR #70 已有的数据库 readiness 探针，不作为本 change 的 sample provider 示例，也不代表业务数据库资源已经落地。
@@ -64,7 +66,7 @@
 
 - 新增 `schemas/` 和 `providers/` 目录，以及一个最小 sample provider。
 - 新增非业务示例资源 `GET /api/v1/version`。
-- 新增或调整共享 API v1 router 注册 helper，集中注册常规 router，并保留 debug-only router gating。
+- 新增或调整共享 API v1 router 注册 helper `register_api_v1_routes`，集中注册常规 router，并保留 debug-only router gating。
 - 为 health/ready/version 显式声明 `response_model` 与 tags。
 - 增加 OpenAPI 契约测试，验证 path、tags、envelope schema、lifespan/DB readiness 行为仍保持既有边界，以及 production 下 debug router 不暴露。
 - 更新 `apps/api/README.md`，说明新增 API v1 router 的目录、注册、provider 替换点、测试要求、最小验证命令与非目标。
@@ -73,7 +75,7 @@
 
 - 后续开发者可以按 README 与代码示例新增一个 API v1 router，而不需要重新决定目录、注册和测试方式。
 - API v1 router 的成功响应继续使用 `ApiResponse[T]` envelope；错误响应继续由统一异常处理输出。
-- OpenAPI 中能看到 `GET /api/v1/version` 的 path、tag 和 envelope schema。
+- OpenAPI 中能看到 `GET /api/v1/version` 的 path、tag 和 envelope schema，且其 data schema 只包含 `service`、`api_version`、`version`。
 - `/api/v1/health` 继续可用，并通过显式 `response_model` 暴露统一 envelope 契约。
 - `/api/v1/ready` 继续保留数据库 readiness 语义，并通过显式 `response_model` 暴露统一 envelope 契约；数据库未配置或不可用时的 503 行为不被本 change 改坏。
 - API v1 router 注册 helper 不破坏现有 FastAPI lifespan 中的数据库初始化与释放。
@@ -83,7 +85,7 @@
 
 ## 失败信号
 
-- 新增 router 仍然需要在多个地方手工猜测注册方式、tag 或 `response_model` 约定。
+- 新增 router 仍然需要在多个地方手工猜测注册方式、tag、`response_model` 约定，或 `VersionResponse` 字段。
 - 示例 provider 写入业务状态、数据库访问、核心领域逻辑、runtime 健康状态或插件 registry 状态。
 - 示例 provider 与 PR #70 的 DB session dependency 概念混淆，让人误以为 sample resource 已经接入真实业务数据库。
 - 示例路由名称或返回内容暗示事件、插件、审批、Agent run、runtime health 或 WebSocket 已经可用。

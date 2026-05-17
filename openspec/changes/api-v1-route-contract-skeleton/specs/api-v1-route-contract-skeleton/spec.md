@@ -66,7 +66,11 @@ API SHALL 包含一个低风险、非业务含义的 API v1 示例资源。
 - **THEN** 响应体包含 `code`、`data`、`msg` 和 `error`
 - **AND** `code` 为 `0`
 - **AND** `error` 为 `null`
-- **AND** `data` 匹配 version response DTO
+- **AND** `data` 只包含 `service`、`api_version`、`version`
+- **AND** `service` 为非空字符串
+- **AND** `api_version` 为非空字符串
+- **AND** `version` 为非空字符串
+- **AND** `data` 不包含任何额外字段
 
 #### Scenario: 现有 health route 保持显式契约
 

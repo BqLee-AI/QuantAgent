@@ -61,13 +61,13 @@ issue #60 将 issue #57 中较大的 API 后端基建方向收窄为一个小范
 
 - 目录职责固定为 `routers/`、`schemas/`、`providers/`。
 - 示例资源固定为 `GET /api/v1/version`。
-- 标准 API v1 router 通过共享注册 helper 或等价注册模块集中装配。
+- 标准 API v1 router 通过单一共享注册 helper `register_api_v1_routes` 集中装配。
 - `health`/`ready` 继续保留现有运行时含义，只补强显式 `response_model` 和 tags。
 - OpenAPI 只做 runtime schema 测试，不提交静态 artifact。
 
 ### 待定但不阻塞实现
 
-- 标准 router 注册 helper 的具体模块名和函数名；只要求存在单一、可发现的共享注册入口。
+- 标准 router 注册 helper 的实现细节可以后续微调，但入口名称固定为 `register_api_v1_routes`，并且必须是单一、可发现的共享注册入口。
 - `health`/`ready` 的成功 DTO 是使用局部窄 schema 还是共享 health schema；只要可观察响应体与现有测试兼容即可。
 - 后续真实业务资源是否需要 `services/`、`usecases/` 或其他 orchestration 边界；本 change 不预置答案。
 
@@ -94,13 +94,19 @@ issue #60 将 issue #57 中较大的 API 后端基建方向收窄为一个小范
 
 `version` 名称业务含义低，足以验证 envelope、DTO、provider、tag 和 OpenAPI 行为，同时不会暗示 runtime、Agent、plugin、approval、metadata aggregation、WebSocket、executor 或 trading 能力已经落地。
 
-payload 应保持很小并由 API 层拥有，例如 API 名称、版本或兼容的静态字段。payload 不应包含 runtime health、数据库状态、插件 registry 状态、feature flags、credential、环境密钥或部署内部细节。
+payload 固定为以下三字段：
+
+- `service`: API 服务名，固定为非空字符串，用于标识当前 API 包。
+- `api_version`: API 契约版本，固定为非空字符串，例如 `v1`。
+- `version`: 当前 API 包版本或发布版本，固定为非空字符串。
+
+payload 不得包含 runtime health、数据库状态、插件 registry 状态、feature flags、credential、环境密钥、部署内部细节或其他动态运行时数据。
 
 影响：该 route 是契约示例，不是业务状态真源。
 
 ### 标准 API v1 router 注册集中到 helper
 
-`main.py` 继续负责 app 创建、middleware、exception handlers 和 lifespan。标准 API v1 routers 应通过共享注册 helper 或注册模块集中列出，避免未来资源继续直接在 `main.py` 中手工接线。
+`main.py` 继续负责 app 创建、middleware、exception handlers 和 lifespan。标准 API v1 routers 应通过单一共享注册 helper `register_api_v1_routes` 集中列出，避免未来资源继续直接在 `main.py` 中手工接线。
 
 该 helper 需要满足：
 
@@ -111,7 +117,7 @@ payload 应保持很小并由 API 层拥有，例如 API 名称、版本或兼�
 
 官方路径、回退路径与禁止路径固定如下：
 
-- 官方路径：新的标准 API v1 资源放在 `routers/`、`schemas/`、`providers/` 中，并通过共享注册入口接入 `create_app()` 创建出的同一个 app 实例。
+- 官方路径：新的标准 API v1 资源放在 `routers/`、`schemas/`、`providers/` 中，并通过 `register_api_v1_routes` 接入 `create_app()` 创建出的同一个 app 实例。
 - 回退路径：现有 `routers/health.py` 与 `routers/debug.py` 可以继续保留原文件位置；`health`/`ready` 可以暂时使用局部窄 DTO；debug router 继续单独受 production gating 控制。
 - 禁止路径：新的标准 route 直接在 `main.py` 零散 `include_router(...)`；把示例或未来标准资源挂到 `/debug`；复用 `/ready` 充当 sample provider；以无 schema 契约的临时 dictionary 代替示例资源 DTO。
 

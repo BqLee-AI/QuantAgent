@@ -16,13 +16,13 @@
 
 - [ ] B1. 稳定 API v1 注册方式与目录边界
   - 输入：`apps/api/src/quantagent/api/main.py`、现有 `routers/health.py`、现有 `routers/debug.py`、`apps/api/src/quantagent/api/db.py`
-  - 输出：共享 API v1 router 注册 helper；常规 router 与 debug-only router 的清晰加载路径；`routers/`、`schemas/`、`providers/` package 边界；现有 FastAPI lifespan 数据库初始化/释放路径不被改坏
+  - 输出：共享 API v1 router 注册 helper `register_api_v1_routes`；常规 router 与 debug-only router 的清晰加载路径；`routers/`、`schemas/`、`providers/` package 边界；现有 FastAPI lifespan 数据库初始化/释放路径不被改坏
   - 写入边界：`apps/api/src/quantagent/api/main.py`、`apps/api/src/quantagent/api/routers/**`、`apps/api/src/quantagent/api/schemas/**`、`apps/api/src/quantagent/api/providers/**`
   - 依赖：B0
 
 - [ ] B2. 新增非业务 `version` 示例资源
   - 输入：B1 注册 helper、`ApiResponse[T]`、issue #60 的命名约束
-  - 输出：`GET /api/v1/version`、`schemas/` 下的响应 DTO、`providers/` 下的 sample provider、显式 `response_model`、显式 tags
+  - 输出：`GET /api/v1/version`、`schemas/` 下的响应 DTO（仅含 `service`、`api_version`、`version`）、`providers/` 下的 sample provider、显式 `response_model`、显式 tags
   - 写入边界：`apps/api/src/quantagent/api/routers/**`、`apps/api/src/quantagent/api/schemas/**`、`apps/api/src/quantagent/api/providers/**`
   - 依赖：B1
 
