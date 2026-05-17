@@ -19,10 +19,10 @@
   - Output: `client.ts`、`index.ts`
   - Write boundary: `apps/web/src/shared/api/client.ts`, `apps/web/src/shared/api/index.ts`
 
-- [ ] B4. 基于已合入 `main` 的测试基础设施补齐并验证 #8 测试
+- [x] B4. 基于已合入 `main` 的测试基础设施补齐并验证 #8 测试
   - Input: `PR #63` 已合入的单元测试链路、issue #8 验收点
-  - Output: 不在本分支重复创建 runner；待与 `main` 对齐后补齐 #8 的 feature-level tests
-  - Write boundary: `apps/web/src/shared/api/*.test.ts`（如对齐后仍需要）
+  - Output: 在现有 Vitest runner 上补齐 API client feature-level tests，并完成验证
+  - Write boundary: `apps/web/src/shared/api/*.test.ts`
 
 ### Parallelizable Work
 
@@ -35,10 +35,11 @@
 ### Review Points
 
 - [x] R1. 确认恢复后的 spec 使用仓库当前 `openspec/` 结构，而不是旧的 `docs/openspec/` 路径。
-- [ ] R2. 在吸收 `main` 上 `PR #63` 后，确认实现与 spec 一致，并覆盖 envelope、鉴权、401 refresh、请求去重、AbortSignal。
+- [x] R2. 在吸收 `main` 上 `PR #63` 后，确认实现与 spec 一致，并覆盖 envelope、鉴权、401 refresh、请求去重、AbortSignal。
 
 ## Verification
 
-- [ ] `bun --cwd apps/web run test:unit` 通过（依赖先同步 `main` / `PR #63`）
+- [x] `bun --cwd apps/web run test:unit` 通过
 - [x] `bun run lint` 通过
-- [ ] `bun run build --filter=web` 通过（待同步 `main` 后复核）
+- [x] `bun run build --filter=web` 通过
+
