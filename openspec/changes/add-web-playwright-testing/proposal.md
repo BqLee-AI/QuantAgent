@@ -58,8 +58,8 @@
 ## What Changes
 
 - 在 `apps/web` 添加 Playwright 所需开发依赖与配置文件。
-- 配置 Playwright `webServer`，优先采用固定端口 `5173` 与 `reuseExistingServer: true` 复用本地 Vite server，避免本地端口漂移导致调试复杂度上升。
-- 验证 `webServer.command` 是否可通过 `bun --cwd apps/web run dev -- --host 127.0.0.1 --port 5173` 向 `vite` 转发参数；若 Bun 参数转发与当前 `dev` script 不兼容，则改为直接使用 `bunx vite --host 127.0.0.1 --port 5173` 或等效 Bun 方案。
+- 为 E2E 命令采用固定端口 `5173` 与可复用本地 Vite server 的生命周期管理策略，避免本地端口漂移导致调试复杂度上升。
+- 验证 `dev` script 的参数转发与当前 Bun 版本兼容性；若 `bun --cwd apps/web run dev -- --host 127.0.0.1 --port 5173` 不稳定，则通过 Bun 生态下的本地包装脚本显式托管 Vite 生命周期。
 - 配置浏览器项目仅包含 Chromium，并明确保留未来扩展 Firefox/WebKit 的位置，但不在本 change 启用。
 - 配置标准浏览器测试命令，例如 `test:e2e`、`test:e2e:ui`、`test:e2e:debug`。
 - 复用现有 Vite `resolve.alias` 约定，确保 Playwright Component Testing 环境继续解析 `@` → `./src`。
@@ -82,8 +82,8 @@
 
 - 无明确前置依赖，可独立完成。
 - 需要保持 Playwright 与 Vitest Node 的目录、命令和职责边界清晰，避免 runner 相互误收集测试文件。
-- 需要确保 `webServer` 启动方式与当前 `apps/web` 的 Vite dev server 行为兼容。
-- 需要验证 Bun 对 `bun --cwd apps/web run dev -- --host 127.0.0.1 --port 5173` 这类参数转发是否稳定支持；若不兼容，需切换到直接调用 `bunx vite` 或等效 Bun 方案。
+- 需要确保本地 E2E 包装脚本的启动与复用策略和当前 `apps/web` 的 Vite dev server 行为兼容。
+- 需要验证 Bun 对 `bun --cwd apps/web run dev -- --host 127.0.0.1 --port 5173` 这类参数转发是否稳定支持；若不兼容，需切换到 Bun 生态内的本地包装脚本或等效方案。
 - 启用 Component Testing 会引入额外配置面，需要在 spec 中先明确其只提供基础承载，不提前封装组件测试 helper。
 - `tanstackRouter({ autoCodeSplitting: true })` 在 CT 场景下可能触发路由代码生成或与组件挂载流程冲突，需要验证 CT 是否可直接复用当前 `vite.config.ts`，或是否需要独立 Vite 配置并排除路由插件。
 - 如果 CT 使用独立 Vite 配置，仍需保持 `@` → `./src` alias 与主应用一致，避免测试环境和运行环境解析漂移。
@@ -97,7 +97,7 @@
 
 ## Success Criteria
 
-- `bun --cwd apps/web run test:e2e` 可以启动或复用本地 web server，并通过至少一个 Chromium smoke test。
+- `bun run --cwd apps/web test:e2e` 可以启动或复用本地 web server，并通过至少一个 Chromium smoke test。
 - Playwright 报告可生成并能用于定位失败。
 - smoke test 验证真实浏览器中的应用壳层或页面内容渲染，而不是只断言空页面。
 - `apps/web` 中存在可供 #54 直接复用的 Playwright Component Testing 基础配置。
@@ -105,7 +105,7 @@
 
 ## Verification
 
-- `bun --cwd apps/web run test:e2e`
-- `bun --cwd apps/web run test:e2e:ui`
+- `bun run --cwd apps/web test:e2e`
+- `bun run --cwd apps/web test:e2e:ui`
 - `bun run lint`
 - `bun run build --filter=web`

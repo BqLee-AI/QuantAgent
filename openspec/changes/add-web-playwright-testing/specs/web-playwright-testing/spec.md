@@ -24,61 +24,61 @@
 
 #### Scenario: Headless test command available
 
-- **WHEN** 开发者运行 `bun --cwd apps/web run test:e2e`
+- **WHEN** 开发者运行 `bun run --cwd apps/web test:e2e`
 - **THEN** Playwright 执行浏览器测试并返回成功或失败状态码
 
 #### Scenario: Interactive ui command available
 
-- **WHEN** 开发者运行 `bun --cwd apps/web run test:e2e:ui`
+- **WHEN** 开发者运行 `bun run --cwd apps/web test:e2e:ui`
 - **THEN** Playwright 以 UI 模式启动，便于本地调试
 
 #### Scenario: Debug command available
 
-- **WHEN** 开发者运行 `bun --cwd apps/web run test:e2e:debug`
+- **WHEN** 开发者运行 `bun run --cwd apps/web test:e2e:debug`
 - **THEN** Playwright 以适合断点和逐步检查的调试模式运行
 
 ### Requirement: Playwright Config File Strategy
 
-浏览器 E2E 与 Component Testing SHALL 共享一个 Playwright 主配置文件，并通过 `projects` 分离测试类型。
+浏览器 E2E 与 Component Testing SHALL 保持清晰的配置边界，并继续共享一致的目录约定、浏览器项目约定与报告策略。
 
-#### Scenario: Shared config file with projects array
+#### Scenario: Config files stay scoped by test type
 
 - **WHEN** 开发者检查 `apps/web` 的 Playwright 配置
-- **THEN** E2E 与 CT 共用一个 `playwright.config.ts`
-- **AND** 配置通过 `projects` 数组区分页面级浏览器测试与组件级浏览器测试
+- **THEN** 页面级 E2E 使用 `playwright.config.ts`
+- **AND** Component Testing 使用独立的 `playwright-ct.config.ts`
 
-#### Scenario: Shared config does not erase scope boundaries
+#### Scenario: Separate configs keep shared conventions aligned
 
-- **WHEN** 开发者审阅共享配置方案
-- **THEN** 公共配置只承载浏览器通用设置
-- **AND** E2E 与 CT 仍保有独立的 `testDir`、文件匹配规则和项目级 `use` 配置
+- **WHEN** 开发者审阅配置方案
+- **THEN** E2E 与 CT 仍保有独立的 `testDir`、文件匹配规则和项目级 `use` 配置
+- **AND** 两者继续共享 Chromium-only、报告输出与目录边界约定
 
 ### Requirement: Local Vite Server Integration
 
-Playwright 配置 SHALL 能自动启动或复用 `apps/web` 的本地 Vite dev server。
+浏览器测试命令 SHALL 能自动启动或复用 `apps/web` 的本地 Vite dev server。
 
 #### Scenario: Web server bootstraps automatically
 
-- **WHEN** 开发者运行 `bun --cwd apps/web run test:e2e`
-- **THEN** Playwright 会启动或复用 `apps/web` 的 Vite server
+- **WHEN** 开发者运行 `bun run --cwd apps/web test:e2e`
+- **THEN** 浏览器测试命令会启动或复用 `apps/web` 的 Vite server
 - **AND** 浏览器测试无需开发者手工先启动独立 server
 
 #### Scenario: Server command stays aligned with current app entry
 
-- **WHEN** 开发者检查 Playwright `webServer` 配置
-- **THEN** 启动命令基于 `apps/web` 现有 `dev` script
+- **WHEN** 开发者检查本地浏览器测试启动方案
+- **THEN** 启动命令基于 `apps/web` 现有 `dev` script 或本地 Vite CLI
 - **AND** 不要求为本 change 重构应用启动方式
 
 #### Scenario: Fixed port and reuse strategy are explicit
 
-- **WHEN** 开发者检查 Playwright `webServer` 配置
-- **THEN** 配置固定使用 `127.0.0.1:5173`
-- **AND** 启用 `reuseExistingServer: true`
+- **WHEN** 开发者检查本地浏览器测试启动方案
+- **THEN** E2E 固定使用 `127.0.0.1:5173`
+- **AND** 命令会复用已存在的本地 Vite server
 
 #### Scenario: Fallback command stays inside Bun ecosystem
 
 - **WHEN** `bun --cwd apps/web run dev -- --host 127.0.0.1 --port 5173` 无法稳定向 `vite` 转发参数
-- **THEN** 配置切换到 `bunx vite --host 127.0.0.1 --port 5173` 或等效 Bun 方案
+- **THEN** 浏览器测试命令可切换到基于 Bun 生态的本地包装脚本或 `bunx vite --host 127.0.0.1 --port 5173`
 - **AND** 不引入 `npx`、`npm`、`yarn` 或 `pnpm`
 
 ### Requirement: Playwright Browser Installation
@@ -87,7 +87,7 @@ Playwright 配置 SHALL 能自动启动或复用 `apps/web` 的本地 Vite dev s
 
 #### Scenario: Chromium binary available before first run
 
-- **WHEN** 开发者首次在本机执行 `bun --cwd apps/web run test:e2e`
+- **WHEN** 开发者首次在本机执行 `bun run --cwd apps/web test:e2e`
 - **THEN** Chromium 浏览器二进制已经可用
 - **AND** 安装步骤使用 `bunx playwright install chromium --with-deps` 或等效 Bun 命令
 
@@ -103,7 +103,7 @@ Playwright 配置 SHALL 能自动启动或复用 `apps/web` 的本地 Vite dev s
 
 #### Scenario: Smoke test proves app shell renders
 
-- **WHEN** 开发者首次完成本 change 并运行 `bun --cwd apps/web run test:e2e`
+- **WHEN** 开发者首次完成本 change 并运行 `bun run --cwd apps/web test:e2e`
 - **THEN** 至少有一个浏览器 smoke test 被执行并通过
 - **AND** 该测试验证应用壳层、稳定页面标题或稳定页面说明文案已渲染
 - **AND** 不只是断言空白页面或 HTTP 200
@@ -138,6 +138,7 @@ Playwright 测试 SHALL 生成可用于失败定位的报告与诊断产物。
 
 - **WHEN** 开发者检查浏览器测试配置
 - **THEN** 仓库中已存在 Playwright Component Testing 项目配置
+- **AND** CT 使用 `playwright-ct.config.ts`
 - **AND** CT 项目的 `testDir` 为 `tests/components`
 - **AND** CT 测试文件使用 `*.spec.tsx` 命名
 - **AND** #54 可以在此基础上添加组件测试文件
