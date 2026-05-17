@@ -25,7 +25,6 @@ export default defineConfig({
         alias: {
           '@': srcRoot,
         },
-        preserveSymlinks: true,
       },
       root: appRoot,
     },
