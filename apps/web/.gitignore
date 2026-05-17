@@ -10,6 +10,9 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+playwright-report
+playwright/.cache
+test-results
 *.local
 
 # Editor directories and files

@@ -11,5 +11,11 @@
     "react": {
       "version": "19.0"
     }
-  }
+  },
+  "ignorePatterns": [
+    "apps/web/playwright/.cache/**",
+    "apps/web/playwright-report/**",
+    "apps/web/test-results/**",
+    "apps/web/dist/**"
+  ]
 }

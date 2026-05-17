@@ -20,4 +20,13 @@ export default defineConfig({
     },
     preserveSymlinks: true,
   },
+  server: {
+    watch: {
+      ignored: [
+        "**/playwright-report/**",
+        "**/test-results/**",
+        "**/playwright/.cache/**",
+      ],
+    },
+  },
 });
