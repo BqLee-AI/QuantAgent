@@ -89,7 +89,8 @@
 
 - **WHEN** 开发者首次在本机执行 `bun run --cwd apps/web test:e2e`
 - **THEN** Chromium 浏览器二进制已经可用
-- **AND** 安装步骤使用 `bunx playwright install chromium --with-deps` 或等效 Bun 命令
+- **AND** 安装步骤默认使用 `bunx playwright install chromium` 或等效 Bun 命令
+- **AND** 在 Linux 环境下可按需追加 `--with-deps` 以安装系统依赖
 
 #### Scenario: Missing browser yields actionable guidance
 

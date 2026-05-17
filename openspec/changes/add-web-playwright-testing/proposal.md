@@ -105,6 +105,7 @@
 
 ## Verification
 
+- `bun run --cwd apps/web test:ct`
 - `bun run --cwd apps/web test:e2e`
 - `bun run --cwd apps/web test:e2e:ui`
 - `bun run lint`

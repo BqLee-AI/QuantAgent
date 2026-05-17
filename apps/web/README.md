@@ -5,6 +5,7 @@
 ## Commands
 
 - `bun run --cwd apps/web test:browser:install`: install the Chromium binary required by Playwright.
+  On Linux, append `--with-deps` when system browser dependencies also need to be installed.
 - `bun run --cwd apps/web test:e2e`: run the Chromium smoke test in headless mode.
 - `bun run --cwd apps/web test:e2e:ui`: open the Playwright UI for local browser-test debugging.
 - `bun run --cwd apps/web test:e2e:debug`: run the Chromium E2E project with the Playwright debugger.

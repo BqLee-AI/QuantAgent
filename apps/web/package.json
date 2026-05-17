@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint .",
-    "test:browser:install": "bunx playwright install chromium --with-deps",
+    "test:browser:install": "bunx playwright install chromium",
     "test:ct": "playwright test --config=playwright-ct.config.ts --project=chromium-ct",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",

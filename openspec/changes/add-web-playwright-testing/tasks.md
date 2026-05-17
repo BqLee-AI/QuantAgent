@@ -13,7 +13,7 @@
 - [x] B2. 为 `apps/web` 接入 Playwright 基础配置与标准命令
   - Input: `apps/web/package.json`、`apps/web/vite.config.ts`、当前前端 dev server 约定
   - Output: Playwright 依赖、配置文件、`test:e2e` / `test:e2e:ui` / `test:e2e:debug` 等命令
-  - Output: 使用 Bun 生态完成本地 Chromium 浏览器安装，例如 `bunx playwright install chromium --with-deps` 或等效 Bun 命令
+  - Output: 使用 Bun 生态完成本地 Chromium 浏览器安装，例如 `bunx playwright install chromium`；Linux 环境可按需追加 `--with-deps`
   - Write boundary: `apps/web/package.json`, `apps/web/playwright*.config.*`, `apps/web/tsconfig*.json`（如需要）
 
 - [x] B2.5. 验证 E2E 启动策略与当前 Vite 启动方式兼容
@@ -53,9 +53,10 @@
 
 ## Verification
 
+- [x] `bun run --cwd apps/web test:ct` 通过
 - [x] `bun run --cwd apps/web test:e2e` 通过
 - [x] `bun run --cwd apps/web test:e2e:ui` 可启动 Playwright UI 模式
-- [x] Chromium 浏览器二进制已通过 `bunx playwright install chromium --with-deps` 或等效 Bun 命令安装可用
+- [x] Chromium 浏览器二进制已通过 `bunx playwright install chromium` 或等效 Bun 命令安装可用；Linux 环境可按需追加 `--with-deps`
 - [x] `bun run lint` 通过
 - [x] `bun run build --filter=web` 通过
 - [x] `openspec validate add-web-playwright-testing --type change --strict --json` 通过
