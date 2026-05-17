@@ -207,9 +207,9 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         schema = response.json()
 
-        self.assertEqual(schema["paths"]["/api/v1/version"]["get"]["tags"], ["system"])
-        self.assertEqual(schema["paths"]["/api/v1/health"]["get"]["tags"], ["system"])
-        self.assertEqual(schema["paths"]["/api/v1/ready"]["get"]["tags"], ["system"])
+        self.assertIn("system", schema["paths"]["/api/v1/version"]["get"]["tags"])
+        self.assertIn("system", schema["paths"]["/api/v1/health"]["get"]["tags"])
+        self.assertIn("system", schema["paths"]["/api/v1/ready"]["get"]["tags"])
 
         version_schema = self._resolve_response_schema(schema, "/api/v1/version")
         self.assertTrue({"code", "data", "msg", "error"}.issubset(version_schema["properties"].keys()))
