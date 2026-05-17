@@ -12,9 +12,9 @@
 - Before implementation, read the change's `proposal.md`, `tasks.md`, and affected spec files.
 - After updating a change, validate it with `openspec validate <change-id> --type change --strict --json`.
 
-## Codex Usage
+## Agent Usage
 
-- OpenSpec skills for Codex are installed under `.codex/skills/openspec-*`.
+- OpenSpec skills for agents are installed under `.agents/skills/openspec-*`.
 - Use those skills when the task is proposal generation, implementation from tasks, exploration, or archiving.
 - Prefer the repository's existing rooted OpenSpec structure and current change IDs over creating parallel documentation trees.
 
