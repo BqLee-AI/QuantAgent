@@ -115,6 +115,27 @@ describe("createApiClient", () => {
     });
   });
 
+  it("returns the full envelope even when the business code is non-zero", async () => {
+    const client = createApiClient({
+      adapter: async (config) =>
+        createEnvelopeResponse(config, {
+          code: 40_001,
+          data: null,
+          msg: "参数错误",
+          request_id: "req-envelope",
+        }),
+    });
+
+    const envelope = await client.requestEnvelope<null>("/broken");
+
+    expect(envelope).toEqual({
+      code: 40_001,
+      data: null,
+      msg: "参数错误",
+      request_id: "req-envelope",
+    });
+  });
+
   it("turns business errors into ApiError", async () => {
     const client = createApiClient({
       adapter: async (config) =>
@@ -258,6 +279,75 @@ describe("createApiClient", () => {
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
   });
 
+  it("propagates replay errors after a successful refresh", async () => {
+    let requestCount = 0;
+    const onError = vi.fn();
+    const onUnauthorized = vi.fn();
+    const adapter: Adapter = vi.fn(async (config) => {
+      requestCount += 1;
+
+      if (requestCount === 1) {
+        throw new AxiosError(
+          "Unauthorized",
+          "ERR_BAD_REQUEST",
+          config,
+          undefined,
+          {
+            config,
+            data: {
+              code: 401,
+              data: null,
+              msg: "unauthorized",
+            },
+            headers: {},
+            status: 401,
+            statusText: "Unauthorized",
+          },
+        );
+      }
+
+      throw new AxiosError(
+        "Server error",
+        "ERR_BAD_RESPONSE",
+        config,
+        undefined,
+        {
+          config,
+          data: {
+            code: 50_000,
+            data: null,
+            msg: "server exploded",
+          },
+          headers: {},
+          status: 500,
+          statusText: "Server Error",
+        },
+      );
+    });
+
+    const client = createApiClient({
+      adapter,
+      onError,
+      onUnauthorized,
+      refreshAccessToken: async () => undefined,
+    });
+
+    await expect(client.get("/refresh-then-fail")).rejects.toMatchObject({
+      code: 50_000,
+      msg: "server exploded",
+      status: 500,
+    });
+    expect(onUnauthorized).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        code: 50_000,
+        msg: "server exploded",
+        status: 500,
+      }),
+    );
+  });
+
   it("reuses inflight GET requests by default", async () => {
     const adapter: Adapter = vi.fn(async (config) => {
       await Promise.resolve();
@@ -299,5 +389,175 @@ describe("createApiClient", () => {
 
     const requestConfig = vi.mocked(adapter).mock.calls[0]?.[0];
     expect(requestConfig?.signal).toBe(controller.signal);
+  });
+
+  it.each([
+    {
+      method: "post",
+      invoke: (
+        client: ReturnType<typeof createApiClient>,
+        config?: Parameters<ReturnType<typeof createApiClient>["post"]>[2],
+      ) => client.post<{ name: string }, { ok: boolean }>("/items", { name: "demo" }, config),
+    },
+    {
+      method: "put",
+      invoke: (
+        client: ReturnType<typeof createApiClient>,
+        config?: Parameters<ReturnType<typeof createApiClient>["put"]>[2],
+      ) => client.put<{ name: string }, { ok: boolean }>("/items/1", { name: "demo" }, config),
+    },
+    {
+      method: "patch",
+      invoke: (
+        client: ReturnType<typeof createApiClient>,
+        config?: Parameters<ReturnType<typeof createApiClient>["patch"]>[2],
+      ) => client.patch<{ name: string }, { ok: boolean }>("/items/1", { name: "demo" }, config),
+    },
+    {
+      method: "delete",
+      invoke: (
+        client: ReturnType<typeof createApiClient>,
+        config?: Parameters<ReturnType<typeof createApiClient>["del"]>[1],
+      ) => client.del<{ ok: boolean }>("/items/1", config),
+    },
+  ])("$method requests unwrap success envelopes and preserve request config", async ({ invoke }) => {
+    const controller = new AbortController();
+    const adapter: Adapter = vi.fn(async (config) =>
+      createEnvelopeResponse(config, {
+        code: 0,
+        data: { ok: true },
+        msg: "ok",
+      }),
+    );
+
+    const client = createApiClient({
+      adapter,
+      authEnabled: true,
+      getAccessToken: () => "test-token",
+    });
+
+    await expect(invoke(client, { signal: controller.signal })).resolves.toEqual({
+      ok: true,
+    });
+
+    const requestConfig = vi.mocked(adapter).mock.calls[0]?.[0];
+    const headers = AxiosHeaders.from(requestConfig?.headers);
+    expect(headers.get("Authorization")).toBe("Bearer test-token");
+    expect(requestConfig?.signal).toBe(controller.signal);
+  });
+
+  it.each([
+    {
+      method: "post",
+      invoke: (client: ReturnType<typeof createApiClient>) =>
+        client.post<{ name: string }, { ok: boolean }>("/items", { name: "demo" }),
+    },
+    {
+      method: "put",
+      invoke: (client: ReturnType<typeof createApiClient>) =>
+        client.put<{ name: string }, { ok: boolean }>("/items/1", { name: "demo" }),
+    },
+    {
+      method: "patch",
+      invoke: (client: ReturnType<typeof createApiClient>) =>
+        client.patch<{ name: string }, { ok: boolean }>("/items/1", { name: "demo" }),
+    },
+    {
+      method: "delete",
+      invoke: (client: ReturnType<typeof createApiClient>) =>
+        client.del<{ ok: boolean }>("/items/1"),
+    },
+  ])("$method requests turn business errors into ApiError", async ({ invoke }) => {
+    const client = createApiClient({
+      adapter: async (config) =>
+        createEnvelopeResponse(config, {
+          code: 40_001,
+          data: null,
+          msg: "参数错误",
+          request_id: "req-non-get",
+        }),
+    });
+
+    await expect(invoke(client)).rejects.toMatchObject({
+      code: 40_001,
+      msg: "参数错误",
+      requestId: "req-non-get",
+    });
+  });
+
+  it.each([
+    {
+      method: "post",
+      run: (client: ReturnType<typeof createApiClient>) =>
+        Promise.all([
+          client.post<{ name: string }, { created: boolean }>("/items", { name: "item-1" }),
+          client.post<{ name: string }, { created: boolean }>("/items", { name: "item-2" }),
+        ]),
+    },
+    {
+      method: "put",
+      run: (client: ReturnType<typeof createApiClient>) =>
+        Promise.all([
+          client.put<{ name: string }, { created: boolean }>("/items/1", { name: "item-1" }),
+          client.put<{ name: string }, { created: boolean }>("/items/1", { name: "item-2" }),
+        ]),
+    },
+    {
+      method: "patch",
+      run: (client: ReturnType<typeof createApiClient>) =>
+        Promise.all([
+          client.patch<{ name: string }, { created: boolean }>("/items/1", { name: "item-1" }),
+          client.patch<{ name: string }, { created: boolean }>("/items/1", { name: "item-2" }),
+        ]),
+    },
+    {
+      method: "delete",
+      run: (client: ReturnType<typeof createApiClient>) =>
+        Promise.all([
+          client.del<{ created: boolean }>("/items/1"),
+          client.del<{ created: boolean }>("/items/1"),
+        ]),
+    },
+  ])("$method requests are not deduplicated by default", async ({ run }) => {
+    const adapter: Adapter = vi.fn(async (config) => {
+      await Promise.resolve();
+      return createEnvelopeResponse(config, {
+        code: 0,
+        data: { created: true },
+        msg: "ok",
+      });
+    });
+
+    const client = createApiClient({ adapter });
+
+    await run(client);
+
+    expect(vi.mocked(adapter)).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not deduplicate data and envelope GET callers together", async () => {
+    const adapter: Adapter = vi.fn(async (config) => {
+      await Promise.resolve();
+      return createEnvelopeResponse(config, {
+        code: 0,
+        data: { ok: true },
+        msg: "ok",
+      });
+    });
+
+    const client = createApiClient({ adapter });
+
+    const [data, envelope] = await Promise.all([
+      client.get<{ ok: boolean }>("/same"),
+      client.requestEnvelope<{ ok: boolean }>("/same"),
+    ]);
+
+    expect(data).toEqual({ ok: true });
+    expect(envelope).toEqual({
+      code: 0,
+      data: { ok: true },
+      msg: "ok",
+    });
+    expect(vi.mocked(adapter)).toHaveBeenCalledTimes(2);
   });
 });

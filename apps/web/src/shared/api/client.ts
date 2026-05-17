@@ -111,8 +111,9 @@ function getDedupeKey(config: InternalRequestConfig): string | undefined {
     config.params && typeof config.params === "object"
       ? JSON.stringify(config.params)
       : "";
+  const responseMode = config._returnEnvelope ? "envelope" : "data";
 
-  return `${method}:${config.baseURL ?? ""}:${config.url ?? ""}:${params}`;
+  return `${method}:${config.baseURL ?? ""}:${config.url ?? ""}:${params}:${responseMode}`;
 }
 
 function normalizeResponse<TResponse>(
@@ -128,12 +129,12 @@ function normalizeResponse<TResponse>(
     });
   }
 
-  if (response.data.code !== 0) {
-    throw createApiErrorFromEnvelope(response.data, response.status);
-  }
-
   if (requestConfig._returnEnvelope) {
     return response.data;
+  }
+
+  if (response.data.code !== 0) {
+    throw createApiErrorFromEnvelope(response.data, response.status);
   }
 
   return response.data.data as TResponse;
@@ -200,12 +201,13 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
 
         try {
           await refreshPromise;
-          return instance.request(requestConfig);
         } catch {
           config.onUnauthorized?.(apiError);
           config.onError?.(apiError);
           return Promise.reject(apiError);
         }
+
+        return instance.request(requestConfig);
       }
 
       if (apiError.status === 401) {

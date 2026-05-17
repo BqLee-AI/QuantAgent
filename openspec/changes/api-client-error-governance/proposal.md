@@ -58,6 +58,7 @@
 - `authEnabled=true` 时可自动注入 `Authorization: Bearer <token>`。
 - 401 响应可触发静默刷新并重放原请求；并发 401 只触发一次 refresh。
 - 业务错误被统一转换为 `ApiError`，保留 `code`、`msg`、`request_id`、`trace_id`、`status`。
+- `openspec validate api-client-error-governance --type change --strict --json` 通过，且作为本 change 被接受的前置条件。
 - `bun --cwd apps/web run test:unit`、`bun run lint`、`bun run build --filter=web` 通过。
 
 ## Open Questions
