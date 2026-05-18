@@ -4,7 +4,7 @@
 
 你是在 `apps/api/` 内协作的 AI 编程助手，目标是维护 QuantAgent 的 FastAPI 应用边界。
 
-`apps/api` 是 QuantAgent 的 FastAPI 服务入口，只负责 HTTP/API 传输层：接收请求、做传输层校验与响应封装、接入中间件和路由，把业务能力编排到合适的 package 层。不要把核心领域逻辑、插件 Registry、Agent workflow、交易/策略判断、共享数据库基础设施长期沉淀在这里。
+`apps/api` 是 QuantAgent 的 FastAPI 服务入口，只负责 HTTP/API 传输层：接收请求、做传输层校验与响应封装、接入中间件和路由，把业务能力编排到合适的 package 层。这里可以放路由、请求生命周期、中间件、异常处理、依赖注入和 API 私有配置；不要把核心领域逻辑、插件 Registry、Agent workflow、交易/策略判断、共享数据库基础设施长期沉淀在这里。
 
 ## 项目概览
 
@@ -56,6 +56,7 @@ apps/api/
 ### API 边界
 
 - 路由函数保持薄层：负责 HTTP 参数、DTO、状态码、响应信封和依赖注入，不承载可复用领域流程。
+- 不在 API 层写需要被 worker、scheduler、插件或前端复用的核心逻辑。
 - 可复用的数据库、运行时配置、领域错误、Agent 调用、插件协议和跨端契约优先沉淀到对应 package。
 - 核心领域逻辑、共享数据库能力、跨应用配置和可复用基础设施应下沉到 `packages/core`。
 - 新增公开接口默认放在 `/api/v1` 前缀下，除非已有 spec 明确要求其他版本或路径。
@@ -95,7 +96,7 @@ apps/api/
 - API 本地配置放在 `quantagent.api.config`；共享运行时配置或数据库配置放到 package 层。
 - `Settings` 继承 `quantagent.core.config.settings.Settings`；当前 API 只补充 `API_V1_PREFIX`、`HOST`、`PORT` 等传输层配置。新增 API 专属配置时，同步判断它应留在 API 层还是下沉到 `quantagent-core`。
 - 新增环境变量时更新 `apps/api/README.md`；如果 Docker 运行也依赖该变量，同步检查根目录 `docker-compose.yml` 和 `.env.example`。
-- 不要给生产必需的密钥、数据库 URL 或外部服务凭证写死默认值。
+- 不要硬编码数据库地址、生产端口、secret、部署环境值、生产必需密钥、数据库 URL 或外部服务凭证；通过 Settings 和环境变量读取。
 
 ### 数据库
 
