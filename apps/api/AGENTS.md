@@ -4,7 +4,7 @@
 
 你是在 `apps/api/` 内协作的 AI 编程助手，目标是维护 QuantAgent 的 FastAPI 应用边界。
 
-`apps/api` 负责 HTTP/API 传输层：接收请求、做传输层校验与响应封装、接入中间件和路由，把业务能力编排到合适的 package 层。不要把核心领域逻辑、插件 Registry、Agent workflow、交易/策略判断、共享数据库基础设施长期沉淀在这里。
+`apps/api` 是 QuantAgent 的 FastAPI 服务入口，只负责 HTTP/API 传输层：接收请求、做传输层校验与响应封装、接入中间件和路由，把业务能力编排到合适的 package 层。不要把核心领域逻辑、插件 Registry、Agent workflow、交易/策略判断、共享数据库基础设施长期沉淀在这里。
 
 ## 项目概览
 
@@ -57,27 +57,33 @@ apps/api/
 
 - 路由函数保持薄层：负责 HTTP 参数、DTO、状态码、响应信封和依赖注入，不承载可复用领域流程。
 - 可复用的数据库、运行时配置、领域错误、Agent 调用、插件协议和跨端契约优先沉淀到对应 package。
+- 核心领域逻辑、共享数据库能力、跨应用配置和可复用基础设施应下沉到 `packages/core`。
 - 新增公开接口默认放在 `/api/v1` 前缀下，除非已有 spec 明确要求其他版本或路径。
+- 新增业务 API 时遵守 `docs/design/08-api-and-websocket-design.md` 的资源边界：REST 资源为主，副作用操作放在资源下的 `actions` 路径。
 - 标准 API v1 routes 统一通过 `quantagent.api.routers.register.register_api_v1_routes` 注册；不要在 `main.py` 零散新增 `include_router(...)`。
 - `debug` 路由只能用于非生产诊断；新增调试入口必须保持 `APP_ENV=production` 下不可见，并且生产 OpenAPI 不应暴露 debug 路径。
 - `GET /api/v1/health` 是存活探针，不应依赖数据库、外部服务或业务表结构。
 - `GET /api/v1/ready` 是数据库 readiness probe，只验证已配置数据库可达；不要把 sample provider 和请求级 DB session dependency 混在一起。
 - `GET /api/v1/version` 是最小非业务示例，只展示 DTO、provider、响应信封和 OpenAPI 契约；不要把它扩展成 runtime、plugin、approval、Agent、tool invocation、WebSocket、executor、live trading 或业务 endpoint family。
+- WebSocket 或实时通道只负责状态变化通知，不替代 REST 查询和数据库状态真源。
+- 高风险动作即使来自前端按钮或 AI 文本，也必须经过后端 Policy Gate。
 
 ### 路由骨架
 
-- request/response DTO 放在 `src/quantagent/api/schemas/`，保持 API 契约独立于 ORM model 和内部领域对象。
+- request/response DTO 放在 `src/quantagent/api/schemas/`，保持 API 契约独立于 ORM model 和内部领域对象；不能直接返回 SQLAlchemy model。
 - 当前 `src/quantagent/api/providers/` 只用于 sample data 或轻量替换点；需要数据库访问、外部服务调用、credentials、runtime 状态或核心领域逻辑时，应先通过 OpenSpec 明确边界，并优先下沉到 package 层。
 - route 应显式声明 FastAPI `response_model=ApiResponse[T]` 和 OpenAPI `tags`。
 - 新增 API v1 route 时，按 `schemas/` DTO、`providers/` seam、`routers/` route、`register_api_v1_routes` 注册、`src/tests/` 运行时和 OpenAPI 契约测试的顺序落地。
+- 新增或修改跨前端契约时，需要同步更新 `packages/contracts`、OpenAPI 或 JSON Schema 中的对应定义作为契约真源，不能只改 API 侧临时返回字段而不更新契约。
 - 本包当前不生成 static OpenAPI artifact、generated client、TypeScript types 或 Zod schema；不要为单个 route 局部引入生成链路。
 
 ### 响应与错误
 
-- 成功响应沿用 `ApiResponse.success(...)`，不要让路由返回裸业务对象作为长期 API。
-- 错误响应保持 `code/data/msg/error` 信封，并携带 `error.request_id`。
+- HTTP API 应逐步收敛到 `code/data/msg/error` envelope；成功响应沿用 `ApiResponse.success(...)`，不要让路由返回裸业务对象作为长期 API。
+- 错误响应保持 `code/data/msg/error` 信封，并携带 `error.request_id`；不把底层异常、secret 或连接串原文返回给调用方。
 - 新增业务错误优先扩展 `AppError` 体系，避免在路由内散落 ad hoc `HTTPException`。
 - OpenAPI 中公开的成功响应也应体现 `code/data/msg/error` 信封，而不是只定义内部 data schema。
+- 引入响应结构例外时必须在 PR 中说明原因和兼容策略。
 
 ### Request ID 与可观测性
 
@@ -93,6 +99,7 @@ apps/api/
 
 ### 数据库
 
+- 不在路由里直接创建数据库 engine；使用应用生命周期和依赖注入管理连接。
 - 数据库初始化只在 FastAPI lifespan 中执行，避免测试或脚本在 `create_app(...)` 时提前建立连接。
 - API 层通过 `quantagent.api.db.get_db_session` 提供请求级 SQLAlchemy `Session`；依赖函数不应隐式 commit。
 - 下游请求处理失败时 session dependency 应 rollback 并 close；正常路径只 close。
