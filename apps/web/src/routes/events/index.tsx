@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import { PageEmpty } from '../../app/components/PageEmpty'
 import { PageLoading } from '../../app/components/PageLoading'
 import { PlaceholderPanel } from '../../app/components/PlaceholderPanel'
+import styles from './index.module.css'
 
 type EventsPreviewState = 'loading' | 'empty'
 
@@ -36,7 +37,7 @@ function EventsPage() {
           title="No events to review"
           description="The event workspace has no source events ready for this preview state."
           cta={
-            <button className="page-state-button" type="button">
+            <button className={styles.previewAction} type="button">
               Preview action
             </button>
           }
