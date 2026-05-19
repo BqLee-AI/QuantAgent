@@ -24,4 +24,5 @@
 - 修改 API client、错误处理或运行时配置时，同步查看已有 unit test。
 - 修改路由、布局或页面交互时，优先运行对应的 unit、component 或 e2e 检查。
 - 新增可复用 UI 或应用基础设施时，先检查 `src/app/` 和 `src/shared/` 的现有边界。
+- 新增可复用组件样式时，默认使用 `*.module.css`，全局 CSS 只保留 tokens、layout shell、route shell 和 app-level fallback 等真正跨组件规则。
 - 未来接入生成 client、types 或 Zod schema 时，从 `packages/contracts/generated/typescript` 消费，不手写复制契约类型。
