@@ -52,6 +52,30 @@ docker compose --profile migration run --rm migrate
 - `/api/v1/ready` 继续是数据库 readiness probe；不要把 sample provider 和请求级 DB session dependency 混在一起。
 - 本包当前不生成 static OpenAPI artifact、generated client、TypeScript types 或 Zod schema。
 
+### Auth 基础闭环
+
+- 当前 API 初版采用本地单用户 Cookie Session 鉴权，不实现注册、RBAC、多用户、多租户、OAuth 或 SSO。
+- public 路由白名单仅包含 `GET /api/v1/health`、`GET /api/v1/ready`、`GET /api/v1/version`；业务 API 默认 protected。
+- 登录入口为 `POST /api/v1/auth/login`，请求体使用本地管理员口令；成功后仅通过 HttpOnly cookie 建立 session。
+- 登出入口为 `POST /api/v1/auth/logout`，必须同时具备有效 session 和 `X-CSRF-Token`。
+- 当前用户快照入口为 `GET /api/v1/me`，返回 `actor_id`、`actor_type`、`capabilities` 和非敏感 `csrf_token`，不返回 session、cookie、secret、口令或 hash。
+- Cookie 默认 `HttpOnly` 且 `SameSite=Lax`；`APP_ENV=production` 下要求 `Secure=true`。
+- `AUTH_ENABLED=false` 仅允许 `APP_ENV=development`；此时依赖会返回 `local_dev` actor，避免下游审计上下文为空。
+- Cookie Session 写操作通过 `X-CSRF-Token` header 做 CSRF 校验；login 豁免，logout 和受保护写操作不豁免。
+
+### Auth 环境变量
+
+- `AUTH_ENABLED`：是否启用鉴权，默认 `true`。
+- `AUTH_ADMIN_PASSWORD`：本地管理员登录口令；development 测试场景可使用默认值，production 必须显式提供。
+- `AUTH_SESSION_SECRET`：session 签名 secret；development 测试场景可使用默认值，production 必须显式提供。
+- `AUTH_COOKIE_NAME`：session cookie 名称，默认 `quantagent_session`。
+- `AUTH_COOKIE_SECURE`：是否对 session cookie 启用 `Secure`；production 默认强制安全值。
+- `AUTH_COOKIE_SAME_SITE`：cookie same-site 策略，默认 `lax`。
+- `AUTH_SESSION_LIFETIME_SECONDS`：session 生命周期，默认 `43200`。
+- `AUTH_CSRF_HEADER_NAME`：CSRF header 名称，默认 `X-CSRF-Token`。
+
+注意：仓库本地 Docker compose 仅代表本地运行默认值，不等同 production 安全部署；生产环境需要显式设置 `APP_ENV=production` 及对应 auth 配置。
+
 ### 新增 route 流程
 
 新增一个 API v1 route 的最小流程：
