@@ -1,13 +1,14 @@
 from fastapi import FastAPI
 
 from quantagent.api.config.settings import Settings
+from quantagent.api.routers.auth import router as auth_router
 from quantagent.api.routers.health import router as health_router
 from quantagent.api.routers.version import router as version_router
 
 
 def register_api_v1_routes(app: FastAPI, app_settings: Settings) -> None:
     """Register standard API v1 routers and environment-gated debug routes."""
-    standard_routers = (health_router, version_router)
+    standard_routers = (health_router, version_router, auth_router)
     for router in standard_routers:
         app.include_router(router, prefix=app_settings.API_V1_PREFIX)
 

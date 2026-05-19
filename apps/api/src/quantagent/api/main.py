@@ -24,6 +24,7 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
             shutdown_database(app)
 
     app = FastAPI(title="QuantAgent API", version=__version__, lifespan=lifespan)
+    app.state.settings = current_settings
     app.add_middleware(RequestIdMiddleware)
     register_exception_handlers(app)
     register_api_v1_routes(app, current_settings)

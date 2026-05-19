@@ -51,6 +51,32 @@ class NotFoundError(AppError):
         )
 
 
+class UnauthorizedError(AppError):
+    """请求缺少有效登录态或鉴权失败。"""
+
+    def __init__(self, message: str = "Unauthorized", *, details: dict[str, Any] | None = None) -> None:
+        super().__init__(
+            message,
+            status_code=401,
+            error_code=40100,
+            error_key="UNAUTHORIZED",
+            details=details,
+        )
+
+
+class ForbiddenError(AppError):
+    """请求主体已识别，但无权执行当前动作。"""
+
+    def __init__(self, message: str = "Forbidden", *, details: dict[str, Any] | None = None) -> None:
+        super().__init__(
+            message,
+            status_code=403,
+            error_code=40300,
+            error_key="FORBIDDEN",
+            details=details,
+        )
+
+
 class InternalError(AppError):
     """服务端内部异常，对外统一表现为通用 500 错误。"""
 
