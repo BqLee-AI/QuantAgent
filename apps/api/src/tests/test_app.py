@@ -9,10 +9,21 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import SQLAlchemyError
 
+from quantagent.api.auth import (
+    ALL_CAPABILITIES,
+    CurrentActor,
+    RUNTIME_INSPECT_CAPABILITY,
+    build_actor_audit_context,
+    issue_session,
+    require_capability,
+    require_csrf,
+)
 from quantagent.api.config.settings import Settings
 from quantagent.api.db import get_db_session
 from quantagent.api.errors import ServiceUnavailableError
 from quantagent.api.main import create_app
+from quantagent.api.responses import ApiResponse
+from quantagent.api.schemas.auth import ProtectedWriteResponse
 
 
 class FakeSession:
@@ -56,7 +67,8 @@ class ApiAppTestCase(unittest.TestCase):
     """覆盖应用装配、错误响应和数据库依赖行为的集成测试。"""
 
     def setUp(self) -> None:
-        self.client = TestClient(create_app(self._settings()))
+        self.settings = self._settings()
+        self.client = TestClient(create_app(self.settings))
         self.client.__enter__()
 
     def tearDown(self) -> None:
@@ -202,6 +214,229 @@ class ApiAppTestCase(unittest.TestCase):
             response = client.get("/api/v1/debug/success")
         self.assertEqual(response.status_code, 404)
 
+    def test_production_rejects_disabled_auth(self) -> None:
+        with self.assertRaisesRegex(ValueError, "AUTH_ENABLED=false"):
+            self._settings(
+                APP_ENV="production",
+                AUTH_ENABLED=False,
+                AUTH_ADMIN_PASSWORD="prod-password",
+                AUTH_SESSION_SECRET="prod-secret",
+            )
+
+    def test_production_login_uses_secure_cookie(self) -> None:
+        production_app = create_app(
+            self._settings(
+                APP_ENV="production",
+                AUTH_ADMIN_PASSWORD="prod-password",
+                AUTH_SESSION_SECRET="prod-secret",
+            )
+        )
+        with TestClient(production_app) as client:
+            response = client.post("/api/v1/auth/login", json={"password": "prod-password"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Secure", response.headers["set-cookie"])
+        self.assertIn("HttpOnly", response.headers["set-cookie"])
+
+    def test_login_success_sets_cookie_and_returns_csrf_token(self) -> None:
+        response = self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+        body = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(body["error"])
+        self.assertEqual(body["data"]["actor_id"], "local_admin")
+        self.assertEqual(body["data"]["actor_type"], "local_single_user")
+        self.assertEqual(set(body["data"]["capabilities"]), ALL_CAPABILITIES)
+        self.assertTrue(body["data"]["csrf_token"])
+        self.assertIn("HttpOnly", response.headers["set-cookie"])
+        self.assertNotIn(self.settings.AUTH_ADMIN_PASSWORD or "", str(body))
+        self.assertNotIn(self.settings.AUTH_SESSION_SECRET or "", str(body))
+
+    def test_login_failure_uses_unauthorized_envelope(self) -> None:
+        response = self.client.post("/api/v1/auth/login", json={"password": "wrong-password"})
+        body = response.json()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(body["code"], 40100)
+        self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+        self.assertEqual(response.headers["X-Request-ID"], body["error"]["request_id"])
+        self.assertNotIn("wrong-password", str(body))
+        self.assertNotIn(self.settings.AUTH_ADMIN_PASSWORD or "", str(body))
+        self.assertNotIn(self.settings.AUTH_SESSION_SECRET or "", str(body))
+        self.assertNotIn("set-cookie", {key.lower() for key in response.headers.keys()})
+
+    def test_me_rejects_missing_session(self) -> None:
+        response = self.client.get("/api/v1/me")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+        self.assertEqual(response.headers["X-Request-ID"], body["error"]["request_id"])
+
+    def test_me_rejects_invalid_session_without_leaking_cookie(self) -> None:
+        self.client.cookies.set(self.settings.AUTH_COOKIE_NAME, "invalid.session")
+        response = self.client.get("/api/v1/me")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+        self.assertNotIn("invalid.session", str(body))
+        self.assertNotIn(self.settings.AUTH_SESSION_SECRET or "", str(body))
+
+    def test_me_rejects_expired_session(self) -> None:
+        session_value, _csrf_token = issue_session("local_admin", self.settings, expires_at=1)
+        self.client.cookies.set(self.settings.AUTH_COOKIE_NAME, session_value)
+
+        response = self.client.get("/api/v1/me")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+
+    def test_me_returns_actor_capabilities_and_csrf(self) -> None:
+        login_response = self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+        login_body = login_response.json()
+
+        response = self.client.get("/api/v1/me")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["data"]["actor_id"], "local_admin")
+        self.assertEqual(body["data"]["actor_type"], "local_single_user")
+        self.assertEqual(set(body["data"]["capabilities"]), ALL_CAPABILITIES)
+        self.assertEqual(body["data"]["csrf_token"], login_body["data"]["csrf_token"])
+        self.assertNotIn(self.settings.AUTH_SESSION_SECRET or "", str(body))
+        self.assertNotIn(self.settings.AUTH_COOKIE_NAME, str(body))
+
+    def test_development_can_disable_auth_and_keep_actor_context(self) -> None:
+        app = create_app(self._settings(AUTH_ENABLED=False))
+        with TestClient(app) as client:
+            response = client.get("/api/v1/me")
+
+        body = response.json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["data"]["actor_id"], "local_dev")
+        self.assertEqual(body["data"]["actor_type"], "local_single_user")
+        self.assertTrue(body["data"]["capabilities"])
+        self.assertTrue(body["data"]["csrf_token"])
+
+    def test_disabled_auth_login_returns_development_actor_without_session_cookie(self) -> None:
+        app = create_app(self._settings(AUTH_ENABLED=False))
+        with TestClient(app) as client:
+            response = client.post("/api/v1/auth/login", json={"password": "ignored-in-development-bypass"})
+            me_response = client.get("/api/v1/me")
+
+        body = response.json()
+        me_body = me_response.json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["data"]["actor_id"], "local_dev")
+        self.assertEqual(body["data"]["actor_type"], "local_single_user")
+        self.assertEqual(body["data"]["csrf_token"], me_body["data"]["csrf_token"])
+        self.assertIn("Max-Age=0", response.headers["set-cookie"])
+
+    def test_disabled_auth_logout_uses_development_csrf_token(self) -> None:
+        app = create_app(self._settings(AUTH_ENABLED=False))
+        with TestClient(app) as client:
+            login_response = client.post("/api/v1/auth/login", json={"password": "ignored"})
+            csrf_token = login_response.json()["data"]["csrf_token"]
+            response = client.post("/api/v1/auth/logout", headers={self.settings.AUTH_CSRF_HEADER_NAME: csrf_token})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"], {"cleared": True})
+
+    def test_logout_requires_csrf_token(self) -> None:
+        self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+        response = self.client.post("/api/v1/auth/logout")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(body["error"]["code"], "FORBIDDEN")
+
+    def test_logout_rejects_invalid_csrf_token_without_echoing_it(self) -> None:
+        self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+        response = self.client.post("/api/v1/auth/logout", headers={self.settings.AUTH_CSRF_HEADER_NAME: "bad-token"})
+        body = response.json()
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(body["error"]["code"], "FORBIDDEN")
+        self.assertNotIn("bad-token", str(body))
+
+    def test_logout_clears_cookie_with_valid_csrf_token(self) -> None:
+        login_response = self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+        csrf_token = login_response.json()["data"]["csrf_token"]
+
+        response = self.client.post("/api/v1/auth/logout", headers={self.settings.AUTH_CSRF_HEADER_NAME: csrf_token})
+        body = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["data"], {"cleared": True})
+        self.assertIn("Max-Age=0", response.headers["set-cookie"])
+
+    def test_protected_write_requires_session(self) -> None:
+        with TestClient(self._protected_write_test_app()) as client:
+            response = client.post("/test/protected-write")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+
+    def test_protected_write_requires_csrf_token(self) -> None:
+        with TestClient(self._protected_write_test_app()) as client:
+            client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+            response = client.post("/test/protected-write")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(body["error"]["code"], "FORBIDDEN")
+
+    def test_protected_write_rejects_invalid_csrf_token(self) -> None:
+        with TestClient(self._protected_write_test_app()) as client:
+            client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+            response = client.post(
+                "/test/protected-write",
+                headers={self.settings.AUTH_CSRF_HEADER_NAME: "bad-token"},
+            )
+        body = response.json()
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(body["error"]["code"], "FORBIDDEN")
+        self.assertNotIn("bad-token", str(body))
+
+    def test_protected_write_returns_actor_audit_context_fields(self) -> None:
+        with TestClient(self._protected_write_test_app()) as client:
+            login_response = client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+            csrf_token = login_response.json()["data"]["csrf_token"]
+
+            response = client.post(
+                "/test/protected-write",
+                headers={
+                    self.settings.AUTH_CSRF_HEADER_NAME: csrf_token,
+                    "X-Request-ID": "req-runtime-write",
+                },
+            )
+        body = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["data"]["actor_id"], "local_admin")
+        self.assertEqual(body["data"]["request_id"], "req-runtime-write")
+
+    def test_missing_capability_is_forbidden(self) -> None:
+        reduced_capabilities = frozenset({"plugin.configure"})
+        session_value, csrf_token = issue_session("local_admin", self.settings, capabilities=reduced_capabilities)
+        with TestClient(self._protected_write_test_app()) as client:
+            client.cookies.set(self.settings.AUTH_COOKIE_NAME, session_value)
+            response = client.post(
+                "/test/protected-write",
+                headers={self.settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+            )
+
+        body = response.json()
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(body["code"], 40300)
+        self.assertEqual(body["error"]["code"], "FORBIDDEN")
+        self.assertEqual(response.headers["X-Request-ID"], body["error"]["request_id"])
+
     def test_openapi_exposes_system_routes_with_tags_and_envelope_schema(self) -> None:
         response = self.client.get("/openapi.json")
         self.assertEqual(response.status_code, 200)
@@ -227,6 +462,21 @@ class ApiAppTestCase(unittest.TestCase):
         ready_schema = self._resolve_response_schema(schema, "/api/v1/ready")
         self.assertTrue({"code", "data", "msg", "error"}.issubset(ready_schema["properties"].keys()))
 
+        self.assertIn("auth", schema["paths"]["/api/v1/auth/login"]["post"]["tags"])
+        self.assertIn("auth", schema["paths"]["/api/v1/auth/logout"]["post"]["tags"])
+        self.assertIn("auth", schema["paths"]["/api/v1/me"]["get"]["tags"])
+        self.assertNotIn("/api/v1/auth/test-actions/runtime-inspect", schema["paths"])
+
+        login_schema = self._resolve_response_schema(schema, "/api/v1/auth/login", method="post")
+        self.assertTrue({"code", "data", "msg", "error"}.issubset(login_schema["properties"].keys()))
+
+        logout_schema = self._resolve_response_schema(schema, "/api/v1/auth/logout", method="post")
+        self.assertTrue({"code", "data", "msg", "error"}.issubset(logout_schema["properties"].keys()))
+
+        me_schema = self._resolve_response_schema(schema, "/api/v1/me")
+        me_data_schema = self._resolve_schema_ref(schema, me_schema["properties"]["data"])
+        self.assertTrue({"actor_id", "actor_type", "capabilities", "csrf_token"}.issubset(me_data_schema["properties"]))
+
     def test_production_openapi_excludes_debug_routes(self) -> None:
         production_app = create_app(self._settings(APP_ENV="production"))
         with TestClient(production_app) as client:
@@ -239,6 +489,7 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertIn("/api/v1/ready", schema["paths"])
         self.assertNotIn("/api/v1/debug/error", schema["paths"])
         self.assertNotIn("/api/v1/debug/success", schema["paths"])
+        self.assertNotIn("/api/v1/auth/test-actions/runtime-inspect", schema["paths"])
 
     def test_db_session_dependency_closes_session_without_auto_commit(self) -> None:
         session = FakeSession()
@@ -306,8 +557,27 @@ class ApiAppTestCase(unittest.TestCase):
         scope = {"type": "http", "app": SimpleNamespace(state=SimpleNamespace(db_session_factory=session_factory))}
         return Request(scope)
 
-    def _resolve_response_schema(self, openapi_schema: dict, path: str) -> dict:
-        response_schema = openapi_schema["paths"][path]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+    def _protected_write_test_app(self) -> FastAPI:
+        app = create_app(self.settings)
+
+        @app.post("/test/protected-write", response_model=ApiResponse[ProtectedWriteResponse])
+        def protected_write(
+            request: Request,
+            actor: CurrentActor = Depends(require_csrf),
+            _capability_actor: CurrentActor = Depends(require_capability(RUNTIME_INSPECT_CAPABILITY)),
+        ) -> ApiResponse[ProtectedWriteResponse]:
+            context = build_actor_audit_context(request, actor)
+            return ApiResponse.success(
+                ProtectedWriteResponse(
+                    actor_id=context.actor_id,
+                    request_id=context.request_id,
+                )
+            )
+
+        return app
+
+    def _resolve_response_schema(self, openapi_schema: dict, path: str, *, method: str = "get") -> dict:
+        response_schema = openapi_schema["paths"][path][method]["responses"]["200"]["content"]["application/json"]["schema"]
         return self._resolve_schema_ref(openapi_schema, response_schema)
 
     def _resolve_schema_ref(self, openapi_schema: dict, schema_node: dict) -> dict:
@@ -337,6 +607,9 @@ class ApiAppTestCase(unittest.TestCase):
             "API_V1_PREFIX": "/api/v1",
             "HOST": "127.0.0.1",
             "PORT": 8000,
+            "AUTH_ENABLED": True,
+            "AUTH_ADMIN_PASSWORD": "test-admin-password",
+            "AUTH_SESSION_SECRET": "test-session-secret",
         }
         baseline.update(overrides)
         return Settings(**baseline)
