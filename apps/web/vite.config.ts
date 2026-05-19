@@ -24,7 +24,6 @@ export default defineConfig({
       "@heroui/react",
       "@heroui/system",
     ],
-    preserveSymlinks: true,
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },

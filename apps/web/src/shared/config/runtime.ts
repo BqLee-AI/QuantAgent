@@ -12,16 +12,23 @@ type RuntimeEnv = {
   VITE_AUTH_ENABLED?: string;
 };
 
-function requireValue(value: string | undefined, key: string): string {
-  if (!value || value.trim().length === 0) {
-    throw new Error(`Missing required runtime config: ${key}`);
-  }
+const DEFAULT_RUNTIME_CONFIG: RuntimeConfig = {
+  apiBaseUrl: '',
+  websocketUrl: '',
+  mode: 'test',
+  authEnabled: false,
+};
 
-  return value.trim();
+function readValue(value: string | undefined, fallback: string): string {
+  return value?.trim() || fallback;
 }
 
-function parseBoolean(value: string | undefined, key: string): boolean {
-  const normalized = requireValue(value, key).toLowerCase();
+function parseBoolean(value: string | undefined, fallback: boolean): boolean {
+  if (value === undefined || value.trim().length === 0) {
+    return fallback;
+  }
+
+  const normalized = value.trim().toLowerCase();
 
   if (normalized === 'true' || normalized === '1') {
     return true;
@@ -32,15 +39,21 @@ function parseBoolean(value: string | undefined, key: string): boolean {
   }
 
   throw new Error(
-    `Invalid boolean runtime config: ${key}. Expected true, false, 1, or 0.`,
+    'Invalid boolean runtime config: VITE_AUTH_ENABLED. Expected true, false, 1, or 0.',
   );
 }
 
 export function loadRuntimeConfig(env: RuntimeEnv = import.meta.env): RuntimeConfig {
   return {
-    apiBaseUrl: requireValue(env.VITE_API_BASE_URL, 'VITE_API_BASE_URL'),
-    websocketUrl: requireValue(env.VITE_WEBSOCKET_URL, 'VITE_WEBSOCKET_URL'),
-    mode: requireValue(env.MODE, 'MODE'),
-    authEnabled: parseBoolean(env.VITE_AUTH_ENABLED, 'VITE_AUTH_ENABLED'),
+    apiBaseUrl: readValue(env.VITE_API_BASE_URL, DEFAULT_RUNTIME_CONFIG.apiBaseUrl),
+    websocketUrl: readValue(
+      env.VITE_WEBSOCKET_URL,
+      DEFAULT_RUNTIME_CONFIG.websocketUrl,
+    ),
+    mode: readValue(env.MODE, DEFAULT_RUNTIME_CONFIG.mode),
+    authEnabled: parseBoolean(
+      env.VITE_AUTH_ENABLED,
+      DEFAULT_RUNTIME_CONFIG.authEnabled,
+    ),
   };
 }

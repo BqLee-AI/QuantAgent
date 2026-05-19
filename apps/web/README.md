@@ -4,8 +4,8 @@
 
 ## Commands
 
-- `bun run --cwd apps/web test:browser:install`: install the Chromium binary required by Playwright.
-  On Linux, append `--with-deps` when system browser dependencies also need to be installed.
+- `bun run --cwd apps/web test:browser:install`: install the Chromium browser set required by the repo-local Playwright CLI.
+- `bun run --cwd apps/web test:browser:install:deps`: install the same browser set plus Linux system dependencies via `--with-deps`.
 - `bun run --cwd apps/web test:e2e`: run the Chromium smoke test in headless mode.
 - `bun run --cwd apps/web test:e2e:ui`: open the Playwright UI for local browser-test debugging.
 - `bun run --cwd apps/web test:e2e:debug`: run the Chromium E2E project with the Playwright debugger.
@@ -29,6 +29,8 @@
 ## Notes
 
 - The Playwright browser matrix is intentionally Chromium-only for this change.
+- In WSL or other mixed Windows/Linux setups, prefer the repo-local install commands above. `bunx playwright install` can populate a Windows-side cache that Linux CT runs cannot use.
+- `loadRuntimeConfig()` falls back to test-safe defaults when `VITE_API_BASE_URL`, `VITE_WEBSOCKET_URL`, or `VITE_AUTH_ENABLED` are unset.
 - CI browser installation is still out of scope. The current acceptance target is local execution.
 - `test:e2e` uses `scripts/run-playwright-e2e.mjs` to start or reuse the Vite dev server and to ensure the process exits cleanly on Windows.
 - `playwright.config.ts` owns page-level E2E, while `playwright-ct.config.ts` owns Component Testing so CT-only lifecycle hooks do not leak into E2E runs.

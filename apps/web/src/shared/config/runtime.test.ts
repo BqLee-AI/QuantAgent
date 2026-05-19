@@ -3,6 +3,17 @@ import { describe, expect, it } from "vitest";
 import { loadRuntimeConfig } from "@/shared/config/runtime";
 
 describe("loadRuntimeConfig", () => {
+  it("uses safe defaults when runtime env values are missing", () => {
+    const config = loadRuntimeConfig({});
+
+    expect(config).toEqual({
+      apiBaseUrl: "",
+      websocketUrl: "",
+      mode: "test",
+      authEnabled: false,
+    });
+  });
+
   it("maps valid runtime env values into typed config", () => {
     const config = loadRuntimeConfig({
       MODE: "development",

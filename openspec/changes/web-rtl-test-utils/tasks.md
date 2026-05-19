@@ -72,10 +72,10 @@
 - [x] 实现 `renderWithProviders`。
 - [x] 从测试公共入口导出 RTL 常用工具和 `userEvent`。
 - [x] 保留现有 `placeholder-panel.spec.tsx`，新增 `placeholder-panel-rtl.spec.tsx`。
-- [ ] 运行 `bun run --cwd apps/web test:ct`。
-- [ ] 运行 `bun run lint`。
-- [ ] 运行 `bun run build --filter=web`。
-- [ ] 运行 `openspec validate web-rtl-test-utils --type change --strict --json`。
+- [x] 运行 `bun run --cwd apps/web test:ct`。
+- [x] 运行 `bun run lint`。
+- [x] 运行 `bun run build --filter=web`。
+- [x] 运行 `openspec validate web-rtl-test-utils --type change --strict --json`。
 
 ## 实现护栏
 

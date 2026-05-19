@@ -3,7 +3,6 @@ import { defineConfig, devices } from '@playwright/experimental-ct-react';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
-const appRoot = fileURLToPath(new URL('.', import.meta.url));
 const srcRoot = fileURLToPath(new URL('./src', import.meta.url));
 
 export default defineConfig({
@@ -31,12 +30,10 @@ export default defineConfig({
           '@heroui/react',
           '@heroui/system',
         ],
-        preserveSymlinks: true,
         alias: {
           '@': srcRoot,
         },
       },
-      root: appRoot,
     },
     ...devices['Desktop Chrome'],
   },
