@@ -63,15 +63,15 @@
 ## 清单
 
 - [x] 创建 issue #54 的 OpenSpec change。
-- [ ] 确认 #53 的 CT 基础设施和当前测试边界。
-- [ ] 固化 `AppProviders` 必传 props 与默认值策略。
-- [ ] 添加 RTL 相关依赖。
-- [ ] 通过 `apps/web/tests/components/setup.ts` 接入 CT 测试 setup。
-- [ ] 创建 `apps/web/src/test/` 目录。
-- [ ] 创建 `apps/web/src/test/render.tsx`。
-- [ ] 实现 `renderWithProviders`。
-- [ ] 从测试公共入口导出 RTL 常用工具和 `userEvent`。
-- [ ] 保留现有 `placeholder-panel.spec.tsx`，新增 `placeholder-panel-rtl.spec.tsx`。
+- [x] 确认 #53 的 CT 基础设施和当前测试边界。
+- [x] 固化 `AppProviders` 必传 props 与默认值策略。
+- [x] 添加 RTL 相关依赖。
+- [x] 通过 `apps/web/tests/components/setup.ts` 接入 CT 测试 setup。
+- [x] 创建 `apps/web/src/test/` 目录。
+- [x] 创建 `apps/web/src/test/render.tsx`。
+- [x] 实现 `renderWithProviders`。
+- [x] 从测试公共入口导出 RTL 常用工具和 `userEvent`。
+- [x] 保留现有 `placeholder-panel.spec.tsx`，新增 `placeholder-panel-rtl.spec.tsx`。
 - [ ] 运行 `bun run --cwd apps/web test:ct`。
 - [ ] 运行 `bun run lint`。
 - [ ] 运行 `bun run build --filter=web`。

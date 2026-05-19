@@ -15,7 +15,7 @@ function RootRoute() {
   return (
     <>
       <MainLayout />
-      <TanStackRouterDevtools />
+      {import.meta.env.DEV ? <TanStackRouterDevtools /> : null}
     </>
   )
 }

@@ -17,6 +17,7 @@
 - `src/**/*.test.ts`: Vitest Node tests for pure TypeScript logic, data transforms, and modules that do not need a browser.
 - `e2e/**/*.spec.ts`: Playwright page-level browser tests that boot the Vite app through the local `test:e2e` wrapper.
 - `tests/components/**/*.spec.tsx`: Playwright Component Testing files for browser-backed component rendering and interaction.
+  Prefer `src/test/render` for provider-aligned component mounting instead of hand-writing app providers in each test.
 - `e2e/mocks/`: reserved for route mock helpers that issue `#55` will add later.
 
 ## Runner Boundaries
@@ -31,4 +32,5 @@
 - CI browser installation is still out of scope. The current acceptance target is local execution.
 - `test:e2e` uses `scripts/run-playwright-e2e.mjs` to start or reuse the Vite dev server and to ensure the process exits cleanly on Windows.
 - `playwright.config.ts` owns page-level E2E, while `playwright-ct.config.ts` owns Component Testing so CT-only lifecycle hooks do not leak into E2E runs.
+- CT-wide provider wiring and jest-dom matcher setup live under `tests/components/setup.ts` and are loaded through `playwright/index.tsx`.
 - The CT project keeps the `@` alias aligned with the main app and intentionally omits the TanStack Router Vite plugin until route-generation compatibility is needed.

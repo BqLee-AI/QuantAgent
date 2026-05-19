@@ -15,6 +15,16 @@ export default defineConfig({
     tailwindcss(),
   ],
   resolve: {
+    dedupe: [
+      "react",
+      "react-dom",
+      "@tanstack/react-query",
+      "@tanstack/react-router",
+      "@tanstack/router-core",
+      "@heroui/react",
+      "@heroui/system",
+    ],
+    preserveSymlinks: true,
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },

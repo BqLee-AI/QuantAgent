@@ -1,4 +1,5 @@
-@import '@heroui/react/styles';
+@import 'tailwindcss';
+@import '@heroui/styles';
 @import './tokens.css';
 @import './tailwind-theme.css';
 @import './base.css';

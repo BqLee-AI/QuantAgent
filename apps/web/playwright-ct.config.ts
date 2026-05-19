@@ -22,6 +22,16 @@ export default defineConfig({
     ctViteConfig: {
       plugins: [react(), tailwindcss()] as never,
       resolve: {
+        dedupe: [
+          'react',
+          'react-dom',
+          '@tanstack/react-query',
+          '@tanstack/react-router',
+          '@tanstack/router-core',
+          '@heroui/react',
+          '@heroui/system',
+        ],
+        preserveSymlinks: true,
         alias: {
           '@': srcRoot,
         },
