@@ -1,0 +1,108 @@
+.state {
+  display: grid;
+  justify-items: center;
+  gap: var(--qa-spacing-md);
+  width: min(100%, 720px);
+  margin-top: var(--qa-spacing-lg);
+  padding: 28px;
+  border: 1px solid var(--qa-color-hairline);
+  border-radius: var(--qa-radius-lg);
+  background: var(--qa-color-canvas);
+  text-align: center;
+}
+
+.stateEmpty {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  justify-items: start;
+  column-gap: 18px;
+  row-gap: var(--qa-spacing-md);
+  width: min(100%, 760px);
+  padding: 30px;
+  text-align: left;
+}
+
+.copy {
+  display: grid;
+  gap: var(--qa-spacing-xs);
+  min-width: 0;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--qa-color-trading-up);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  color: var(--qa-color-ink);
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+.description {
+  margin: 0;
+  color: var(--qa-color-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.mark {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 54px;
+  height: 54px;
+  border: 1px solid var(--qa-color-hairline);
+  border-radius: var(--qa-radius-lg);
+  background:
+    linear-gradient(180deg, rgba(59, 130, 246, 0.08), transparent),
+    var(--qa-color-surface);
+}
+
+.mark::before {
+  position: absolute;
+  inset: 11px 13px;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 6px;
+  background: var(--qa-color-canvas);
+  content: "";
+}
+
+.markLine {
+  position: relative;
+  z-index: 1;
+  width: 20px;
+  height: 3px;
+  border-radius: var(--qa-radius-pill);
+  background: var(--qa-color-hairline);
+}
+
+.markLine + .markLine {
+  width: 14px;
+}
+
+.actions {
+  display: flex;
+  grid-column: 2;
+  flex-wrap: wrap;
+  gap: var(--qa-spacing-sm);
+  max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  .stateEmpty {
+    grid-template-columns: 1fr;
+  }
+
+  .actions {
+    grid-column: 1;
+  }
+}

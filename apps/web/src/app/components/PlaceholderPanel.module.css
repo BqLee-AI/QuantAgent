@@ -1,0 +1,20 @@
+.panel {
+  min-height: 120px;
+  padding: 18px;
+  border: 1px solid var(--qa-color-hairline);
+  border-radius: var(--qa-radius-lg);
+  background: var(--qa-color-canvas);
+}
+
+.title {
+  margin: 0 0 var(--qa-spacing-xs);
+  color: var(--qa-color-ink);
+  font-size: 15px;
+}
+
+.copy {
+  margin: 0;
+  color: var(--qa-color-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}

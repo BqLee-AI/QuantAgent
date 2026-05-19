@@ -1,0 +1,40 @@
+.state {
+  display: grid;
+  justify-items: center;
+  gap: var(--qa-spacing-md);
+  width: min(100%, 720px);
+  margin-top: var(--qa-spacing-lg);
+  padding: 28px;
+  border: 1px solid var(--qa-color-hairline);
+  border-radius: var(--qa-radius-lg);
+  background: var(--qa-color-canvas);
+  text-align: center;
+}
+
+.mark {
+  width: 34px;
+  height: 34px;
+  border: 3px solid var(--qa-color-hairline);
+  border-top-color: var(--qa-color-primary);
+  border-radius: var(--qa-radius-pill);
+  animation: spin 0.8s linear infinite;
+}
+
+.title {
+  margin: 0;
+  color: var(--qa-color-ink);
+  font-size: 18px;
+  line-height: 1.35;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mark {
+    animation: none;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
