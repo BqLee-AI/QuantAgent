@@ -63,7 +63,7 @@
 
 `POST /api/v1/auth/login` 用本地配置管理员口令换取 session cookie。登录成功只通过 Set-Cookie 写入 session，不在响应体返回 session 原文。
 
-`POST /api/v1/auth/logout` 清除 session cookie。logout 属于写操作，应受 CSRF 或等价防护约束，除非实现中为无状态清理提供明确安全理由并在测试中覆盖。
+`POST /api/v1/auth/logout` 清除 session cookie。logout 属于 cookie-session 写操作，必须要求有效 `X-CSRF-Token`；缺失或无效 token 返回统一错误 envelope，成功后清除 session cookie，响应体不得包含 session、cookie 或 token 原文。
 
 `GET /api/v1/me` 返回当前 actor 和 capability 快照。它不返回 session id、cookie、签名、口令、hash、secret 或部署内部敏感配置。
 
@@ -125,7 +125,7 @@ route 不能散落手写 capability 字符串判断，应通过统一 guard 或 
 
 CSRF token 获取口径固定为 login 成功响应和 `/api/v1/me` response 都返回非敏感 `csrf_token` 快照。本 change 不新增单独 CSRF/bootstrap endpoint，避免扩大初版 route surface。
 
-login 可豁免 CSRF，因为登录前通常没有 session；logout 和 protected write route 必须要求有效 `X-CSRF-Token`。`csrf_token` 不是 session、cookie、签名 secret 或 raw token material，不得在响应中暴露可伪造 session 的秘密。
+login 可豁免 CSRF，因为登录前通常没有 session；本 change 只有 login 可豁免 CSRF，logout 和 protected write route 必须要求有效 `X-CSRF-Token`。`csrf_token` 不是 session、cookie、签名 secret 或 raw token material，不得在响应中暴露可伪造 session 的秘密。
 
 影响：后续插件配置、secret、approval、executor dry-run 等敏感写操作可直接复用同一防线。
 
