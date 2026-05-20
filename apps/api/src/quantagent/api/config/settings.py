@@ -48,9 +48,9 @@ class Settings(CoreSettings):
         if not self.AUTH_ENABLED and environment != "development":
             raise ValueError("AUTH_ENABLED=false is only allowed when APP_ENV=development")
 
-        # 只有 development/test 才自动兜底弱默认；local、staging 等环境必须显式提供。
+        # 只有 development/test/local 才自动兜底弱默认；staging 等环境必须显式提供。
         # production 仍会额外做强校验，拒绝弱默认和关闭鉴权。
-        is_dev_or_test = environment in {"development", "test"}
+        is_dev_or_test = environment in {"development", "test", "local"}
 
         if not self.AUTH_ADMIN_PASSWORD:
             if is_dev_or_test:

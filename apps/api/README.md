@@ -66,8 +66,8 @@ docker compose --profile migration run --rm migrate
 ### Auth 环境变量
 
 - `AUTH_ENABLED`：是否启用鉴权，默认 `true`。
-- `AUTH_ADMIN_PASSWORD`：本地管理员登录口令；仅 `APP_ENV=development` 或 `APP_ENV=test` 可使用默认值，`local`、`staging` 和 `production` 都必须显式提供。
-- `AUTH_SESSION_SECRET`：session 签名 secret；仅 `APP_ENV=development` 或 `APP_ENV=test` 可使用默认值，`local`、`staging` 和 `production` 都必须显式提供。
+- `AUTH_ADMIN_PASSWORD`：本地管理员登录口令；`APP_ENV=development`、`APP_ENV=test` 和 `APP_ENV=local` 可使用默认值，`staging` 和 `production` 必须显式提供。
+- `AUTH_SESSION_SECRET`：session 签名 secret；`APP_ENV=development`、`APP_ENV=test` 和 `APP_ENV=local` 可使用默认值，`staging` 和 `production` 必须显式提供。
 - `AUTH_COOKIE_NAME`：session cookie 名称，默认 `quantagent_session`。
 - `AUTH_COOKIE_SECURE`：是否对 session cookie 启用 `Secure`；production 默认强制安全值。
 - `AUTH_COOKIE_SAME_SITE`：cookie same-site 策略，默认 `lax`。

@@ -23,7 +23,8 @@ from quantagent.api.schemas.auth import (
 )
 
 
-router = APIRouter(tags=["auth"])
+public_router = APIRouter(tags=["auth"])
+protected_router = APIRouter(tags=["auth"])
 
 
 def _actor_response(actor: CurrentActor) -> AuthenticatedActorResponse:
@@ -36,7 +37,7 @@ def _actor_response(actor: CurrentActor) -> AuthenticatedActorResponse:
     )
 
 
-@router.post("/auth/login", response_model=ApiResponse[AuthenticatedActorResponse])
+@public_router.post("/auth/login", response_model=ApiResponse[AuthenticatedActorResponse])
 def login(payload: LoginRequest, response: Response, request: Request) -> ApiResponse[AuthenticatedActorResponse]:
     app_settings = request.app.state.settings
 
@@ -58,7 +59,7 @@ def login(payload: LoginRequest, response: Response, request: Request) -> ApiRes
     )
 
 
-@router.post("/auth/logout", response_model=ApiResponse[LogoutResponse])
+@protected_router.post("/auth/logout", response_model=ApiResponse[LogoutResponse])
 def logout(
     response: Response,
     request: Request,
@@ -69,6 +70,6 @@ def logout(
     return ApiResponse.success(LogoutResponse(cleared=True))
 
 
-@router.get("/me", response_model=ApiResponse[AuthenticatedActorResponse])
+@protected_router.get("/me", response_model=ApiResponse[AuthenticatedActorResponse])
 def me(actor: CurrentActor = Depends(get_current_actor)) -> ApiResponse[AuthenticatedActorResponse]:
     return ApiResponse.success(_actor_response(actor))
