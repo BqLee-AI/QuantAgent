@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { PlaceholderPanel } from '../../app/components/PlaceholderPanel'
+import styles from './index.module.css'
 
 export const Route = createFileRoute('/runtime/')({
   component: RuntimePage,
@@ -16,7 +17,7 @@ function RuntimePage() {
         </p>
       </section>
 
-      <section className="placeholder-grid" aria-label="Runtime overview">
+      <section className={styles.overviewGrid} aria-label="Runtime overview">
         <PlaceholderPanel title="Agent Runs" copy="Recent runs, status transitions, and trace references." />
         <PlaceholderPanel title="Tool Calls" copy="Invocation status, retries, duration, and error summaries." />
         <PlaceholderPanel title="Scheduler" copy="Queued jobs, completed jobs, and runtime failures." />

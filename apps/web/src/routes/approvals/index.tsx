@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { PlaceholderPanel } from '../../app/components/PlaceholderPanel'
+import styles from './index.module.css'
 
 export const Route = createFileRoute('/approvals/')({
   component: ApprovalsPage,
@@ -16,7 +17,7 @@ function ApprovalsPage() {
         </p>
       </section>
 
-      <section className="placeholder-grid" aria-label="Approvals overview">
+      <section className={styles.overviewGrid} aria-label="Approvals overview">
         <PlaceholderPanel title="Pending" copy="Requests waiting for approve, reject, reanalysis, or amend." />
         <PlaceholderPanel title="Expiring" copy="Short-window approvals that need attention before policy expiry." />
         <PlaceholderPanel title="Handled" copy="Approved, rejected, expired, or execute-then-notify decisions." />

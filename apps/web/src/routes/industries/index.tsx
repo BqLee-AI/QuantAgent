@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { PlaceholderPanel } from '../../app/components/PlaceholderPanel'
+import styles from './index.module.css'
 
 export const Route = createFileRoute('/industries/')({
   component: IndustriesPage,
@@ -16,7 +17,7 @@ function IndustriesPage() {
         </p>
       </section>
 
-      <section className="placeholder-grid" aria-label="Industries overview">
+      <section className={styles.overviewGrid} aria-label="Industries overview">
         <PlaceholderPanel title="Packages" copy="Industry modules and domain boundaries will be summarized here." />
         <PlaceholderPanel title="Markets" copy="Market coverage and source binding context will be reviewed here." />
         <PlaceholderPanel title="Dependencies" copy="Future package readiness and dependency signals will appear here." />

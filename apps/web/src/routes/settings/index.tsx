@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { PlaceholderPanel } from '../../app/components/PlaceholderPanel'
+import styles from './index.module.css'
 
 export const Route = createFileRoute('/settings/')({
   component: SettingsPage,
@@ -16,7 +17,7 @@ function SettingsPage() {
         </p>
       </section>
 
-      <section className="placeholder-grid" aria-label="Settings overview">
+      <section className={styles.overviewGrid} aria-label="Settings overview">
         <PlaceholderPanel title="Access" copy="Session configuration and capability visibility." />
         <PlaceholderPanel title="Notifications" copy="Channel setup and delivery health for operator alerts." />
         <PlaceholderPanel title="Secrets" copy="Secret references and policy-controlled management entry points." />
