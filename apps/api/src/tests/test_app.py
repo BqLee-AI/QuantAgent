@@ -238,6 +238,18 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertIn("Secure", response.headers["set-cookie"])
         self.assertIn("HttpOnly", response.headers["set-cookie"])
 
+    def test_non_development_env_requires_explicit_auth_credentials(self) -> None:
+        with self.assertRaisesRegex(ValueError, "AUTH_ADMIN_PASSWORD is required when APP_ENV is not development/test"):
+            Settings(APP_ENV="local")
+
+        with self.assertRaisesRegex(ValueError, "AUTH_SESSION_SECRET is required when APP_ENV is not development/test"):
+            Settings(APP_ENV="staging", AUTH_ADMIN_PASSWORD="local-password")
+
+    def test_test_env_still_receives_weak_auth_defaults(self) -> None:
+        settings = Settings(APP_ENV="test")
+        self.assertEqual(settings.AUTH_ADMIN_PASSWORD, "dev-admin-password")
+        self.assertEqual(settings.AUTH_SESSION_SECRET, "dev-session-secret-change-me")
+
     def test_login_success_sets_cookie_and_returns_csrf_token(self) -> None:
         response = self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
         body = response.json()

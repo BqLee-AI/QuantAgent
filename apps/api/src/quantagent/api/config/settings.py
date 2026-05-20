@@ -45,12 +45,21 @@ class Settings(CoreSettings):
         if not self.AUTH_ENABLED and environment != "development":
             raise ValueError("AUTH_ENABLED=false is only allowed when APP_ENV=development")
 
-        # development 默认值只为本地启动和测试兜底，production 分支会显式拒绝。
-        if not self.AUTH_ADMIN_PASSWORD and not self.is_production:
-            self.AUTH_ADMIN_PASSWORD = "dev-admin-password"
+        # 只有 development/test 才自动兜底弱默认；local、staging 等环境必须显式提供。
+        # production 仍会额外做强校验，拒绝弱默认和关闭鉴权。
+        is_dev_or_test = environment in {"development", "test"}
 
-        if not self.AUTH_SESSION_SECRET and not self.is_production:
-            self.AUTH_SESSION_SECRET = "dev-session-secret-change-me"
+        if not self.AUTH_ADMIN_PASSWORD:
+            if is_dev_or_test:
+                self.AUTH_ADMIN_PASSWORD = "dev-admin-password"
+            elif not self.is_production:
+                raise ValueError("AUTH_ADMIN_PASSWORD is required when APP_ENV is not development/test")
+
+        if not self.AUTH_SESSION_SECRET:
+            if is_dev_or_test:
+                self.AUTH_SESSION_SECRET = "dev-session-secret-change-me"
+            elif not self.is_production:
+                raise ValueError("AUTH_SESSION_SECRET is required when APP_ENV is not development/test")
 
         # production 不允许弱默认或关闭鉴权，避免部署时静默裸奔。
         if self.is_production:
