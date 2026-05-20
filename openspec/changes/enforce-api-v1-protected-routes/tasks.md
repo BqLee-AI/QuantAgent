@@ -2,7 +2,7 @@
 
 ## 状态
 
-当前状态为 OpenSpec artifacts 已创建并通过本地校验。OpenSpec-only PR 获得维护者明确认可前，不进入 API runtime 实现。
+当前状态为 OpenSpec artifacts 已创建、通过本地校验，并已提交 OpenSpec-only PR。OpenSpec-only PR 获得维护者明确认可前，不进入 API runtime 实现。
 
 ## 任务图
 
@@ -25,9 +25,9 @@
   - 写入边界：无
   - 依赖：B1
 
-- [ ] B3. 创建 OpenSpec-only PR 并等待认可
+- [ ] B3. 等待 OpenSpec-only PR 认可
   - 输入：B2 验证结果
-  - 输出：OpenSpec-only PR；维护者明确评论“没问题”或批准
+  - 输出：维护者明确评论“没问题”或批准
   - 写入边界：GitHub PR
   - 依赖：B2
 
@@ -86,7 +86,7 @@
 - [x] 创建 `openspec/changes/enforce-api-v1-protected-routes/tasks.md`。
 - [x] 创建 `openspec/changes/enforce-api-v1-protected-routes/specs/api-cookie-session-auth/spec.md`。
 - [x] 运行 `openspec validate enforce-api-v1-protected-routes --type change --strict --json`。
-- [ ] 准备 OpenSpec-only PR，范围仅包含本 change artifacts。
+- [x] 准备 OpenSpec-only PR，范围仅包含本 change artifacts。
 
 ## 实现护栏
 
