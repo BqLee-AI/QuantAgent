@@ -243,6 +243,21 @@ class ApiAppTestCase(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "AUTH_SESSION_SECRET is required when APP_ENV is not development/test/local"):
             Settings(APP_ENV="staging", AUTH_ADMIN_PASSWORD="local-password")
 
+    def test_production_rejects_whitespace_only_auth_credentials(self) -> None:
+        with self.assertRaisesRegex(ValueError, "AUTH_ADMIN_PASSWORD is required in production"):
+            Settings(
+                APP_ENV="production",
+                AUTH_ADMIN_PASSWORD="   ",
+                AUTH_SESSION_SECRET="prod-secret",
+            )
+
+        with self.assertRaisesRegex(ValueError, "AUTH_SESSION_SECRET is required in production"):
+            Settings(
+                APP_ENV="production",
+                AUTH_ADMIN_PASSWORD="prod-password",
+                AUTH_SESSION_SECRET="   ",
+            )
+
     def test_test_env_still_receives_weak_auth_defaults(self) -> None:
         settings = Settings(APP_ENV="test")
         self.assertEqual(settings.AUTH_ADMIN_PASSWORD, "dev-admin-password")
@@ -284,6 +299,22 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertNotIn(self.settings.AUTH_ADMIN_PASSWORD or "", str(body))
         self.assertNotIn(self.settings.AUTH_SESSION_SECRET or "", str(body))
         self.assertNotIn("set-cookie", {key.lower() for key in response.headers.keys()})
+
+    def test_login_with_non_ascii_password_uses_unauthorized_envelope_instead_of_500(self) -> None:
+        app = create_app(
+            self._settings(
+                AUTH_ADMIN_PASSWORD="密碼",
+                AUTH_SESSION_SECRET="测试-secret",
+            )
+        )
+        with TestClient(app) as client:
+            response = client.post("/api/v1/auth/login", json={"password": "错误密码"})
+
+        body = response.json()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+        self.assertEqual(response.headers["X-Request-ID"], body["error"]["request_id"])
 
     def test_me_rejects_missing_session(self) -> None:
         response = self.client.get("/api/v1/me")

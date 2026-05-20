@@ -34,6 +34,11 @@ class Settings(CoreSettings):
     def validate_auth_settings(self) -> "Settings":
         environment = self.APP_ENV.lower()
 
+        if self.AUTH_ADMIN_PASSWORD is not None:
+            self.AUTH_ADMIN_PASSWORD = self.AUTH_ADMIN_PASSWORD.strip()
+        if self.AUTH_SESSION_SECRET is not None:
+            self.AUTH_SESSION_SECRET = self.AUTH_SESSION_SECRET.strip()
+
         # 未显式配置时按环境推导 cookie secure，production 默认必须收紧。
         if self.AUTH_COOKIE_SECURE is None:
             self.AUTH_COOKIE_SECURE = self.is_production

@@ -78,6 +78,11 @@ def _csrf_token(secret: str, actor_id: str, expires_at: int) -> str:
     return _hmac_sha256(secret, f"csrf:{actor_id}:{expires_at}")
 
 
+def _compare_sensitive_text(left: str, right: str) -> bool:
+    """用 UTF-8 bytes 做常量时间比较，避免非 ASCII 字符触发 TypeError。"""
+    return hmac.compare_digest(left.encode("utf-8"), right.encode("utf-8"))
+
+
 def _b64encode(value: str) -> str:
     return base64.urlsafe_b64encode(value.encode("utf-8")).decode("ascii").rstrip("=")
 
@@ -107,7 +112,7 @@ def _deserialize_session(raw_session: str, secret: str) -> dict[str, object]:
         raise UnauthorizedError() from exc
 
     expected_signature = _session_signature(secret, payload_json)
-    if not hmac.compare_digest(signature, expected_signature):
+    if not _compare_sensitive_text(signature, expected_signature):
         raise UnauthorizedError()
 
     try:
@@ -173,7 +178,7 @@ def set_session_cookie(response: Response, session_value: str, app_settings: Set
 def authenticate_admin_password(password: str, app_settings: Settings) -> None:
     """校验本地管理员口令；失败时不暴露口令来源或匹配细节。"""
     expected_password = app_settings.AUTH_ADMIN_PASSWORD or ""
-    if not hmac.compare_digest(password, expected_password):
+    if not _compare_sensitive_text(password, expected_password):
         raise UnauthorizedError()
 
 
@@ -222,7 +227,7 @@ def resolve_current_actor(request: Request) -> CurrentActor:
         raise UnauthorizedError()
 
     expected_csrf = _csrf_token(app_settings.AUTH_SESSION_SECRET or "", actor_id, expires_at)
-    if not hmac.compare_digest(csrf_token, expected_csrf):
+    if not _compare_sensitive_text(csrf_token, expected_csrf):
         raise UnauthorizedError()
 
     return CurrentActor(
@@ -255,7 +260,7 @@ def require_csrf(request: Request, actor: CurrentActor = Depends(get_current_act
     """校验 cookie-session 写操作的 CSRF header，不回显提交值或期望值。"""
     app_settings: Settings = request.app.state.settings
     submitted_token = request.headers.get(app_settings.AUTH_CSRF_HEADER_NAME)
-    if not submitted_token or not hmac.compare_digest(submitted_token, actor.csrf_token):
+    if not submitted_token or not _compare_sensitive_text(submitted_token, actor.csrf_token):
         raise ForbiddenError("Forbidden")
     return actor
 
