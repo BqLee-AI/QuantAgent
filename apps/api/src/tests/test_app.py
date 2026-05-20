@@ -470,6 +470,10 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(body["error"]["code"], "FORBIDDEN")
         self.assertEqual(response.headers["X-Request-ID"], body["error"]["request_id"])
 
+    def test_unknown_required_capability_fails_fast(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unknown capability: runtime.typo"):
+            require_capability("runtime.typo")
+
     def test_openapi_exposes_system_routes_with_tags_and_envelope_schema(self) -> None:
         response = self.client.get("/openapi.json")
         self.assertEqual(response.status_code, 200)
