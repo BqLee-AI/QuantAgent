@@ -130,6 +130,8 @@ def issue_session(
 ) -> tuple[str, str]:
     """签发本地单用户 session，并返回给前端 bootstrap 用的 CSRF token。"""
     capability_set = ALL_CAPABILITIES if capabilities is None else capabilities
+    if not capability_set or not capability_set.issubset(ALL_CAPABILITIES):
+        raise ValueError("capabilities must be a non-empty subset of ALL_CAPABILITIES")
     session_expires_at = expires_at if expires_at is not None else int(
         (datetime.now(UTC) + timedelta(seconds=app_settings.AUTH_SESSION_LIFETIME_SECONDS)).timestamp()
     )
@@ -213,6 +215,7 @@ def resolve_current_actor(request: Request) -> CurrentActor:
         raise UnauthorizedError()
     if (
         not isinstance(capabilities, list)
+        or not capabilities
         or not all(isinstance(item, str) for item in capabilities)
         or not set(capabilities).issubset(ALL_CAPABILITIES)
     ):
