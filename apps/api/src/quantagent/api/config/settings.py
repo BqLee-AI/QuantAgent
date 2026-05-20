@@ -20,7 +20,6 @@ class Settings(CoreSettings):
     AUTH_ADMIN_PASSWORD: str | None = None
     AUTH_SESSION_SECRET: str | None = None
     AUTH_COOKIE_NAME: str = "quantagent_session"
-    AUTH_COOKIE_HTTP_ONLY: bool = True
     AUTH_COOKIE_SECURE: bool | None = None
     AUTH_COOKIE_SAME_SITE: Literal["lax", "strict", "none"] = "lax"
     AUTH_SESSION_LIFETIME_SECONDS: int = Field(default=43200, ge=300)
@@ -39,9 +38,6 @@ class Settings(CoreSettings):
         if self.AUTH_COOKIE_SECURE is None:
             self.AUTH_COOKIE_SECURE = self.is_production
 
-        if not self.AUTH_COOKIE_HTTP_ONLY:
-            raise ValueError("AUTH_COOKIE_HTTP_ONLY must remain true")
-
         if self.AUTH_COOKIE_SAME_SITE == "none" and not self.AUTH_COOKIE_SECURE:
             raise ValueError("AUTH_COOKIE_SAME_SITE=none requires AUTH_COOKIE_SECURE=true")
 
@@ -56,13 +52,13 @@ class Settings(CoreSettings):
             if is_dev_or_test:
                 self.AUTH_ADMIN_PASSWORD = "dev-admin-password"
             elif not self.is_production:
-                raise ValueError("AUTH_ADMIN_PASSWORD is required when APP_ENV is not development/test")
+                raise ValueError("AUTH_ADMIN_PASSWORD is required when APP_ENV is not development/test/local")
 
         if not self.AUTH_SESSION_SECRET:
             if is_dev_or_test:
                 self.AUTH_SESSION_SECRET = "dev-session-secret-change-me"
             elif not self.is_production:
-                raise ValueError("AUTH_SESSION_SECRET is required when APP_ENV is not development/test")
+                raise ValueError("AUTH_SESSION_SECRET is required when APP_ENV is not development/test/local")
 
         # production 不允许弱默认或关闭鉴权，避免部署时静默裸奔。
         if self.is_production:

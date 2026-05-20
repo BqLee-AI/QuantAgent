@@ -151,7 +151,7 @@ def clear_session_cookie(response: Response, app_settings: Settings) -> None:
     response.delete_cookie(
         key=app_settings.AUTH_COOKIE_NAME,
         path="/",
-        httponly=app_settings.AUTH_COOKIE_HTTP_ONLY,
+        httponly=True,
         secure=bool(app_settings.AUTH_COOKIE_SECURE),
         samesite=app_settings.AUTH_COOKIE_SAME_SITE,
     )
@@ -164,7 +164,7 @@ def set_session_cookie(response: Response, session_value: str, app_settings: Set
         value=session_value,
         max_age=app_settings.AUTH_SESSION_LIFETIME_SECONDS,
         path="/",
-        httponly=app_settings.AUTH_COOKIE_HTTP_ONLY,
+        httponly=True,
         secure=bool(app_settings.AUTH_COOKIE_SECURE),
         samesite=app_settings.AUTH_COOKIE_SAME_SITE,
     )

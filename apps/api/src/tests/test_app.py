@@ -240,7 +240,7 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertIn("HttpOnly", response.headers["set-cookie"])
 
     def test_non_development_env_requires_explicit_auth_credentials(self) -> None:
-        with self.assertRaisesRegex(ValueError, "AUTH_SESSION_SECRET is required when APP_ENV is not development/test"):
+        with self.assertRaisesRegex(ValueError, "AUTH_SESSION_SECRET is required when APP_ENV is not development/test/local"):
             Settings(APP_ENV="staging", AUTH_ADMIN_PASSWORD="local-password")
 
     def test_test_env_still_receives_weak_auth_defaults(self) -> None:
