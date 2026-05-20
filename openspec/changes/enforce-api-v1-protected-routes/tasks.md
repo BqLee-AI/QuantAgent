@@ -2,7 +2,7 @@
 
 ## 状态
 
-当前状态为 OpenSpec artifacts 已创建、通过本地校验，并已提交 OpenSpec-only PR。OpenSpec-only PR 获得维护者明确认可前，不进入 API runtime 实现。
+当前状态为 OpenSpec artifacts 已创建并获得实现认可，进入 API runtime 实现与验证阶段。
 
 ## 任务图
 
@@ -25,7 +25,7 @@
   - 写入边界：无
   - 依赖：B1
 
-- [ ] B3. 等待 OpenSpec-only PR 认可
+- [x] B3. 等待 OpenSpec-only PR 认可
   - 输入：B2 验证结果
   - 输出：维护者明确评论“没问题”或批准
   - 写入边界：GitHub PR
@@ -33,31 +33,31 @@
 
 ### 审核通过后的实现路径
 
-- [ ] I1. 设计并实现 API v1 route registration helper
+- [x] I1. 设计并实现 API v1 route registration helper
   - 输入：B3 审核结论、当前 `register_api_v1_routes`
   - 输出：public/protected router 注册边界；protected router 统一注入 session dependency；public allowlist 单一代码声明位置；禁止新增业务 router 通过裸注册或 route-level ad hoc dependency 冒充默认 protected
   - 写入边界：`apps/api/src/quantagent/api/routers/register.py` 及必要相邻 API 私有 helper
   - 依赖：B3
 
-- [ ] I2. 迁移现有 API v1 routers 到 public/protected 分类
+- [x] I2. 迁移现有 API v1 routers 到 public/protected 分类
   - 输入：I1 helper、现有 health/version/auth/debug routers
   - 输出：health/ready/version/login 作为 public；logout/me/debug 作为 protected；debug 仍 production 不注册
   - 写入边界：`apps/api/src/quantagent/api/routers/**`
   - 依赖：I1
 
-- [ ] I3. 保持 capability 与 CSRF 细粒度 guard
+- [x] I3. 保持 capability 与 CSRF 细粒度 guard
   - 输入：#87 `require_capability`、`require_csrf`
   - 输出：默认 protected 不替代 capability/CSRF；logout 同时满足 session 和 CSRF；需要 capability 的测试 route 仍缺 capability 返回 403
   - 写入边界：`apps/api/src/quantagent/api/**`、`apps/api/src/tests/**`
   - 依赖：I2
 
-- [ ] I4. 补 runtime behavior 与 registration tests
+- [x] I4. 补 runtime behavior 与 registration tests
   - 输入：I1-I3 实现
   - 输出：public allowlist anonymous success；login anonymous success；未显式添加 route-level auth dependency 的 protected test router anonymous 401；同 route 带 session success；logout anonymous 401；debug 非 production protected；request id envelope 校验
   - 写入边界：`apps/api/src/tests/**`
   - 依赖：I2、I3
 
-- [ ] I5. 补 OpenAPI 与 README 验证
+- [x] I5. 补 OpenAPI 与 README 验证
   - 输入：I1-I4 实现
   - 输出：production OpenAPI excludes debug-only paths；route tags/envelope 不回退；README 同步 public/protected rule 和 OpenAPI security scheme 是否本轮实现
   - 写入边界：`apps/api/src/tests/**`、`apps/api/README.md`
@@ -71,13 +71,13 @@
 
 ### 审核点
 
-- [ ] R1. 确认本 change 未新增业务 API、RBAC、多用户、OAuth、SSO、数据库 session 表或 audit persistence。
-- [ ] R2. 确认 public allowlist 只包含 health、ready、version 和 login。
-- [ ] R3. 确认 logout、me、debug 和测试业务 route 均不是 public。
-- [ ] R4. 确认默认 protected 只提供 session guard，不替代 capability、CSRF 或 Policy Gate。
-- [ ] R5. 确认 production OpenAPI 不暴露 debug-only paths。
-- [ ] R6. 确认 401/403 仍走统一 envelope 且携带 request id。
-- [ ] R7. 确认 README、OpenAPI 或 route-level dependency 没有取代 registration boundary 成为权限真源。
+- [x] R1. 确认本 change 未新增业务 API、RBAC、多用户、OAuth、SSO、数据库 session 表或 audit persistence。
+- [x] R2. 确认 public allowlist 只包含 health、ready、version 和 login。
+- [x] R3. 确认 logout、me、debug 和测试业务 route 均不是 public。
+- [x] R4. 确认默认 protected 只提供 session guard，不替代 capability、CSRF 或 Policy Gate。
+- [x] R5. 确认 production OpenAPI 不暴露 debug-only paths。
+- [x] R6. 确认 401/403 仍走统一 envelope 且携带 request id。
+- [x] R7. 确认 README、OpenAPI 或 route-level dependency 没有取代 registration boundary 成为权限真源。
 
 ## 清单
 
@@ -100,4 +100,4 @@
 ## 验证任务
 
 - [x] V1. OpenSpec 验证：`openspec validate enforce-api-v1-protected-routes --type change --strict --json`
-- [ ] V2. 实现阶段 API 测试：`cd apps/api && uv run python -m unittest discover -s src/tests`
+- [x] V2. 实现阶段 API 测试：`cd apps/api && uv run python -m unittest discover -s src/tests`

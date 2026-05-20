@@ -55,13 +55,15 @@ docker compose --profile migration run --rm migrate
 ### Auth 基础闭环
 
 - 当前 API 初版采用本地单用户 Cookie Session 鉴权，不实现注册、RBAC、多用户、多租户、OAuth 或 SSO。
-- public 路由白名单仅包含 `GET /api/v1/health`、`GET /api/v1/ready`、`GET /api/v1/version`；业务 API 默认 protected。
+- public 路由白名单仅包含 `GET /api/v1/health`、`GET /api/v1/ready`、`GET /api/v1/version` 和 `POST /api/v1/auth/login`；其余 API v1 routes 默认 protected。
 - 登录入口为 `POST /api/v1/auth/login`，请求体使用本地管理员口令；成功后仅通过 HttpOnly cookie 建立 session。
 - 登出入口为 `POST /api/v1/auth/logout`，必须同时具备有效 session 和 `X-CSRF-Token`。
 - 当前用户快照入口为 `GET /api/v1/me`，返回 `actor_id`、`actor_type`、`capabilities` 和非敏感 `csrf_token`，不返回 session、cookie、secret、口令或 hash。
+- 非 production 的 `/api/v1/debug/*` 仍会注册到 OpenAPI，但默认按 protected route 处理，不加入 public allowlist。
 - Cookie 默认 `HttpOnly` 且 `SameSite=Lax`；`APP_ENV=production` 下要求 `Secure=true`。
 - `AUTH_ENABLED=false` 仅允许 `APP_ENV=development`；此时依赖会返回 `local_dev` actor，避免下游审计上下文为空。
 - Cookie Session 写操作通过 `X-CSRF-Token` header 做 CSRF 校验；login 豁免，logout 和受保护写操作不豁免。
+- `quantagent.api.routers.register` 中的 `STANDARD_API_V1_ROUTER_REGISTRATIONS` 与 registration helper 是 public/protected 真源；README、OpenAPI 或 route-level ad hoc dependency 只用于说明与补充，不替代该边界。
 
 ### Auth 环境变量
 
@@ -83,7 +85,7 @@ docker compose --profile migration run --rm migrate
 1. 在 `schemas/` 中定义 DTO，保持 API 契约独立于 ORM model。
 2. 在 `providers/` 中放 sample data 或替换点，不引入数据库访问、外部服务调用、credentials、runtime 状态或核心领域逻辑。
 3. 在 `routers/` 中定义 route，返回 `ApiResponse[T]`，并显式声明 `response_model` 和 `tags`。
-4. 通过 `register_api_v1_routes` 接入标准 router 列表。
+4. 标准 API v1 router 变更应更新 `STANDARD_API_V1_ROUTER_REGISTRATIONS`；额外测试 router 可使用 `register_api_v1_protected_router` 接入统一 registration boundary。
 5. 在 `src/tests/` 中补运行时 route 测试和 `/openapi.json` 契约测试。
 
 ### 最小验证

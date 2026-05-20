@@ -6,10 +6,10 @@ import unittest
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
-from sqlalchemy.exc import SQLAlchemyError
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.exc import SQLAlchemyError
 
 from quantagent.api.auth import (
     ALL_CAPABILITIES,
@@ -25,6 +25,12 @@ from quantagent.api.db import get_db_session
 from quantagent.api.errors import ServiceUnavailableError
 from quantagent.api.main import create_app
 from quantagent.api.responses import ApiResponse
+from quantagent.api.routers.register import (
+    API_V1_PUBLIC_ROUTE_ALLOWLIST,
+    STANDARD_API_V1_ROUTER_REGISTRATIONS,
+    register_api_v1_protected_router,
+)
+from fastapi.routing import APIRoute
 
 
 class FakeSession:
@@ -168,6 +174,7 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertIsNone(getattr(app.state, "db_session_factory", None))
 
     def test_debug_error_uses_envelope(self) -> None:
+        self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
         response = self.client.get("/api/v1/debug/error")
         body = response.json()
         self.assertEqual(response.status_code, 400)
@@ -178,6 +185,7 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(body["msg"], "参数错误")
 
     def test_validation_error_sanitizes_fields(self) -> None:
+        self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
         response = self.client.post("/api/v1/debug/validation", json={})
         body = response.json()
         self.assertEqual(response.status_code, 422)
@@ -214,6 +222,14 @@ class ApiAppTestCase(unittest.TestCase):
         with TestClient(production_app) as client:
             response = client.get("/api/v1/debug/success")
         self.assertEqual(response.status_code, 404)
+
+    def test_debug_routes_require_session_when_not_production(self) -> None:
+        response = self.client.get("/api/v1/debug/success")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+        self.assertEqual(response.headers["X-Request-ID"], body["error"]["request_id"])
 
     def test_production_rejects_disabled_auth(self) -> None:
         with self.assertRaisesRegex(ValueError, "AUTH_ENABLED=false"):
@@ -286,6 +302,31 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertIn("HttpOnly", response.headers["set-cookie"])
         self.assertNotIn(self.settings.AUTH_ADMIN_PASSWORD or "", str(body))
         self.assertNotIn(self.settings.AUTH_SESSION_SECRET or "", str(body))
+
+    def test_public_allowlist_matches_expected_routes(self) -> None:
+        self.assertEqual(
+            API_V1_PUBLIC_ROUTE_ALLOWLIST,
+            frozenset(
+                {
+                    ("GET", "/api/v1/health"),
+                    ("GET", "/api/v1/ready"),
+                    ("GET", "/api/v1/version"),
+                    ("POST", "/api/v1/auth/login"),
+                }
+            ),
+        )
+
+    def test_standard_public_registrations_match_allowlist(self) -> None:
+        public_routes = frozenset(
+            (method, f"/api/v1{route.path}")
+            for registration in STANDARD_API_V1_ROUTER_REGISTRATIONS
+            if registration.access == "public"
+            for route in registration.router.routes
+            if isinstance(route, APIRoute)
+            for method in (route.methods or ())
+            if method in {"DELETE", "GET", "PATCH", "POST", "PUT"}
+        )
+        self.assertEqual(public_routes, API_V1_PUBLIC_ROUTE_ALLOWLIST)
 
     def test_login_failure_uses_unauthorized_envelope(self) -> None:
         response = self.client.post("/api/v1/auth/login", json={"password": "wrong-password"})
@@ -496,6 +537,26 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(body["data"]["actor_id"], "local_admin")
         self.assertEqual(body["data"]["request_id"], "req-runtime-write")
 
+    def test_registered_protected_router_requires_session_without_route_level_dependency(self) -> None:
+        with TestClient(self._registered_protected_api_v1_test_app()) as client:
+            response = client.get("/api/v1/test-actions/runtime-inspect")
+
+        body = response.json()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+        self.assertEqual(response.headers["X-Request-ID"], body["error"]["request_id"])
+
+    def test_registered_protected_router_allows_authenticated_request_without_route_level_dependency(self) -> None:
+        with TestClient(self._registered_protected_api_v1_test_app()) as client:
+            client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+            response = client.get("/api/v1/test-actions/runtime-inspect")
+
+        body = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["data"], {"status": "protected"})
+
     def test_missing_capability_is_forbidden(self) -> None:
         reduced_capabilities = frozenset({"plugin.configure"})
         session_value, csrf_token = issue_session("local_admin", self.settings, capabilities=reduced_capabilities)
@@ -660,6 +721,23 @@ class ApiAppTestCase(unittest.TestCase):
                 )
             )
 
+        return app
+
+    def _registered_protected_api_v1_test_app(self) -> FastAPI:
+        app = create_app(self.settings)
+
+        class RuntimeInspectResponse(BaseModel):
+            model_config = ConfigDict(extra="forbid")
+
+            status: str = Field(min_length=1)
+
+        router = APIRouter(prefix="/test-actions", tags=["test"])
+
+        @router.get("/runtime-inspect", response_model=ApiResponse[RuntimeInspectResponse])
+        def runtime_inspect() -> ApiResponse[RuntimeInspectResponse]:
+            return ApiResponse.success(RuntimeInspectResponse(status="protected"))
+
+        register_api_v1_protected_router(app, self.settings, router)
         return app
 
     def _resolve_response_schema(self, openapi_schema: dict, path: str, *, method: str = "get") -> dict:
