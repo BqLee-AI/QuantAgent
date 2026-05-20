@@ -78,7 +78,7 @@ docker compose --profile migration run --rm migrate
 
 ## 快速部署
 
-README 只保留“如何尽快把 API 跑起来”的最小步骤；Nginx、TLS、备份、发布脚本、CI/CD 和服务器初始化等运维细节不在这里展开。
+README 只保留“如何尽快把 API 跑起来”的最小步骤；Nginx、TLS、备份、发布脚本、CI/CD 和服务器初始化等运维细节不在这里展开。当前仓库也还没有正式的生产部署手册；如果后续需要统一沉淀，建议单独维护到 `docs/deployment/` 或独立 infra 文档。
 
 ### 后端最小闭环
 
@@ -116,7 +116,7 @@ bun install --frozen-lockfile
 VITE_API_BASE_URL=/api/v1 VITE_AUTH_ENABLED=true bun run --cwd apps/web build
 ```
 
-推荐前后端同域部署，并把 `apps/web/dist/` 交给已有静态文件服务或反向代理托管；具体 Nginx、证书和发布拓扑按团队现有基础设施另行维护。
+推荐前后端同域部署，并把 `apps/web/dist/` 交给已有静态文件服务或反向代理托管；具体 Nginx、证书和发布拓扑请参考团队已有运维文档，或后续单独沉淀到 `docs/deployment/`。
 
 ### 新增 route 流程
 
