@@ -134,6 +134,9 @@ def issue_session(
     expires_at: int | None = None,
 ) -> tuple[str, str]:
     """签发本地单用户 session，并返回给前端 bootstrap 用的 CSRF token。"""
+    if actor_id != LOCAL_ADMIN_ACTOR_ID:
+        raise ValueError(f"Unsupported actor_id for session issuance: {actor_id}")
+
     capability_set = ALL_CAPABILITIES if capabilities is None else capabilities
     if not capability_set or not capability_set.issubset(ALL_CAPABILITIES):
         raise ValueError("capabilities must be a non-empty subset of ALL_CAPABILITIES")

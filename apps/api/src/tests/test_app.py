@@ -316,6 +316,10 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
         self.assertEqual(response.headers["X-Request-ID"], body["error"]["request_id"])
 
+    def test_issue_session_rejects_unsupported_actor_id(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported actor_id for session issuance: local_other"):
+            issue_session("local_other", self.settings)
+
     def test_me_rejects_missing_session(self) -> None:
         response = self.client.get("/api/v1/me")
         body = response.json()
@@ -407,6 +411,14 @@ class ApiAppTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["data"], {"cleared": True})
+
+    def test_logout_without_session_is_unauthorized(self) -> None:
+        response = self.client.post("/api/v1/auth/logout")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+        self.assertEqual(response.headers["X-Request-ID"], body["error"]["request_id"])
 
     def test_logout_requires_csrf_token(self) -> None:
         self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
