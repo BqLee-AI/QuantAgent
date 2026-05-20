@@ -23,7 +23,11 @@ function readValue(value: string | undefined, fallback: string): string {
   return value?.trim() || fallback;
 }
 
-function parseBoolean(value: string | undefined, fallback: boolean): boolean {
+function parseBoolean(
+  value: string | undefined,
+  fallback: boolean,
+  configName: string,
+): boolean {
   if (value === undefined || value.trim().length === 0) {
     return fallback;
   }
@@ -39,7 +43,7 @@ function parseBoolean(value: string | undefined, fallback: boolean): boolean {
   }
 
   throw new Error(
-    'Invalid boolean runtime config: VITE_AUTH_ENABLED. Expected true, false, 1, or 0.',
+    `Invalid boolean runtime config: ${configName}. Expected true, false, 1, or 0.`,
   );
 }
 
@@ -54,6 +58,7 @@ export function loadRuntimeConfig(env: RuntimeEnv = import.meta.env): RuntimeCon
     authEnabled: parseBoolean(
       env.VITE_AUTH_ENABLED,
       DEFAULT_RUNTIME_CONFIG.authEnabled,
+      'VITE_AUTH_ENABLED',
     ),
   };
 }
