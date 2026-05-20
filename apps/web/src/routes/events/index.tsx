@@ -45,7 +45,7 @@ function EventsPage() {
       ) : null}
 
       {!state ? (
-        <section className="placeholder-grid" aria-label="Events overview">
+        <section className={styles.overviewGrid} aria-label="Events overview">
           <PlaceholderPanel title="Incoming" copy="Captured events waiting for routing and analysis." />
           <PlaceholderPanel title="In Progress" copy="Events currently connected to agent runs or plugin work." />
           <PlaceholderPanel title="Resolved" copy="Completed events with decisions, audit records, or approvals." />

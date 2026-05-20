@@ -31,13 +31,4 @@
     padding: 18px var(--qa-spacing-md);
   }
 
-  .placeholder-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (min-width: 761px) and (max-width: 1080px) {
-  .placeholder-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
