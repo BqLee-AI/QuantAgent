@@ -14,6 +14,7 @@ type MockRouteResult =
   | ApiResponse<unknown>
   | MockHttpResponse
   | MockNetworkFailure;
+type MockRouteUrlPattern = string;
 
 interface MockRouteRequest {
   readonly bodyText: null | string;
@@ -30,12 +31,21 @@ type MockRouteResponder =
   | MockRouteResult[]
   | ((request: MockRouteRequest, callCount: number) => MaybePromise<MockRouteResult>);
 
+interface CreateRouteMockOptions {
+  routePattern?: MockRouteUrlPattern;
+}
+
+function testPattern(pattern: RegExp, value: string): boolean {
+  pattern.lastIndex = 0;
+  return pattern.test(value);
+}
+
 function matchesPath(pathname: string, path: MockRoutePath, search: string): boolean {
   if (typeof path === "string") {
     return pathname === path;
   }
 
-  return path.test(pathname) || path.test(`${pathname}${search}`);
+  return testPattern(path, pathname) || testPattern(path, `${pathname}${search}`);
 }
 
 function normalizeRequest(route: Route): MockRouteRequest {
@@ -96,7 +106,12 @@ async function fulfillMock(route: Route, result: MockRouteResult): Promise<void>
   });
 }
 
-export function createRouteMock(page: Page) {
+export function createRouteMock(
+  page: Page,
+  options: CreateRouteMockOptions = {},
+) {
+  const routePattern = options.routePattern ?? "**/api/v1/**";
+
   async function registerRoute(
     method: MockRouteMethod,
     path: MockRoutePath,
@@ -104,7 +119,7 @@ export function createRouteMock(page: Page) {
   ): Promise<void> {
     let callCount = 0;
 
-    await page.route("**/*", async (route) => {
+    await page.route(routePattern, async (route) => {
       const request = normalizeRequest(route);
 
       if (request.method !== method || !matchesPath(request.pathname, path, request.search)) {

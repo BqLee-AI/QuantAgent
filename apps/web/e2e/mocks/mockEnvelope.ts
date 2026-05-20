@@ -70,29 +70,46 @@ export interface MockRecoverScenario {
   replayResponse?: MockHttpResponse | MockNetworkFailure | ApiResponse<unknown>;
 }
 
+function withEnvelopeMetadata<TData>(
+  envelope: {
+    code: number;
+    data: TData | null;
+    msg: string;
+  },
+  options: MockEnvelopeOverrides,
+): ApiResponse<TData | null> {
+  return {
+    ...envelope,
+    ...(options.requestId ? { request_id: options.requestId } : {}),
+    ...(options.traceId ? { trace_id: options.traceId } : {}),
+  };
+}
+
 export function mockApiSuccess<TData>(
   data: TData,
   options: MockApiSuccessOptions = {},
 ): ApiResponse<TData> {
-  return {
-    code: 0,
-    data,
-    msg: options.msg ?? "ok",
-    request_id: options.requestId,
-    trace_id: options.traceId,
-  };
+  return withEnvelopeMetadata(
+    {
+      code: 0,
+      data,
+      msg: options.msg ?? "ok",
+    },
+    options,
+  ) as ApiResponse<TData>;
 }
 
 export function mockApiError(
   options: MockApiErrorOptions = {},
 ): ApiResponse<null> {
-  return {
-    code: options.code ?? 40_000,
-    data: null,
-    msg: options.msg ?? "mocked business error",
-    request_id: options.requestId,
-    trace_id: options.traceId,
-  };
+  return withEnvelopeMetadata(
+    {
+      code: options.code ?? 40_000,
+      data: null,
+      msg: options.msg ?? "mocked business error",
+    },
+    options,
+  ) as ApiResponse<null>;
 }
 
 export function mockHttpError<TBody = null>(
@@ -102,15 +119,15 @@ export function mockHttpError<TBody = null>(
     kind: "http",
     status: options.status ?? 500,
     headers: options.headers,
-    body:
-      options.body ??
-      ({
-        code: options.code ?? options.status ?? 50_000,
-        data: (options.data ?? null) as TBody | null,
-        msg: options.msg ?? "mocked http error",
-        request_id: options.requestId,
-        trace_id: options.traceId,
-      } satisfies ApiResponse<TBody | null>),
+    body: options.body ??
+      withEnvelopeMetadata(
+        {
+          code: options.code ?? options.status ?? 50_000,
+          data: (options.data ?? null) as TBody | null,
+          msg: options.msg ?? "mocked http error",
+        },
+        options,
+      ),
   };
 }
 

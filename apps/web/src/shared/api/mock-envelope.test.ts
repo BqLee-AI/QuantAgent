@@ -37,8 +37,6 @@ describe("mockEnvelope helpers", () => {
       code: 40_001,
       data: null,
       msg: "参数错误",
-      request_id: undefined,
-      trace_id: undefined,
     });
   });
 
@@ -64,7 +62,6 @@ describe("mockEnvelope helpers", () => {
         data: null,
         msg: "temporary outage",
         request_id: "req-http",
-        trace_id: undefined,
       },
     });
 
@@ -90,7 +87,6 @@ describe("mockEnvelope helpers", () => {
       data: null,
       msg: "unauthorized",
       request_id: "req-401",
-      trace_id: undefined,
     });
 
     expect(scenario).toMatchObject({
