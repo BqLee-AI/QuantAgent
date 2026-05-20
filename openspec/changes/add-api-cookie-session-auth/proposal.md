@@ -89,7 +89,7 @@
 - 正确管理员口令可通过 `/api/v1/auth/login` 换取 HttpOnly session cookie。
 - `/api/v1/auth/logout` 可清除 session cookie。
 - `/api/v1/me` 返回当前 actor 和 capability 快照，不暴露 session、cookie、签名、secret 或口令。
-- login 成功响应和 `/api/v1/me` 提供非敏感 `csrf_token`；logout、protected write route 或最小验证 route 缺少或携带无效 CSRF token 时被拒绝，携带有效 token 时通过。
+- login 成功响应和 `/api/v1/me` 提供非敏感 `csrf_token`；logout、测试中的 protected write route（`/test/protected-write`）缺少或携带无效 CSRF token 时被拒绝，携带有效 token 时通过。
 - actor/audit context helper 可以把 current actor 和 request metadata 安全传递给后续 handler。
 - API 响应、日志和测试输出不包含管理员口令、hash、session、cookie、签名 secret、私有策略或 stack trace。
 - OpenAPI 中 auth routes 使用 `ApiResponse[T]` envelope、显式 tags 和稳定 schema。

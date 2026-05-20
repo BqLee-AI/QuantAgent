@@ -3,11 +3,13 @@ from __future__ import annotations
 import os
 import tempfile
 import unittest
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import SQLAlchemyError
+from pydantic import BaseModel, ConfigDict, Field
 
 from quantagent.api.auth import (
     ALL_CAPABILITIES,
@@ -23,7 +25,6 @@ from quantagent.api.db import get_db_session
 from quantagent.api.errors import ServiceUnavailableError
 from quantagent.api.main import create_app
 from quantagent.api.responses import ApiResponse
-from quantagent.api.schemas.auth import ProtectedWriteResponse
 
 
 class FakeSession:
@@ -250,6 +251,16 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(settings.AUTH_ADMIN_PASSWORD, "dev-admin-password")
         self.assertEqual(settings.AUTH_SESSION_SECRET, "dev-session-secret-change-me")
 
+    def test_same_site_none_requires_secure_cookie(self) -> None:
+        with self.assertRaisesRegex(ValueError, "AUTH_COOKIE_SAME_SITE=none requires AUTH_COOKIE_SECURE=true"):
+            Settings(
+                APP_ENV="development",
+                AUTH_ADMIN_PASSWORD="test-admin-password",
+                AUTH_SESSION_SECRET="test-session-secret",
+                AUTH_COOKIE_SAME_SITE="none",
+                AUTH_COOKIE_SECURE=False,
+            )
+
     def test_login_success_sets_cookie_and_returns_csrf_token(self) -> None:
         response = self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
         body = response.json()
@@ -304,6 +315,19 @@ class ApiAppTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 401)
         self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+
+    def test_me_rejects_session_expiring_at_now(self) -> None:
+        session_value, _csrf_token = issue_session(
+            "local_admin",
+            self.settings,
+            expires_at=int(datetime.now(UTC).timestamp()),
+        )
+        self.client.cookies.set(self.settings.AUTH_COOKIE_NAME, session_value)
+
+        response = self.client.get("/api/v1/me")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"]["code"], "UNAUTHORIZED")
 
     def test_me_returns_actor_capabilities_and_csrf(self) -> None:
         login_response = self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
@@ -571,6 +595,12 @@ class ApiAppTestCase(unittest.TestCase):
 
     def _protected_write_test_app(self) -> FastAPI:
         app = create_app(self.settings)
+
+        class ProtectedWriteResponse(BaseModel):
+            model_config = ConfigDict(extra="forbid")
+
+            actor_id: str = Field(min_length=1)
+            request_id: str = Field(min_length=1)
 
         @app.post("/test/protected-write", response_model=ApiResponse[ProtectedWriteResponse])
         def protected_write(

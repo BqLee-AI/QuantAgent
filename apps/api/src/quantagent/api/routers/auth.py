@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, Request, Response
 
 from quantagent.api.auth import (
     ALL_CAPABILITIES,
+    LOCAL_ACTOR_TYPE,
+    LOCAL_ADMIN_ACTOR_ID,
     CurrentActor,
     authenticate_admin_password,
     clear_session_cookie,
@@ -44,12 +46,12 @@ def login(payload: LoginRequest, response: Response, request: Request) -> ApiRes
         return ApiResponse.success(_actor_response(development_bypass_actor()))
 
     authenticate_admin_password(payload.password, app_settings)
-    session_value, csrf_token = issue_session("local_admin", app_settings)
+    session_value, csrf_token = issue_session(LOCAL_ADMIN_ACTOR_ID, app_settings)
     set_session_cookie(response, session_value, app_settings)
     return ApiResponse.success(
         AuthenticatedActorResponse(
-            actor_id="local_admin",
-            actor_type="local_single_user",
+            actor_id=LOCAL_ADMIN_ACTOR_ID,
+            actor_type=LOCAL_ACTOR_TYPE,
             capabilities=sorted(ALL_CAPABILITIES),
             csrf_token=csrf_token,
         )

@@ -42,6 +42,9 @@ class Settings(CoreSettings):
         if not self.AUTH_COOKIE_HTTP_ONLY:
             raise ValueError("AUTH_COOKIE_HTTP_ONLY must remain true")
 
+        if self.AUTH_COOKIE_SAME_SITE == "none" and not self.AUTH_COOKIE_SECURE:
+            raise ValueError("AUTH_COOKIE_SAME_SITE=none requires AUTH_COOKIE_SECURE=true")
+
         if not self.AUTH_ENABLED and environment != "development":
             raise ValueError("AUTH_ENABLED=false is only allowed when APP_ENV=development")
 
@@ -63,8 +66,6 @@ class Settings(CoreSettings):
 
         # production 不允许弱默认或关闭鉴权，避免部署时静默裸奔。
         if self.is_production:
-            if not self.AUTH_ENABLED:
-                raise ValueError("Production must not run with auth disabled")
             if not self.AUTH_COOKIE_SECURE:
                 raise ValueError("Production session cookie must be secure")
             if not self.AUTH_ADMIN_PASSWORD:

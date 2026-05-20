@@ -129,8 +129,8 @@ def issue_session(
     expires_at: int | None = None,
 ) -> tuple[str, str]:
     """签发本地单用户 session，并返回给前端 bootstrap 用的 CSRF token。"""
-    capability_set = capabilities or ALL_CAPABILITIES
-    session_expires_at = expires_at or int(
+    capability_set = ALL_CAPABILITIES if capabilities is None else capabilities
+    session_expires_at = expires_at if expires_at is not None else int(
         (datetime.now(UTC) + timedelta(seconds=app_settings.AUTH_SESSION_LIFETIME_SECONDS)).timestamp()
     )
     csrf_token = _csrf_token(app_settings.AUTH_SESSION_SECRET or "", actor_id, session_expires_at)
@@ -207,11 +207,15 @@ def resolve_current_actor(request: Request) -> CurrentActor:
     # session payload 只接受当前单用户模型和集中维护的 capability 集合。
     if actor_id != LOCAL_ADMIN_ACTOR_ID or actor_type != LOCAL_ACTOR_TYPE:
         raise UnauthorizedError()
-    if not isinstance(expires_at, int) or expires_at < int(datetime.now(UTC).timestamp()):
+    if not isinstance(expires_at, int) or expires_at <= int(datetime.now(UTC).timestamp()):
         raise UnauthorizedError()
     if not isinstance(csrf_token, str) or not csrf_token:
         raise UnauthorizedError()
-    if not isinstance(capabilities, list) or not set(capabilities).issubset(ALL_CAPABILITIES):
+    if (
+        not isinstance(capabilities, list)
+        or not all(isinstance(item, str) for item in capabilities)
+        or not set(capabilities).issubset(ALL_CAPABILITIES)
+    ):
         raise UnauthorizedError()
 
     expected_csrf = _csrf_token(app_settings.AUTH_SESSION_SECRET or "", actor_id, expires_at)

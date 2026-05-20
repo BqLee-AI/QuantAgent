@@ -22,10 +22,3 @@ class LogoutResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     cleared: bool
-
-
-class ProtectedWriteResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    actor_id: str = Field(min_length=1)
-    request_id: str = Field(min_length=1)
