@@ -1,24 +1,42 @@
 # QuantAgent API
 
-## 运行
+## 本地开发
 
-### 启动
+### 依赖安装
 
 ```bash
 cd apps/api
 uv sync
+```
+
+### 启动 API
+
+```bash
 APP_ENV=development uv run api
 ```
 
-### Docker
+API 默认监听 `127.0.0.1:8000`。鉴权默认开启（`AUTH_ENABLED=true`）；development 环境下口令使用 `.env.example` 中预设的弱默认值，也可显式设置 `AUTH_ENABLED=false` 完全关闭鉴权（此选项仅 `APP_ENV=development` 允许）。
 
-从仓库根目录构建并启动 API：
+### 测试
 
 ```bash
+cd apps/api && uv run python -m unittest discover -s src/tests
+```
+
+## Docker 部署
+
+### 首次启动（完整流程）
+
+从仓库根目录执行：
+
+```bash
+cp .env.example .env          # 首次配置，按需修改变量
+docker compose up -d db
+docker compose --profile migration run --rm migrate
 docker compose up --build api
 ```
 
-只启动本地数据库：
+### 只启动数据库
 
 ```bash
 docker compose up -d db
@@ -30,11 +48,35 @@ Compose 中的 API 容器通过 `API_DATABASE_URL` 连接 `db:5432`；宿主机�
 
 如果修改了 `POSTGRES_DB`、`POSTGRES_USER` 或 `POSTGRES_PASSWORD`，需要同步调整 `API_DATABASE_URL` 和 `MIGRATION_DATABASE_URL`。
 
-需要执行 Alembic 迁移时，从仓库根目录运行：
+### 数据库迁移
+
+执行 Alembic 迁移，从仓库根目录运行：
 
 ```bash
 docker compose --profile migration run --rm migrate
 ```
+
+### 健康检查
+
+```bash
+docker compose ps
+docker compose logs --tail=100 api
+curl -i http://127.0.0.1:8000/api/v1/health
+curl -i http://127.0.0.1:8000/api/v1/ready
+```
+
+`/api/v1/health` 只验证 API 进程存活；`/api/v1/ready` 验证数据库可达。
+
+### 生产注意事项
+
+仓库本地 Compose 默认值仅用于本地开发，不等同生产安全部署。生产环境启动前，至少在 `.env` 中替换以下变量为安全值：
+
+- `APP_ENV=production`
+- `POSTGRES_PASSWORD`
+- `AUTH_ADMIN_PASSWORD`
+- `AUTH_SESSION_SECRET`（建议用 `openssl rand -hex 32` 生成）
+
+`APP_ENV=production` 时 API 会强制验证这些配置，启动时若检测到弱默认值（`AUTH_ADMIN_PASSWORD=dev-admin-password` 或 `AUTH_SESSION_SECRET=dev-session-secret-change-me`）或配置缺失，会直接报错退出。
 
 ## API v1 route skeleton
 
@@ -73,50 +115,6 @@ docker compose --profile migration run --rm migrate
 - `AUTH_COOKIE_SAME_SITE`：cookie same-site 策略，默认 `lax`。
 - `AUTH_SESSION_LIFETIME_SECONDS`：session 生命周期，默认 `43200`。
 - `AUTH_CSRF_HEADER_NAME`：CSRF header 名称，默认 `X-CSRF-Token`。
-
-注意：仓库本地 Docker compose 仅代表本地运行默认值，不等同 production 安全部署；生产环境需要显式设置 `APP_ENV=production` 及对应 auth 配置。
-
-## 快速部署
-
-README 只保留“如何尽快把 API 跑起来”的最小步骤；Nginx、TLS、备份、发布脚本、CI/CD 和服务器初始化等运维细节不在这里展开。当前仓库也还没有正式的生产部署手册；如果后续需要统一沉淀，建议单独维护到 `docs/deployment/` 或独立 infra 文档。
-
-### 后端最小闭环
-
-从仓库根目录执行：
-
-```bash
-cp .env.example .env
-docker compose up -d db
-docker compose --profile migration run --rm migrate
-docker compose up --build api
-```
-
-如果是生产环境，启动前至少确认以下变量已经被替换为安全值：
-
-- `APP_ENV=production`
-- `POSTGRES_PASSWORD`
-- `AUTH_ADMIN_PASSWORD`
-- `AUTH_SESSION_SECRET`
-
-启动后可以用下面的命令做最小检查：
-
-```bash
-docker compose ps
-docker compose logs --tail=100 api
-curl -i http://127.0.0.1:8000/api/v1/health
-curl -i http://127.0.0.1:8000/api/v1/ready
-```
-
-### 前端最小闭环
-
-如果需要同时部署 Web，从仓库根目录执行：
-
-```bash
-bun install --frozen-lockfile
-VITE_API_BASE_URL=/api/v1 VITE_AUTH_ENABLED=true bun run --cwd apps/web build
-```
-
-推荐前后端同域部署，并把 `apps/web/dist/` 交给已有静态文件服务或反向代理托管；具体 Nginx、证书和发布拓扑请参考团队已有运维文档，或后续单独沉淀到 `docs/deployment/`。
 
 ### 新增 route 流程
 
