@@ -2,7 +2,7 @@
 
 ## MODIFIED Requirements
 
-### Requirement: 公共与受保护路由策略
+### Requirement: Public And Protected Route Policy
 
 SHALL 要求 API routes 使用经过代码审核的 public allowlist，并默认保护 API v1 routes。
 
