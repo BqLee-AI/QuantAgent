@@ -182,6 +182,21 @@ test('authenticated users without route capability stay in forbidden flow instea
   await expect(page.getByRole('button', { name: '返回可访问入口' })).toBeVisible();
 });
 
+test('root route waits for session capabilities before choosing the default entry', async ({ page }) => {
+  await mockAuth(page, {
+    actor: {
+      ...actor,
+      capabilities: ['secret.manage'],
+    },
+    authenticated: true,
+  });
+
+  await page.goto('/');
+
+  await expect(page).toHaveURL(/\/settings/);
+  await expect(page.locator('.page-title')).toHaveText('系统设置');
+});
+
 test('forbidden API responses preserve diagnostics without leaking sensitive values', async ({ page }) => {
   await page.route('**/api/v1/me', async (route) => {
     await route.fulfill({

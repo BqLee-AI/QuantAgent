@@ -14,7 +14,7 @@ export function ForbiddenPage({
   onReturnToEntry,
 }: ForbiddenPageProps): ReactNode {
   return (
-    <main className="app-forbidden-screen">
+    <section className="app-forbidden-screen">
       <section className="app-forbidden-card" aria-labelledby="app-forbidden-title">
         <p className="app-error-kicker">QuantAgent</p>
         <h1 id="app-forbidden-title" className="app-error-title">
@@ -58,6 +58,6 @@ export function ForbiddenPage({
           </button>
         </div>
       </section>
-    </main>
+    </section>
   )
 }

@@ -20,7 +20,6 @@ interface AuthContextValue extends AuthState {
   bootstrap(): Promise<void>;
   login(password: string): Promise<void>;
   logout(): Promise<void>;
-  markForbidden(message?: string): void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -79,20 +78,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const handleUnauthorized = useCallback(() => {
     csrfTokenRef.current = null;
-    setState(createUnauthenticatedState(false));
-  }, []);
-
-  const markForbidden = useCallback((message?: string) => {
-    setState((current) => ({
-      ...current,
-      forbidden: current.forbidden ?? {
-        message: message ?? "当前账号没有执行该操作的权限。",
-        requestId: null,
-        traceId: null,
-      },
-      lastForbiddenMessage: message ?? "当前账号没有执行该操作的权限。",
-    }));
-  }, []);
+    setState(createUnauthenticatedState(!config.authEnabled));
+  }, [config.authEnabled]);
 
   const apiClient = useMemo(
     () =>
@@ -176,9 +163,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       bootstrap,
       login,
       logout,
-      markForbidden,
     }),
-    [apiClient, bootstrap, login, logout, markForbidden, state],
+    [apiClient, bootstrap, login, logout, state],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
