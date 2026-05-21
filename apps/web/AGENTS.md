@@ -37,3 +37,4 @@
 - 修改路由、layout、页面交互时，优先跑对应的 unit、component 或 e2e 检查。
 - 路由结构变更后，先用现有 TanStack 生成流程刷新 `src/routeTree.gen.ts`，再跑构建。
 - 如果验证缺依赖或环境不可用，最终说明必须写清楚未验证项和原因。
+- 新增本地调试页面、页面状态预览、runtime config 可视化、route playground 或类似开发态入口时，优先收口到 `/debug` 工作台；不要继续在业务 route 上增加临时 query 参数、按钮或局部 hack，除非已有 issue、OpenSpec 或维护者评论明确要求它作为正式功能保留。
