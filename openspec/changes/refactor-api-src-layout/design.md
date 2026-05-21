@@ -22,6 +22,14 @@ issue #105 要求先通过 OpenSpec 明确目录重构边界，再进入实现�
 - 不引入 `services/`、`repositories/`、`domain/`、`models/`、`usecases/` 等容易暗示 API 层承载核心业务逻辑的占位目录。
 - 不新增依赖，不迁移测试框架，不生成 static OpenAPI artifact、前端 client、TypeScript types 或 Zod schema。
 
+## Source of Truth and Boundaries
+
+- 规范真源：本 change 的 `specs/api-src-layout/spec.md` 定义目录重构验收口径；`openspec/specs/api-cookie-session-auth/spec.md` 定义 Cookie Session、capability guard、CSRF、development bypass 等稳定鉴权行为。
+- 实现真源：当前 `apps/api/src/quantagent/api/**` 和 `apps/api/src/tests/**` 是迁移输入；实现阶段不得只按文档想象重排不存在的模块。
+- 文档真源：实现完成后 `apps/api/README.md` 和 `apps/api/AGENTS.md` 必须反映新目录；它们不是旧路径继续增长的理由。
+- 禁止路径：不得通过在 `main.py` 零散新增标准 API v1 `include_router(...)`、在 route 内重复临时 auth dependency、或在 API 层新增业务核心目录来绕过本 change 的边界。
+- 兼容路径：旧 import 只允许作为薄 re-export 存在于高风险公共入口；re-export 不能持有新逻辑、状态或分叉行为。
+
 ## Decisions
 
 ### 1. 使用 `http/` 承接传输层基础能力
@@ -64,15 +72,15 @@ issue #105 要求先通过 OpenSpec 明确目录重构边界，再进入实现�
 
 ## Risks / Trade-offs
 
-- [Risk] 目录移动导致 OpenAPI 路径、tags、response_model 或 envelope schema 发生非预期变化。  
+- [Risk] 目录移动导致 OpenAPI 路径、tags、response_model 或 envelope schema 发生非预期变化。
   → Mitigation: 保留现有 route 定义语义，并运行 API runtime 与 OpenAPI 契约测试。
-- [Risk] 旧 import 路径保留过多，导致新旧路径长期并存。  
+- [Risk] 旧 import 路径保留过多，导致新旧路径长期并存。
   → Mitigation: 只保留高风险公共入口薄 re-export，新增代码和文档统一指向新路径。
 - [Risk] 拆分 `auth.py` 时误改 session、cookie、CSRF、`/me` 活动续期或 capability 行为。
   → Mitigation: 迁移前后复用现有测试断言，特别保留 `/me` 在 session 模式下刷新 HttpOnly cookie 和 `csrf_token`、development bypass 下不签发 session 的断言；新增必要 import 边界测试时不得放宽行为验收。
-- [Risk] 新目录被误解为 API 层可以承载业务核心逻辑。  
+- [Risk] 新目录被误解为 API 层可以承载业务核心逻辑。
   → Mitigation: README 和 AGENTS 明确禁止新增空的 `services/repositories/domain/models/usecases` 目录，并重申 `apps/api` 只承载 HTTP 边界。
-- [Risk] 文档和实际结构再次漂移。  
+- [Risk] 文档和实际结构再次漂移。
   → Mitigation: 把 README/AGENTS 同步列为实现任务和验收条件，而不是可选收尾。
 
 ## Migration Plan
@@ -85,3 +93,9 @@ issue #105 要求先通过 OpenSpec 明确目录重构边界，再进入实现�
 ## Open Questions
 
 - 当前无阻塞问题。旧 import 兼容策略已按“最小兼容”处理，具体保留哪些 re-export 由实现阶段基于上述高风险公共入口口径确认；不得扩大为全量长期双入口。
+
+## Deferred / Out of Phase
+
+- 前端契约生成、static OpenAPI artifact、TypeScript client、Zod schema 和 `packages/contracts` 生成链路不在本 change 内启用。
+- 多用户、RBAC、OAuth、SSO、跨 app/worker/scheduler 共享鉴权包不在本 change 内设计或实现。
+- runtime、plugin、approval、Agent、tool invocation、WebSocket、executor 和 live trading endpoint family 不因目录重构获得任何新增能力。
