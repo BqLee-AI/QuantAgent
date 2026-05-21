@@ -431,6 +431,8 @@ function DebugErrorFallbackIndexPage() {
           copy="应用应切换到现有错误兜底页面，保持安全的错误展示方式，并提供恢复操作。"
         />
       </section>
+
+      <Outlet />
     </>
   )
 }
