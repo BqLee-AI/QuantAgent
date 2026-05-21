@@ -4,7 +4,7 @@ import { routeTree } from '../routeTree.gen'
 import type { AuthState } from '../shared/auth'
 
 export type RouterContext = {
-  auth?: Pick<AuthState, 'capabilities' | 'status'>
+  auth?: Pick<AuthState, 'capabilities' | 'forbidden' | 'status'>
   capabilities: Set<string>
 }
 

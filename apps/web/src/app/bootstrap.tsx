@@ -48,6 +48,7 @@ function AuthenticatedRouterProvider({
       context={{
         auth: {
           capabilities: auth.capabilities,
+          forbidden: auth.forbidden,
           status: auth.status,
         },
         capabilities: auth.capabilities,
