@@ -443,7 +443,7 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertIn("HttpOnly", response.headers["set-cookie"])
 
     def test_me_refreshes_session_cookie_and_csrf_token(self) -> None:
-        login_response = self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+        self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
 
         response = self.client.get("/api/v1/me")
 
