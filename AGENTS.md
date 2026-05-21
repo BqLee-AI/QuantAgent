@@ -54,6 +54,7 @@
 
 - 开始开发前先确认当前分支和远程主线状态；不要在本地过期的 `main` 上继续堆提交。
 - 每个 issue 使用独立分支推进，PR 范围应围绕同一个 issue 或 OpenSpec change。
+- 前端实现分支命名使用 `FE-<scope>-<goal>`，例如 `FE-web-capability-guard-403-ux`；`scope` 表示主要工作区，`goal` 表示本轮可验收目标。
 - 修改前必须阅读 issue 正文和评论；评论中的约束优先纳入实现。
 - 涉及行为、架构、跨模块契约或持久化边界时，先查看 `docs/design/`、`openspec/` 中相关 change 或 stable spec。
 - 不把无关格式化、目录迁移、依赖升级混进同一个 PR。
