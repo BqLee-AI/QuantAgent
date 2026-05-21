@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import React, { StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { RouterProvider } from '@tanstack/react-router';
 import {
@@ -37,6 +37,10 @@ function AuthenticatedRouterProvider({
   router: ReturnType<typeof createAppRouter>;
 }) {
   const auth = useAuth();
+
+  React.useEffect(() => {
+    void router.invalidate();
+  }, [auth.status, auth.actor?.actor_id, router]);
 
   return (
     <RouterProvider

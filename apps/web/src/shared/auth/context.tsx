@@ -127,12 +127,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
   );
 
   const logout = useCallback(async () => {
+    if (state.status !== "authenticated") {
+      handleUnauthorized();
+      return;
+    }
+
     try {
       await logoutSession(apiClient);
     } finally {
       handleUnauthorized();
     }
-  }, [apiClient, handleUnauthorized]);
+  }, [apiClient, handleUnauthorized, state.status]);
 
   useEffect(() => {
     void bootstrap();

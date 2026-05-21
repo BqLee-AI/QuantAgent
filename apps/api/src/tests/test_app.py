@@ -277,7 +277,7 @@ class ApiAppTestCase(unittest.TestCase):
 
     def test_test_env_still_receives_weak_auth_defaults(self) -> None:
         settings = Settings(APP_ENV="test")
-        self.assertEqual(settings.AUTH_ADMIN_PASSWORD, "dev-admin-password")
+        self.assertEqual(settings.AUTH_ADMIN_PASSWORD, "12345678")
         self.assertEqual(settings.AUTH_SESSION_SECRET, "dev-session-secret-change-me")
 
     def test_same_site_none_requires_secure_cookie(self) -> None:

@@ -55,7 +55,7 @@ class Settings(CoreSettings):
 
         if not self.AUTH_ADMIN_PASSWORD:
             if is_dev_or_test:
-                self.AUTH_ADMIN_PASSWORD = "dev-admin-password"
+                self.AUTH_ADMIN_PASSWORD = "12345678"
             elif not self.is_production:
                 raise ValueError("AUTH_ADMIN_PASSWORD is required when APP_ENV is not development/test/local")
 
@@ -73,7 +73,7 @@ class Settings(CoreSettings):
                 raise ValueError("AUTH_ADMIN_PASSWORD is required in production")
             if not self.AUTH_SESSION_SECRET:
                 raise ValueError("AUTH_SESSION_SECRET is required in production")
-            if self.AUTH_ADMIN_PASSWORD == "dev-admin-password":
+            if self.AUTH_ADMIN_PASSWORD == "12345678":
                 raise ValueError("Production must not use the development auth password default")
             if self.AUTH_SESSION_SECRET == "dev-session-secret-change-me":
                 raise ValueError("Production must not use the development session secret default")
