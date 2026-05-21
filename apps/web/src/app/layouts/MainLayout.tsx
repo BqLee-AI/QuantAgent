@@ -1,4 +1,5 @@
-import { Link, Outlet, useRouterState } from '@tanstack/react-router'
+import { Link, useRouterState } from '@tanstack/react-router'
+import type { PropsWithChildren } from 'react'
 import { useAuth } from '../../shared/auth'
 
 type NavItem = {
@@ -7,28 +8,28 @@ type NavItem = {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Events', to: '/events' },
-  { label: 'Runtime', to: '/runtime' },
-  { label: 'Approvals', to: '/approvals' },
-  { label: 'Plugins', to: '/plugins' },
-  { label: 'Skills', to: '/skills' },
-  { label: 'Tools', to: '/tools' },
-  { label: 'Industries', to: '/industries' },
-  { label: 'Settings', to: '/settings' },
+  { label: '事件', to: '/events' },
+  { label: '运行态', to: '/runtime' },
+  { label: '审批', to: '/approvals' },
+  { label: '插件', to: '/plugins' },
+  { label: '技能', to: '/skills' },
+  { label: '工具', to: '/tools' },
+  { label: '行业包', to: '/industries' },
+  { label: '设置', to: '/settings' },
 ]
 
 const routeLabels = new Map<string, string>([
-  ['events', 'Events'],
-  ['runtime', 'Runtime'],
-  ['approvals', 'Approvals'],
-  ['plugins', 'Plugins'],
-  ['skills', 'Skills'],
-  ['tools', 'Tools'],
-  ['industries', 'Industries'],
-  ['settings', 'Settings'],
+  ['events', '事件'],
+  ['runtime', '运行态'],
+  ['approvals', '审批'],
+  ['plugins', '插件'],
+  ['skills', '技能'],
+  ['tools', '工具'],
+  ['industries', '行业包'],
+  ['settings', '设置'],
 ])
 
-export function MainLayout() {
+export function MainLayout({ children }: PropsWithChildren) {
   const auth = useAuth()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const breadcrumbs = getBreadcrumbs(pathname)
@@ -68,19 +69,19 @@ export function MainLayout() {
           </nav>
           <div className="app-session" aria-label="Session status">
             {auth.isAuthDisabled ? (
-              <span className="app-session-badge">Development auth disabled</span>
+              <span className="app-session-badge">开发环境已关闭鉴权</span>
             ) : null}
             {auth.actor ? (
               <span className="app-session-actor">{auth.actor.actor_id}</span>
             ) : null}
             <button className="app-session-logout" type="button" onClick={() => void auth.logout()}>
-              Logout
+              退出登录
             </button>
           </div>
         </header>
 
         <main className="app-content">
-          <Outlet />
+          {children}
         </main>
       </div>
     </div>
@@ -91,7 +92,7 @@ function getBreadcrumbs(pathname: string) {
   const segments = pathname.split('/').filter(Boolean)
 
   if (segments.length === 0) {
-    return [{ label: 'Events', path: '/events' }]
+    return [{ label: '事件', path: '/events' }]
   }
 
   return segments.map((segment, index) => {

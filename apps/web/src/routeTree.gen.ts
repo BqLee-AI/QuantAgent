@@ -9,104 +9,116 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ToolsIndexRouteImport } from './routes/tools/index'
-import { Route as SkillsIndexRouteImport } from './routes/skills/index'
-import { Route as SettingsIndexRouteImport } from './routes/settings/index'
-import { Route as RuntimeIndexRouteImport } from './routes/runtime/index'
-import { Route as PluginsIndexRouteImport } from './routes/plugins/index'
-import { Route as IndustriesIndexRouteImport } from './routes/industries/index'
-import { Route as EventsIndexRouteImport } from './routes/events/index'
-import { Route as ApprovalsIndexRouteImport } from './routes/approvals/index'
+import { Route as publicLoginRouteImport } from './routes/(public)/login'
+import { Route as AppworkspaceRouteRouteImport } from './routes/_app/(workspace)/route'
+import { Route as AppworkspaceToolsIndexRouteImport } from './routes/_app/(workspace)/tools/index'
+import { Route as AppworkspaceSkillsIndexRouteImport } from './routes/_app/(workspace)/skills/index'
+import { Route as AppworkspaceSettingsIndexRouteImport } from './routes/_app/(workspace)/settings/index'
+import { Route as AppworkspaceRuntimeIndexRouteImport } from './routes/_app/(workspace)/runtime/index'
+import { Route as AppworkspacePluginsIndexRouteImport } from './routes/_app/(workspace)/plugins/index'
+import { Route as AppworkspaceIndustriesIndexRouteImport } from './routes/_app/(workspace)/industries/index'
+import { Route as AppworkspaceEventsIndexRouteImport } from './routes/_app/(workspace)/events/index'
+import { Route as AppworkspaceApprovalsIndexRouteImport } from './routes/_app/(workspace)/approvals/index'
 
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ToolsIndexRoute = ToolsIndexRouteImport.update({
+const publicLoginRoute = publicLoginRouteImport.update({
+  id: '/(public)/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppworkspaceRouteRoute = AppworkspaceRouteRouteImport.update({
+  id: '/_app/(workspace)',
+  path: '',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppworkspaceToolsIndexRoute = AppworkspaceToolsIndexRouteImport.update({
   id: '/tools/',
   path: '/tools/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppworkspaceRouteRoute,
 } as any)
-const SkillsIndexRoute = SkillsIndexRouteImport.update({
+const AppworkspaceSkillsIndexRoute = AppworkspaceSkillsIndexRouteImport.update({
   id: '/skills/',
   path: '/skills/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppworkspaceRouteRoute,
 } as any)
-const SettingsIndexRoute = SettingsIndexRouteImport.update({
-  id: '/settings/',
-  path: '/settings/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RuntimeIndexRoute = RuntimeIndexRouteImport.update({
-  id: '/runtime/',
-  path: '/runtime/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PluginsIndexRoute = PluginsIndexRouteImport.update({
-  id: '/plugins/',
-  path: '/plugins/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const IndustriesIndexRoute = IndustriesIndexRouteImport.update({
-  id: '/industries/',
-  path: '/industries/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const EventsIndexRoute = EventsIndexRouteImport.update({
+const AppworkspaceSettingsIndexRoute =
+  AppworkspaceSettingsIndexRouteImport.update({
+    id: '/settings/',
+    path: '/settings/',
+    getParentRoute: () => AppworkspaceRouteRoute,
+  } as any)
+const AppworkspaceRuntimeIndexRoute =
+  AppworkspaceRuntimeIndexRouteImport.update({
+    id: '/runtime/',
+    path: '/runtime/',
+    getParentRoute: () => AppworkspaceRouteRoute,
+  } as any)
+const AppworkspacePluginsIndexRoute =
+  AppworkspacePluginsIndexRouteImport.update({
+    id: '/plugins/',
+    path: '/plugins/',
+    getParentRoute: () => AppworkspaceRouteRoute,
+  } as any)
+const AppworkspaceIndustriesIndexRoute =
+  AppworkspaceIndustriesIndexRouteImport.update({
+    id: '/industries/',
+    path: '/industries/',
+    getParentRoute: () => AppworkspaceRouteRoute,
+  } as any)
+const AppworkspaceEventsIndexRoute = AppworkspaceEventsIndexRouteImport.update({
   id: '/events/',
   path: '/events/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => AppworkspaceRouteRoute,
 } as any)
-const ApprovalsIndexRoute = ApprovalsIndexRouteImport.update({
-  id: '/approvals/',
-  path: '/approvals/',
-  getParentRoute: () => rootRouteImport,
-} as any)
+const AppworkspaceApprovalsIndexRoute =
+  AppworkspaceApprovalsIndexRouteImport.update({
+    id: '/approvals/',
+    path: '/approvals/',
+    getParentRoute: () => AppworkspaceRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/login': typeof LoginRoute
-  '/approvals/': typeof ApprovalsIndexRoute
-  '/events/': typeof EventsIndexRoute
-  '/industries/': typeof IndustriesIndexRoute
-  '/plugins/': typeof PluginsIndexRoute
-  '/runtime/': typeof RuntimeIndexRoute
-  '/settings/': typeof SettingsIndexRoute
-  '/skills/': typeof SkillsIndexRoute
-  '/tools/': typeof ToolsIndexRoute
+  '/login': typeof publicLoginRoute
+  '/approvals/': typeof AppworkspaceApprovalsIndexRoute
+  '/events/': typeof AppworkspaceEventsIndexRoute
+  '/industries/': typeof AppworkspaceIndustriesIndexRoute
+  '/plugins/': typeof AppworkspacePluginsIndexRoute
+  '/runtime/': typeof AppworkspaceRuntimeIndexRoute
+  '/settings/': typeof AppworkspaceSettingsIndexRoute
+  '/skills/': typeof AppworkspaceSkillsIndexRoute
+  '/tools/': typeof AppworkspaceToolsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/login': typeof LoginRoute
-  '/approvals': typeof ApprovalsIndexRoute
-  '/events': typeof EventsIndexRoute
-  '/industries': typeof IndustriesIndexRoute
-  '/plugins': typeof PluginsIndexRoute
-  '/runtime': typeof RuntimeIndexRoute
-  '/settings': typeof SettingsIndexRoute
-  '/skills': typeof SkillsIndexRoute
-  '/tools': typeof ToolsIndexRoute
+  '/login': typeof publicLoginRoute
+  '/approvals': typeof AppworkspaceApprovalsIndexRoute
+  '/events': typeof AppworkspaceEventsIndexRoute
+  '/industries': typeof AppworkspaceIndustriesIndexRoute
+  '/plugins': typeof AppworkspacePluginsIndexRoute
+  '/runtime': typeof AppworkspaceRuntimeIndexRoute
+  '/settings': typeof AppworkspaceSettingsIndexRoute
+  '/skills': typeof AppworkspaceSkillsIndexRoute
+  '/tools': typeof AppworkspaceToolsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/login': typeof LoginRoute
-  '/approvals/': typeof ApprovalsIndexRoute
-  '/events/': typeof EventsIndexRoute
-  '/industries/': typeof IndustriesIndexRoute
-  '/plugins/': typeof PluginsIndexRoute
-  '/runtime/': typeof RuntimeIndexRoute
-  '/settings/': typeof SettingsIndexRoute
-  '/skills/': typeof SkillsIndexRoute
-  '/tools/': typeof ToolsIndexRoute
+  '/_app/(workspace)': typeof AppworkspaceRouteRouteWithChildren
+  '/(public)/login': typeof publicLoginRoute
+  '/_app/(workspace)/approvals/': typeof AppworkspaceApprovalsIndexRoute
+  '/_app/(workspace)/events/': typeof AppworkspaceEventsIndexRoute
+  '/_app/(workspace)/industries/': typeof AppworkspaceIndustriesIndexRoute
+  '/_app/(workspace)/plugins/': typeof AppworkspacePluginsIndexRoute
+  '/_app/(workspace)/runtime/': typeof AppworkspaceRuntimeIndexRoute
+  '/_app/(workspace)/settings/': typeof AppworkspaceSettingsIndexRoute
+  '/_app/(workspace)/skills/': typeof AppworkspaceSkillsIndexRoute
+  '/_app/(workspace)/tools/': typeof AppworkspaceToolsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -136,39 +148,26 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/login'
-    | '/approvals/'
-    | '/events/'
-    | '/industries/'
-    | '/plugins/'
-    | '/runtime/'
-    | '/settings/'
-    | '/skills/'
-    | '/tools/'
+    | '/_app/(workspace)'
+    | '/(public)/login'
+    | '/_app/(workspace)/approvals/'
+    | '/_app/(workspace)/events/'
+    | '/_app/(workspace)/industries/'
+    | '/_app/(workspace)/plugins/'
+    | '/_app/(workspace)/runtime/'
+    | '/_app/(workspace)/settings/'
+    | '/_app/(workspace)/skills/'
+    | '/_app/(workspace)/tools/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  LoginRoute: typeof LoginRoute
-  ApprovalsIndexRoute: typeof ApprovalsIndexRoute
-  EventsIndexRoute: typeof EventsIndexRoute
-  IndustriesIndexRoute: typeof IndustriesIndexRoute
-  PluginsIndexRoute: typeof PluginsIndexRoute
-  RuntimeIndexRoute: typeof RuntimeIndexRoute
-  SettingsIndexRoute: typeof SettingsIndexRoute
-  SkillsIndexRoute: typeof SkillsIndexRoute
-  ToolsIndexRoute: typeof ToolsIndexRoute
+  AppworkspaceRouteRoute: typeof AppworkspaceRouteRouteWithChildren
+  publicLoginRoute: typeof publicLoginRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -176,76 +175,108 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/tools/': {
-      id: '/tools/'
+    '/(public)/login': {
+      id: '/(public)/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof publicLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/(workspace)': {
+      id: '/_app/(workspace)'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof AppworkspaceRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/(workspace)/tools/': {
+      id: '/_app/(workspace)/tools/'
       path: '/tools'
       fullPath: '/tools/'
-      preLoaderRoute: typeof ToolsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppworkspaceToolsIndexRouteImport
+      parentRoute: typeof AppworkspaceRouteRoute
     }
-    '/skills/': {
-      id: '/skills/'
+    '/_app/(workspace)/skills/': {
+      id: '/_app/(workspace)/skills/'
       path: '/skills'
       fullPath: '/skills/'
-      preLoaderRoute: typeof SkillsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppworkspaceSkillsIndexRouteImport
+      parentRoute: typeof AppworkspaceRouteRoute
     }
-    '/settings/': {
-      id: '/settings/'
+    '/_app/(workspace)/settings/': {
+      id: '/_app/(workspace)/settings/'
       path: '/settings'
       fullPath: '/settings/'
-      preLoaderRoute: typeof SettingsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppworkspaceSettingsIndexRouteImport
+      parentRoute: typeof AppworkspaceRouteRoute
     }
-    '/runtime/': {
-      id: '/runtime/'
+    '/_app/(workspace)/runtime/': {
+      id: '/_app/(workspace)/runtime/'
       path: '/runtime'
       fullPath: '/runtime/'
-      preLoaderRoute: typeof RuntimeIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppworkspaceRuntimeIndexRouteImport
+      parentRoute: typeof AppworkspaceRouteRoute
     }
-    '/plugins/': {
-      id: '/plugins/'
+    '/_app/(workspace)/plugins/': {
+      id: '/_app/(workspace)/plugins/'
       path: '/plugins'
       fullPath: '/plugins/'
-      preLoaderRoute: typeof PluginsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppworkspacePluginsIndexRouteImport
+      parentRoute: typeof AppworkspaceRouteRoute
     }
-    '/industries/': {
-      id: '/industries/'
+    '/_app/(workspace)/industries/': {
+      id: '/_app/(workspace)/industries/'
       path: '/industries'
       fullPath: '/industries/'
-      preLoaderRoute: typeof IndustriesIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppworkspaceIndustriesIndexRouteImport
+      parentRoute: typeof AppworkspaceRouteRoute
     }
-    '/events/': {
-      id: '/events/'
+    '/_app/(workspace)/events/': {
+      id: '/_app/(workspace)/events/'
       path: '/events'
       fullPath: '/events/'
-      preLoaderRoute: typeof EventsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppworkspaceEventsIndexRouteImport
+      parentRoute: typeof AppworkspaceRouteRoute
     }
-    '/approvals/': {
-      id: '/approvals/'
+    '/_app/(workspace)/approvals/': {
+      id: '/_app/(workspace)/approvals/'
       path: '/approvals'
       fullPath: '/approvals/'
-      preLoaderRoute: typeof ApprovalsIndexRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AppworkspaceApprovalsIndexRouteImport
+      parentRoute: typeof AppworkspaceRouteRoute
     }
   }
 }
 
+interface AppworkspaceRouteRouteChildren {
+  AppworkspaceApprovalsIndexRoute: typeof AppworkspaceApprovalsIndexRoute
+  AppworkspaceEventsIndexRoute: typeof AppworkspaceEventsIndexRoute
+  AppworkspaceIndustriesIndexRoute: typeof AppworkspaceIndustriesIndexRoute
+  AppworkspacePluginsIndexRoute: typeof AppworkspacePluginsIndexRoute
+  AppworkspaceRuntimeIndexRoute: typeof AppworkspaceRuntimeIndexRoute
+  AppworkspaceSettingsIndexRoute: typeof AppworkspaceSettingsIndexRoute
+  AppworkspaceSkillsIndexRoute: typeof AppworkspaceSkillsIndexRoute
+  AppworkspaceToolsIndexRoute: typeof AppworkspaceToolsIndexRoute
+}
+
+const AppworkspaceRouteRouteChildren: AppworkspaceRouteRouteChildren = {
+  AppworkspaceApprovalsIndexRoute: AppworkspaceApprovalsIndexRoute,
+  AppworkspaceEventsIndexRoute: AppworkspaceEventsIndexRoute,
+  AppworkspaceIndustriesIndexRoute: AppworkspaceIndustriesIndexRoute,
+  AppworkspacePluginsIndexRoute: AppworkspacePluginsIndexRoute,
+  AppworkspaceRuntimeIndexRoute: AppworkspaceRuntimeIndexRoute,
+  AppworkspaceSettingsIndexRoute: AppworkspaceSettingsIndexRoute,
+  AppworkspaceSkillsIndexRoute: AppworkspaceSkillsIndexRoute,
+  AppworkspaceToolsIndexRoute: AppworkspaceToolsIndexRoute,
+}
+
+const AppworkspaceRouteRouteWithChildren =
+  AppworkspaceRouteRoute._addFileChildren(AppworkspaceRouteRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  LoginRoute: LoginRoute,
-  ApprovalsIndexRoute: ApprovalsIndexRoute,
-  EventsIndexRoute: EventsIndexRoute,
-  IndustriesIndexRoute: IndustriesIndexRoute,
-  PluginsIndexRoute: PluginsIndexRoute,
-  RuntimeIndexRoute: RuntimeIndexRoute,
-  SettingsIndexRoute: SettingsIndexRoute,
-  SkillsIndexRoute: SkillsIndexRoute,
-  ToolsIndexRoute: ToolsIndexRoute,
+  AppworkspaceRouteRoute: AppworkspaceRouteRouteWithChildren,
+  publicLoginRoute: publicLoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
