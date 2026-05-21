@@ -28,6 +28,7 @@ from quantagent.api.responses import ApiResponse
 from quantagent.api.routers.register import (
     API_V1_PUBLIC_ROUTE_ALLOWLIST,
     STANDARD_API_V1_ROUTER_REGISTRATIONS,
+    build_api_v1_public_route_allowlist,
     register_api_v1_protected_router,
 )
 from fastapi.routing import APIRoute
@@ -308,17 +309,17 @@ class ApiAppTestCase(unittest.TestCase):
             API_V1_PUBLIC_ROUTE_ALLOWLIST,
             frozenset(
                 {
-                    ("GET", "/api/v1/health"),
-                    ("GET", "/api/v1/ready"),
-                    ("GET", "/api/v1/version"),
-                    ("POST", "/api/v1/auth/login"),
+                    ("GET", "/health"),
+                    ("GET", "/ready"),
+                    ("GET", "/version"),
+                    ("POST", "/auth/login"),
                 }
             ),
         )
 
     def test_standard_public_registrations_match_allowlist(self) -> None:
         public_routes = frozenset(
-            (method, f"/api/v1{route.path}")
+            (method, route.path)
             for registration in STANDARD_API_V1_ROUTER_REGISTRATIONS
             if registration.access == "public"
             for route in registration.router.routes
@@ -326,7 +327,30 @@ class ApiAppTestCase(unittest.TestCase):
             for method in (route.methods or ())
             if method in {"DELETE", "GET", "PATCH", "POST", "PUT"}
         )
-        self.assertEqual(public_routes, API_V1_PUBLIC_ROUTE_ALLOWLIST)
+        self.assertEqual(
+            public_routes,
+            frozenset(
+                {
+                    ("GET", "/health"),
+                    ("GET", "/ready"),
+                    ("GET", "/version"),
+                    ("POST", "/auth/login"),
+                }
+            ),
+        )
+
+    def test_public_allowlist_builds_prefixed_routes_from_settings(self) -> None:
+        self.assertEqual(
+            build_api_v1_public_route_allowlist(self.settings.API_V1_PREFIX),
+            frozenset(
+                {
+                    ("GET", "/api/v1/health"),
+                    ("GET", "/api/v1/ready"),
+                    ("GET", "/api/v1/version"),
+                    ("POST", "/api/v1/auth/login"),
+                }
+            ),
+        )
 
     def test_login_failure_uses_unauthorized_envelope(self) -> None:
         response = self.client.post("/api/v1/auth/login", json={"password": "wrong-password"})

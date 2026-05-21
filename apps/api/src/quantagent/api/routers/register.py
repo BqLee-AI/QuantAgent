@@ -47,8 +47,12 @@ API_V1_PUBLIC_ROUTE_ALLOWLIST = frozenset(
     route
     for registration in STANDARD_API_V1_ROUTER_REGISTRATIONS
     if registration.access == "public"
-    for route in _expand_router_routes(registration.router, prefix="/api/v1")
+    for route in _expand_router_routes(registration.router)
 )
+
+
+def build_api_v1_public_route_allowlist(api_v1_prefix: str) -> frozenset[tuple[str, str]]:
+    return frozenset((method, f"{api_v1_prefix}{path}") for method, path in API_V1_PUBLIC_ROUTE_ALLOWLIST)
 
 
 def register_api_v1_router(
