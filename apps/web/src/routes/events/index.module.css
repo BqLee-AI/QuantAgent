@@ -1,24 +1,3 @@
-.previewAction {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 40px;
-  max-width: 100%;
-  padding: 0 16px;
-  border: 1px solid var(--qa-color-primary);
-  border-radius: var(--qa-radius-lg);
-  background: var(--qa-color-primary);
-  color: var(--qa-color-on-primary);
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  white-space: normal;
-}
-
-.previewAction:hover {
-  background: var(--qa-color-primary-active);
-}
-
 .overviewGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
