@@ -1,0 +1,56 @@
+from quantagent.api.auth.actor import (
+    ALL_CAPABILITIES,
+    APPROVAL_AMEND_CAPABILITY,
+    APPROVAL_APPROVE_CAPABILITY,
+    CurrentActor,
+    DEVELOPMENT_BYPASS_CSRF_TOKEN,
+    EXECUTOR_DRY_RUN_CAPABILITY,
+    LOCAL_ACTOR_TYPE,
+    LOCAL_ADMIN_ACTOR_ID,
+    LOCAL_DEV_ACTOR_ID,
+    PLUGIN_CONFIGURE_CAPABILITY,
+    PLUGIN_INSTALL_CAPABILITY,
+    RUNTIME_INSPECT_CAPABILITY,
+    SECRET_MANAGE_CAPABILITY,
+)
+from quantagent.api.auth.audit import ActorAuditContext, build_actor_audit_context
+from quantagent.api.auth.capability import require_capability
+from quantagent.api.auth.csrf import require_csrf
+from quantagent.api.auth.session import (
+    authenticate_admin_password,
+    clear_session_cookie,
+    development_bypass_actor,
+    get_current_actor,
+    issue_session,
+    refresh_session,
+    resolve_current_actor,
+    set_session_cookie,
+)
+
+__all__ = [
+    "ALL_CAPABILITIES",
+    "APPROVAL_AMEND_CAPABILITY",
+    "APPROVAL_APPROVE_CAPABILITY",
+    "ActorAuditContext",
+    "CurrentActor",
+    "DEVELOPMENT_BYPASS_CSRF_TOKEN",
+    "EXECUTOR_DRY_RUN_CAPABILITY",
+    "LOCAL_ACTOR_TYPE",
+    "LOCAL_ADMIN_ACTOR_ID",
+    "LOCAL_DEV_ACTOR_ID",
+    "PLUGIN_CONFIGURE_CAPABILITY",
+    "PLUGIN_INSTALL_CAPABILITY",
+    "RUNTIME_INSPECT_CAPABILITY",
+    "SECRET_MANAGE_CAPABILITY",
+    "authenticate_admin_password",
+    "build_actor_audit_context",
+    "clear_session_cookie",
+    "development_bypass_actor",
+    "get_current_actor",
+    "issue_session",
+    "refresh_session",
+    "require_capability",
+    "require_csrf",
+    "resolve_current_actor",
+    "set_session_cookie",
+]

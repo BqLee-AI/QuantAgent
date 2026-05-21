@@ -22,10 +22,10 @@ from quantagent.api.auth import (
 )
 from quantagent.api.config.settings import Settings
 from quantagent.api.db import get_db_session
-from quantagent.api.errors import ServiceUnavailableError
+from quantagent.api.http.errors import ServiceUnavailableError
 from quantagent.api.main import create_app
-from quantagent.api.responses import ApiResponse
-from quantagent.api.routers.register import (
+from quantagent.api.http.responses import ApiResponse
+from quantagent.api.routers.v1.register import (
     API_V1_PUBLIC_ROUTE_ALLOWLIST,
     STANDARD_API_V1_ROUTER_REGISTRATIONS,
     build_api_v1_public_route_allowlist,
@@ -446,14 +446,13 @@ class ApiAppTestCase(unittest.TestCase):
     def test_me_refreshes_session_cookie_and_csrf_token(self) -> None:
         login_response = self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
         initial_csrf_token = login_response.json()["data"]["csrf_token"]
-        initial_cookie = login_response.headers["set-cookie"]
 
         response = self.client.get("/api/v1/me")
         body = response.json()
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("HttpOnly", response.headers["set-cookie"])
-        self.assertNotEqual(response.headers["set-cookie"], initial_cookie)
+        self.assertNotEqual(response.headers["set-cookie"], login_response.headers["set-cookie"])
         self.assertNotEqual(body["data"]["csrf_token"], initial_csrf_token)
 
     def test_development_can_disable_auth_and_keep_actor_context(self) -> None:

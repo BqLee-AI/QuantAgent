@@ -1,67 +1,24 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 import hashlib
 import hmac
 import json
-from typing import Literal
+import uuid
 
 from fastapi import Depends, Request, Response
 
-from quantagent.api.config.settings import Settings
-from quantagent.api.errors import ForbiddenError, UnauthorizedError
-from quantagent.api.middleware import get_request_id
-
-
-LOCAL_ADMIN_ACTOR_ID = "local_admin"
-LOCAL_DEV_ACTOR_ID = "local_dev"
-LOCAL_ACTOR_TYPE = "local_single_user"
-DEVELOPMENT_BYPASS_CSRF_TOKEN = "development-bypass-csrf-token"
-
-RUNTIME_INSPECT_CAPABILITY = "runtime.inspect"
-PLUGIN_CONFIGURE_CAPABILITY = "plugin.configure"
-PLUGIN_INSTALL_CAPABILITY = "plugin.install"
-SECRET_MANAGE_CAPABILITY = "secret.manage"
-APPROVAL_APPROVE_CAPABILITY = "approval.approve"
-APPROVAL_AMEND_CAPABILITY = "approval.amend"
-EXECUTOR_DRY_RUN_CAPABILITY = "executor.dry_run"
-
-ALL_CAPABILITIES = frozenset(
-    {
-        RUNTIME_INSPECT_CAPABILITY,
-        PLUGIN_CONFIGURE_CAPABILITY,
-        PLUGIN_INSTALL_CAPABILITY,
-        SECRET_MANAGE_CAPABILITY,
-        APPROVAL_APPROVE_CAPABILITY,
-        APPROVAL_AMEND_CAPABILITY,
-        EXECUTOR_DRY_RUN_CAPABILITY,
-    }
+from quantagent.api.auth.actor import (
+    ALL_CAPABILITIES,
+    DEVELOPMENT_BYPASS_CSRF_TOKEN,
+    LOCAL_ACTOR_TYPE,
+    LOCAL_ADMIN_ACTOR_ID,
+    LOCAL_DEV_ACTOR_ID,
+    CurrentActor,
 )
-
-
-@dataclass(frozen=True)
-class CurrentActor:
-    """请求处理期间传递的脱敏身份快照，不包含 session/cookie 原文。"""
-
-    actor_id: str
-    actor_type: Literal["local_single_user"]
-    capabilities: frozenset[str]
-    csrf_token: str
-    auth_mode: Literal["session", "development_bypass"]
-
-
-@dataclass(frozen=True)
-class ActorAuditContext:
-    """供后续高风险 handler 复用的审计上下文，只保留 actor 与请求元数据。"""
-
-    actor_id: str
-    actor_type: str
-    capabilities: tuple[str, ...]
-    request_id: str
-    request_method: str
-    request_path: str
+from quantagent.api.config.settings import Settings
+from quantagent.api.http.errors import UnauthorizedError
 
 
 def _hmac_sha256(secret: str, value: str) -> str:
@@ -73,9 +30,9 @@ def _session_signature(secret: str, payload_json: str) -> str:
     return _hmac_sha256(secret, payload_json)
 
 
-def _csrf_token(secret: str, actor_id: str, expires_at: int) -> str:
+def _csrf_token(secret: str, actor_id: str, expires_at: int, session_nonce: str) -> str:
     """从 session secret、actor 和过期时间派生稳定 CSRF token。"""
-    return _hmac_sha256(secret, f"csrf:{actor_id}:{expires_at}")
+    return _hmac_sha256(secret, f"csrf:{actor_id}:{expires_at}:{session_nonce}")
 
 
 def _compare_sensitive_text(left: str, right: str) -> bool:
@@ -143,13 +100,15 @@ def issue_session(
     session_expires_at = expires_at if expires_at is not None else int(
         (datetime.now(UTC) + timedelta(seconds=app_settings.AUTH_SESSION_LIFETIME_SECONDS)).timestamp()
     )
-    csrf_token = _csrf_token(app_settings.AUTH_SESSION_SECRET or "", actor_id, session_expires_at)
+    session_nonce = uuid.uuid4().hex
+    csrf_token = _csrf_token(app_settings.AUTH_SESSION_SECRET or "", actor_id, session_expires_at, session_nonce)
     payload = {
         "sub": actor_id,
         "type": LOCAL_ACTOR_TYPE,
         "exp": session_expires_at,
         "csrf": csrf_token,
         "capabilities": sorted(capability_set),
+        "jti": session_nonce,
     }
     return _serialize_session(payload, app_settings.AUTH_SESSION_SECRET or ""), csrf_token
 
@@ -244,7 +203,7 @@ def resolve_current_actor(request: Request) -> CurrentActor:
     ):
         raise UnauthorizedError()
 
-    expected_csrf = _csrf_token(app_settings.AUTH_SESSION_SECRET or "", actor_id, expires_at)
+    expected_csrf = _csrf_token(app_settings.AUTH_SESSION_SECRET or "", actor_id, expires_at, str(payload.get("jti")))
     if not _compare_sensitive_text(csrf_token, expected_csrf):
         raise UnauthorizedError()
 
@@ -259,37 +218,3 @@ def resolve_current_actor(request: Request) -> CurrentActor:
 
 def get_current_actor(request: Request) -> CurrentActor:
     return resolve_current_actor(request)
-
-
-def require_capability(capability: str):
-    """生成 FastAPI dependency，用集中 capability 集合保护后续业务 route。"""
-    if capability not in ALL_CAPABILITIES:
-        raise ValueError(f"Unknown capability: {capability}")
-
-    def dependency(actor: CurrentActor = Depends(get_current_actor)) -> CurrentActor:
-        if capability not in actor.capabilities:
-            raise ForbiddenError()
-        return actor
-
-    return dependency
-
-
-def require_csrf(request: Request, actor: CurrentActor = Depends(get_current_actor)) -> CurrentActor:
-    """校验 cookie-session 写操作的 CSRF header，不回显提交值或期望值。"""
-    app_settings: Settings = request.app.state.settings
-    submitted_token = request.headers.get(app_settings.AUTH_CSRF_HEADER_NAME)
-    if not submitted_token or not _compare_sensitive_text(submitted_token, actor.csrf_token):
-        raise ForbiddenError("Forbidden")
-    return actor
-
-
-def build_actor_audit_context(request: Request, actor: CurrentActor) -> ActorAuditContext:
-    """构造脱敏审计上下文，供后续 Policy Gate 或审计持久化复用。"""
-    return ActorAuditContext(
-        actor_id=actor.actor_id,
-        actor_type=actor.actor_type,
-        capabilities=tuple(sorted(actor.capabilities)),
-        request_id=get_request_id(request),
-        request_method=request.method,
-        request_path=request.url.path,
-    )

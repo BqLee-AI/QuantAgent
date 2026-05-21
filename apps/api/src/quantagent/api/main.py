@@ -3,11 +3,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from quantagent.api import __version__
-from quantagent.api.exceptions import register_exception_handlers
 from quantagent.api.config.settings import Settings, settings
 from quantagent.api.db import initialize_database, shutdown_database
-from quantagent.api.middleware import RequestIdMiddleware
-from quantagent.api.routers import register_api_v1_routes
+from quantagent.api.http.exceptions import register_exception_handlers
+from quantagent.api.http.middleware import RequestIdMiddleware
+from quantagent.api.routers.v1 import register_api_v1_routes
 
 
 def create_app(app_settings: Settings | None = None) -> FastAPI:

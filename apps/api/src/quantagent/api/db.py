@@ -8,7 +8,7 @@ from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
 from quantagent.api.config.settings import Settings
-from quantagent.api.errors import ServiceUnavailableError
+from quantagent.api.http.errors import ServiceUnavailableError
 from quantagent.core.db.session import create_session_factory, create_sync_engine
 
 
