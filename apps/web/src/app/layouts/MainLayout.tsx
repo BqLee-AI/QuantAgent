@@ -1,22 +1,6 @@
 import { Link, useRouterState } from '@tanstack/react-router'
 import type { PropsWithChildren } from 'react'
-import { useAuth } from '../../shared/auth'
-
-type NavItem = {
-  label: string
-  to: string
-}
-
-const navItems: NavItem[] = [
-  { label: '事件', to: '/events' },
-  { label: '运行态', to: '/runtime' },
-  { label: '审批', to: '/approvals' },
-  { label: '插件', to: '/plugins' },
-  { label: '技能', to: '/skills' },
-  { label: '工具', to: '/tools' },
-  { label: '行业包', to: '/industries' },
-  { label: '设置', to: '/settings' },
-]
+import { listVisibleNavItems, useAuth } from '../../shared/auth'
 
 const routeLabels = new Map<string, string>([
   ['events', '事件'],
@@ -33,6 +17,7 @@ export function MainLayout({ children }: PropsWithChildren) {
   const auth = useAuth()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const breadcrumbs = getBreadcrumbs(pathname)
+  const visibleNavItems = listVisibleNavItems(auth.capabilities)
 
   return (
     <div className="app-shell">
@@ -43,7 +28,7 @@ export function MainLayout({ children }: PropsWithChildren) {
         </div>
 
         <nav className="app-nav">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <Link
               key={item.to}
               to={item.to}

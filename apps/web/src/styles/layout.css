@@ -153,3 +153,13 @@
 .app-session-logout:hover {
   background: var(--qa-color-surface-elevated);
 }
+
+.app-forbidden-screen {
+  display: grid;
+  min-height: calc(100vh - 56px - (2 * var(--qa-spacing-lg)));
+  place-items: center;
+}
+
+.app-forbidden-card {
+  width: min(520px, 100%);
+}
