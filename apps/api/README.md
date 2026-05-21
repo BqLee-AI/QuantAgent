@@ -85,10 +85,12 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 - 默认会返回统一的 `code/data/msg/error` 响应信封。
 - 请求与错误响应都会携带 `X-Request-ID`。
 - `APP_ENV=production` 时不会加载 `/api/v1/debug/*` 路由。
-- 标准 API v1 routes 放在 `src/quantagent/api/routers/`。
+- HTTP 传输层基础能力放在 `src/quantagent/api/http/`。
+- API 私有 Cookie Session 鉴权放在 `src/quantagent/api/auth/`。
+- 标准 API v1 routes 放在 `src/quantagent/api/routers/v1/`。
 - request/response DTO 放在 `src/quantagent/api/schemas/`。
 - sample 或可替换的数据边界放在 `src/quantagent/api/providers/`。
-- 标准 routes 统一通过 `quantagent.api.routers.register.register_api_v1_routes` 注册，不要继续在 `main.py` 零散 `include_router(...)`。
+- 标准 routes 统一通过 `quantagent.api.routers.v1.register.register_api_v1_routes` 注册，不要继续在 `main.py` 零散 `include_router(...)`。
 - route 应显式声明 FastAPI `response_model=ApiResponse[T]` 和 OpenAPI `tags`。
 - `GET /api/v1/version` 是最小非业务示例：它只展示 DTO、provider、envelope 和 OpenAPI 契约，不代表 runtime、plugin、approval、Agent、tool invocation、WebSocket、executor、live trading 或业务 endpoint family 已完成。
 - `/api/v1/ready` 继续是数据库 readiness probe；不要把 sample provider 和请求级 DB session dependency 混在一起。
@@ -106,7 +108,7 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 - Cookie 默认 `HttpOnly` 且 `SameSite=Lax`；`APP_ENV=production` 下要求 `Secure=true`。
 - `AUTH_ENABLED=false` 仅允许 `APP_ENV=development`；此时依赖会返回 `local_dev` actor，避免下游审计上下文为空。
 - Cookie Session 写操作通过 `X-CSRF-Token` header 做 CSRF 校验；login 豁免，logout 和受保护写操作不豁免。
-- `quantagent.api.routers.register` 中的 `STANDARD_API_V1_ROUTER_REGISTRATIONS` 与 registration helper 是 public/protected 真源；README、OpenAPI 或 route-level ad hoc dependency 只用于说明与补充，不替代该边界。
+- `quantagent.api.routers.v1.register` 中的 `STANDARD_API_V1_ROUTER_REGISTRATIONS` 与 registration helper 是 public/protected 真源；README、OpenAPI 或 route-level ad hoc dependency 只用于说明与补充，不替代该边界。
 
 ### Auth 环境变量
 

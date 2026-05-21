@@ -1,8 +1,8 @@
 ## Status
 
-- 当前状态：OpenSpec-only PR 已创建，implementation blocked。
-- 进入实现前置门槛：维护者必须在 PR #108 下明确评论“没问题”或批准。
-- 当前 change 只允许修改 `openspec/changes/refactor-api-src-layout/**`；实现代码、README 和 AGENTS 更新必须放到后续 implementation PR。
+- 当前状态：实现已完成，等待 implementation PR 收口。
+- OpenSpec-only PR #108 已获得继续实现所需确认。
+- 当前实现已完成目录迁移、文档同步和验证，剩余收口项是 implementation PR 说明与 review。
 
 ## Graph Overview
 
@@ -20,13 +20,13 @@
 - [x] B0. 确认 issue #105、`apps/api/README.md`、`apps/api/AGENTS.md`、`docs/design/01-tech-stack-and-project-structure.md` 和 `docs/design/08-api-and-websocket-design.md` 是本 change 的输入真源。
 - [x] V0. 运行 `openspec validate refactor-api-src-layout --type change --strict --json`，确认 proposal、design、spec 和 tasks 通过 strict 校验。
 - [x] R0. 创建 OpenSpec-only PR，范围只包含 `openspec/changes/refactor-api-src-layout/**`。
-- [ ] R1. 等待维护者在 OpenSpec-only PR 下明确评论“没问题”或批准，再进入代码实现。
-- [ ] B1. 创建或确认 implementation 分支基于已审核的 OpenSpec change 和最新目标主线；在 R1 完成前不得开始源码迁移。
-- [ ] B2. 用 `rg "quantagent\\.api\\.(auth|middleware|responses|errors|exceptions|routers\\.register)" apps/api/src apps/api/README.md apps/api/AGENTS.md` 确认旧 import 和文档引用面，并产出最小兼容 re-export 清单。
+- [x] R1. 等待维护者在 OpenSpec-only PR 下明确评论“没问题”或批准，再进入代码实现。
+- [x] B1. 创建或确认 implementation 分支基于已审核的 OpenSpec change 和最新目标主线；在 R1 完成前不得开始源码迁移。
+- [x] B2. 用 `rg "quantagent\\.api\\.(auth|middleware|responses|errors|exceptions|routers\\.register)" apps/api/src apps/api/README.md apps/api/AGENTS.md` 确认旧 import 和文档引用面，并产出最小兼容 re-export 清单。
 
 ## Parallel Work After B2
 
-- [ ] P1. HTTP 传输层迁移。
+- [x] P1. HTTP 传输层迁移。
   - 输入：B2 兼容清单、`design.md` Decision 1、`spec.md` 的 HTTP 边界 requirement。
   - 输出：响应信封、API 层错误类型、异常处理注册和 Request ID middleware 落入明确 HTTP 边界。
   - 写入边界：`apps/api/src/quantagent/api/http/**` 或同等 HTTP 边界目录，旧 `responses.py`、`errors.py`、`exceptions.py`、`middleware.py` 的最小 re-export，相关 import 和测试 import。
@@ -34,7 +34,7 @@
   - 并行条件：不修改 Auth 行为和 API v1 registration 语义。
   - 节点验证：错误响应仍使用 `code/data/msg/error` envelope，响应 header 与错误体中的 `request_id` 保持一致。
 
-- [ ] P2. API 私有 Auth 模块拆分。
+- [x] P2. API 私有 Auth 模块拆分。
   - 输入：B2 兼容清单、`design.md` Decision 2、`api-cookie-session-auth` stable spec。
   - 输出：actor/capability、session/cookie、CSRF/dependency 和 audit context 拆入 `auth/` 边界；`refresh_session` 等活动续期逻辑归入 session/cookie 边界。
   - 写入边界：`apps/api/src/quantagent/api/auth/**` 或同等 auth package，旧 `auth.py` 的最小 re-export，`routers/auth.py` 中 auth import，相关测试 import。
@@ -42,7 +42,7 @@
   - 并行条件：不修改 route path、OpenAPI tags、public/protected registration 真源。
   - 节点验证：login/logout/me、development auth bypass、production secure cookie 校验、session 签名、`/me` session refresh、capability guard 和 CSRF guard 行为不变。
 
-- [ ] P3. API v1 route registration 边界迁移。
+- [x] P3. API v1 route registration 边界迁移。
   - 输入：B2 兼容清单、`design.md` Decision 3、`spec.md` 的 route registration requirement。
   - 输出：标准 API v1 route、debug route 和 registration helper 收敛到显式 `routers/v1/` 边界。
   - 写入边界：`apps/api/src/quantagent/api/routers/v1/**` 或同等 v1 route 边界，旧 `routers/register.py` 和旧 route 模块的最小 re-export，registration tests。
@@ -52,14 +52,14 @@
 
 ## Merge / Integration Nodes
 
-- [ ] M1. 合并 P1/P2/P3 后统一收敛内部 import 和兼容入口。
+- [x] M1. 合并 P1/P2/P3 后统一收敛内部 import 和兼容入口。
   - 输入：P1、P2、P3 输出。
   - 输出：内部引用使用新路径；只为 B2 清单中的高风险旧入口保留薄 re-export；re-export 只转发新路径符号，不写入新逻辑。
   - 写入边界：`apps/api/src/quantagent/api/**`、`apps/api/src/tests/**`。
   - 依赖：P1、P2、P3。
   - 验证：运行 `rg "quantagent\\.api\\.(auth|middleware|responses|errors|exceptions|routers\\.register)" apps/api/src apps/api/README.md apps/api/AGENTS.md`，逐项解释保留命中是否属于已确认兼容入口。
 
-- [ ] M2. 人工确认 API 外部行为未变。
+- [x] M2. 人工确认 API 外部行为未变。
   - 输入：M1 后代码。
   - 输出：现有 API 路径、状态码、response_model、tags、envelope、public allowlist、protected-by-default、CSRF、`/me` session refresh、production secure cookie 和 debug production gating 未回归。
   - 写入边界：无，发现回归时回到对应 P/M 节点修复。
@@ -68,14 +68,14 @@
 
 ## Documentation Nodes
 
-- [ ] D1. 更新 `apps/api/README.md`。
+- [x] D1. 更新 `apps/api/README.md`。
   - 输入：M1 后实际代码结构。
   - 输出：目录说明、新增 route 流程、auth/http/router 边界和最小验证命令与实际代码一致。
   - 写入边界：`apps/api/README.md`。
   - 依赖：M1。
   - 验证：README 不再引导新增代码使用旧路径，且仍说明 public/protected allowlist、Cookie Session、CSRF 和 debug production gating。
 
-- [ ] D2. 更新 `apps/api/AGENTS.md`。
+- [x] D2. 更新 `apps/api/AGENTS.md`。
   - 输入：M1 后实际代码结构。
   - 输出：关键目录索引和本地规则与实际代码一致，明确不新增空的 `services/repositories/domain/models/usecases` 等目录。
   - 写入边界：`apps/api/AGENTS.md`。
@@ -85,17 +85,17 @@
 ## Review Checkpoints
 
 - [x] R0. OpenSpec-only PR 创建后接受维护者 review。
-- [ ] R1. 维护者明确评论“没问题”或批准前，不进入 implementation PR。
+- [x] R1. 维护者明确评论“没问题”或批准前，不进入 implementation PR。
 - [ ] R2. implementation PR 说明必须链接 issue #105 和 `refactor-api-src-layout` change，说明依据、改动摘要、验证结果、最小兼容入口和未验证风险。
-- [ ] R3. 如果实现发现 change 边界需要调整，先补 OpenSpec artifacts 并重新完成 R0/R1，不在 implementation PR 中夹带未审核的大幅 spec 修改。
+- [x] R3. 如果实现发现 change 边界需要调整，先补 OpenSpec artifacts 并重新完成 R0/R1，不在 implementation PR 中夹带未审核的大幅 spec 修改。
 
 ## Validation Nodes
 
 - [x] V0. OpenSpec 校验：`openspec validate refactor-api-src-layout --type change --strict --json`。
-- [ ] V1. 实现分支基线验证：`cd apps/api && uv run python -m unittest discover -s src/tests`，在迁移前执行。
-- [ ] V2. 迁移后 API 验证：`cd apps/api && uv run python -m unittest discover -s src/tests`。
-- [ ] V3. 文档路径一致性检查：`rg "routers/register|routers/v1|http/|auth/" apps/api/README.md apps/api/AGENTS.md apps/api/src apps/api/src/tests`，确认旧路径只作为已登记兼容入口出现。
-- [ ] V4. OpenSpec 收口校验：如 implementation 期间修改本 change artifacts，再运行 `openspec validate refactor-api-src-layout --type change --strict --json`。
+- [x] V1. 实现分支基线验证：`cd apps/api && uv run python -m unittest discover -s src/tests`，在迁移前执行。
+- [x] V2. 迁移后 API 验证：`cd apps/api && uv run python -m unittest discover -s src/tests`。
+- [x] V3. 文档路径一致性检查：`rg "routers/register|routers/v1|http/|auth/" apps/api/README.md apps/api/AGENTS.md apps/api/src apps/api/src/tests`，确认旧路径只作为已登记兼容入口出现。
+- [x] V4. OpenSpec 收口校验：如 implementation 期间修改本 change artifacts，再运行 `openspec validate refactor-api-src-layout --type change --strict --json`。
 
 ## Multi-Agent Plan
 

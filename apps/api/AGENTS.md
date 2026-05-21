@@ -35,13 +35,11 @@ apps/api/
     │       ├── main.py        # FastAPI app 工厂和运行入口
     │       ├── config/        # API 本地配置
     │       ├── db.py          # 应用生命周期数据库初始化与请求级 Session 依赖
-    │       ├── middleware.py  # 请求中间件
-    │       ├── responses.py   # 响应信封模型
-    │       ├── errors.py      # API 层业务异常类型
-    │       ├── exceptions.py  # 异常处理注册
+    │       ├── http/          # HTTP 传输层基础能力
+    │       ├── auth/          # API 私有 Cookie Session 鉴权
     │       ├── schemas/       # API request/response DTO
     │       ├── providers/     # sample data 或可替换 provider seam
-    │       └── routers/       # HTTP 路由
+    │       └── routers/v1/    # 标准 API v1 路由与注册真源
     └── tests/                 # API 测试
 ```
 
@@ -61,7 +59,7 @@ apps/api/
 - 核心领域逻辑、共享数据库能力、跨应用配置和可复用基础设施应下沉到 `packages/core`。
 - 新增公开接口默认放在 `/api/v1` 前缀下，除非已有 spec 明确要求其他版本或路径。
 - 新增业务 API 时遵守 `docs/design/08-api-and-websocket-design.md` 的资源边界：REST 资源为主，副作用操作放在资源下的 `actions` 路径。
-- 标准 API v1 routes 统一通过 `quantagent.api.routers.register.register_api_v1_routes` 注册；不要在 `main.py` 零散新增 `include_router(...)`。
+- 标准 API v1 routes 统一通过 `quantagent.api.routers.v1.register.register_api_v1_routes` 注册；不要在 `main.py` 零散新增 `include_router(...)`。
 - `debug` 路由只能用于非生产诊断；新增调试入口必须保持 `APP_ENV=production` 下不可见，并且生产 OpenAPI 不应暴露 debug 路径。
 - `GET /api/v1/health` 是存活探针，不应依赖数据库、外部服务或业务表结构。
 - `GET /api/v1/ready` 是数据库 readiness probe，只验证已配置数据库可达；不要把 sample provider 和请求级 DB session dependency 混在一起。
