@@ -5,7 +5,6 @@ from datetime import UTC, datetime, timedelta
 import hashlib
 import hmac
 import json
-import uuid
 
 from fastapi import Depends, Request, Response
 
@@ -30,9 +29,9 @@ def _session_signature(secret: str, payload_json: str) -> str:
     return _hmac_sha256(secret, payload_json)
 
 
-def _csrf_token(secret: str, actor_id: str, expires_at: int, session_nonce: str) -> str:
+def _csrf_token(secret: str, actor_id: str, expires_at: int) -> str:
     """从 session secret、actor 和过期时间派生稳定 CSRF token。"""
-    return _hmac_sha256(secret, f"csrf:{actor_id}:{expires_at}:{session_nonce}")
+    return _hmac_sha256(secret, f"csrf:{actor_id}:{expires_at}")
 
 
 def _compare_sensitive_text(left: str, right: str) -> bool:
@@ -100,15 +99,13 @@ def issue_session(
     session_expires_at = expires_at if expires_at is not None else int(
         (datetime.now(UTC) + timedelta(seconds=app_settings.AUTH_SESSION_LIFETIME_SECONDS)).timestamp()
     )
-    session_nonce = uuid.uuid4().hex
-    csrf_token = _csrf_token(app_settings.AUTH_SESSION_SECRET or "", actor_id, session_expires_at, session_nonce)
+    csrf_token = _csrf_token(app_settings.AUTH_SESSION_SECRET or "", actor_id, session_expires_at)
     payload = {
         "sub": actor_id,
         "type": LOCAL_ACTOR_TYPE,
         "exp": session_expires_at,
         "csrf": csrf_token,
         "capabilities": sorted(capability_set),
-        "jti": session_nonce,
     }
     return _serialize_session(payload, app_settings.AUTH_SESSION_SECRET or ""), csrf_token
 
@@ -203,7 +200,7 @@ def resolve_current_actor(request: Request) -> CurrentActor:
     ):
         raise UnauthorizedError()
 
-    expected_csrf = _csrf_token(app_settings.AUTH_SESSION_SECRET or "", actor_id, expires_at, str(payload.get("jti")))
+    expected_csrf = _csrf_token(app_settings.AUTH_SESSION_SECRET or "", actor_id, expires_at)
     if not _compare_sensitive_text(csrf_token, expected_csrf):
         raise UnauthorizedError()
 
