@@ -86,7 +86,7 @@
 
 - [x] R0. OpenSpec-only PR 创建后接受维护者 review。
 - [x] R1. 维护者明确评论“没问题”或批准前，不进入 implementation PR。
-- [ ] R2. implementation PR 说明必须链接 issue #105 和 `refactor-api-src-layout` change，说明依据、改动摘要、验证结果、最小兼容入口和未验证风险。
+- [x] R2. implementation PR 说明必须链接 issue #105 和 `refactor-api-src-layout` change，说明依据、改动摘要、验证结果、最小兼容入口和未验证风险。
 - [x] R3. 如果实现发现 change 边界需要调整，先补 OpenSpec artifacts 并重新完成 R0/R1，不在 implementation PR 中夹带未审核的大幅 spec 修改。
 
 ## Validation Nodes
