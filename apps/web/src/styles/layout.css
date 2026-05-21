@@ -77,6 +77,8 @@
 .app-topbar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--qa-spacing-md);
   min-width: 0;
   padding: 0 var(--qa-spacing-lg);
   border-bottom: 1px solid var(--qa-color-hairline);
@@ -88,6 +90,7 @@
   display: flex;
   align-items: center;
   min-width: 0;
+  flex: 1;
   color: var(--qa-color-muted);
   font-size: 14px;
   font-weight: 600;
@@ -108,4 +111,45 @@
   min-width: 0;
   overflow: auto;
   padding: var(--qa-spacing-lg);
+}
+
+.app-session {
+  display: flex;
+  align-items: center;
+  gap: var(--qa-spacing-sm);
+  min-width: 0;
+}
+
+.app-session-badge,
+.app-session-actor {
+  overflow: hidden;
+  max-width: 220px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.app-session-badge {
+  color: var(--qa-color-trading-up);
+}
+
+.app-session-actor {
+  color: var(--qa-color-muted-strong);
+}
+
+.app-session-logout {
+  min-height: 32px;
+  padding: 0 var(--qa-spacing-sm);
+  border: 1px solid var(--qa-color-hairline-strong);
+  border-radius: var(--qa-radius-lg);
+  background: var(--qa-color-canvas);
+  color: var(--qa-color-ink);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.app-session-logout:hover {
+  background: var(--qa-color-surface-elevated);
 }

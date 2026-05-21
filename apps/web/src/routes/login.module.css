@@ -1,0 +1,113 @@
+.shell {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: var(--qa-spacing-lg);
+  background: var(--qa-color-canvas);
+}
+
+.panel {
+  display: grid;
+  gap: var(--qa-spacing-lg);
+  width: min(100%, 420px);
+  padding: var(--qa-spacing-xl);
+  border: 1px solid var(--qa-color-hairline);
+  border-radius: var(--qa-radius-lg);
+  background: var(--qa-color-canvas);
+  box-shadow: var(--qa-shadow-elevated);
+}
+
+.header {
+  display: grid;
+  gap: var(--qa-spacing-xs);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--qa-spacing-sm);
+  color: var(--qa-color-ink);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.mark {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: var(--qa-radius-lg);
+  background: var(--qa-color-primary);
+  color: var(--qa-color-on-primary);
+  font-size: 14px;
+}
+
+.title {
+  margin: 0;
+  color: var(--qa-color-ink);
+  font-size: 24px;
+  line-height: 1.25;
+}
+
+.copy {
+  margin: 0;
+  color: var(--qa-color-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.form {
+  display: grid;
+  gap: var(--qa-spacing-md);
+}
+
+.field {
+  display: grid;
+  gap: var(--qa-spacing-xs);
+}
+
+.label {
+  color: var(--qa-color-muted-strong);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.input {
+  min-height: 42px;
+  width: 100%;
+  border: 1px solid var(--qa-color-hairline-strong);
+  border-radius: var(--qa-radius-lg);
+  padding: 0 var(--qa-spacing-md);
+  color: var(--qa-color-ink);
+  font: inherit;
+}
+
+.input:focus {
+  border-color: var(--qa-color-primary);
+  outline: 2px solid rgb(59 130 246 / 0.18);
+  outline-offset: 1px;
+}
+
+.button {
+  min-height: 42px;
+  border: 1px solid var(--qa-color-primary);
+  border-radius: var(--qa-radius-lg);
+  background: var(--qa-color-primary);
+  color: var(--qa-color-on-primary);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.button:disabled {
+  border-color: var(--qa-color-primary-disabled);
+  background: var(--qa-color-primary-disabled);
+  cursor: not-allowed;
+}
+
+.error {
+  margin: 0;
+  color: var(--qa-color-trading-down);
+  font-size: 13px;
+  line-height: 1.5;
+}

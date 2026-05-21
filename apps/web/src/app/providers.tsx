@@ -5,6 +5,7 @@ import {
   QueryClientProvider,
   type QueryClientConfig,
 } from '@tanstack/react-query';
+import { AuthProvider } from '../shared/auth';
 import { RuntimeConfigProvider, type RuntimeConfig } from '../shared/config';
 import { heroUITheme } from '../styles/heroui-theme';
 
@@ -72,7 +73,9 @@ export function AppProviders({
     <RuntimeConfigProvider value={config}>
       <div className="heroui-theme" data-theme="light" style={heroUITheme}>
         <HeroUIProvider>
-          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>{children}</AuthProvider>
+          </QueryClientProvider>
         </HeroUIProvider>
       </div>
     </RuntimeConfigProvider>
