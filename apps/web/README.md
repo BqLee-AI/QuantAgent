@@ -35,6 +35,10 @@
   actor metadata, capabilities, `csrf_token`, and non-sensitive status flags.
 - Protected writes and logout use `X-CSRF-Token` through `src/shared/api`;
   page components should not handwrite auth headers or raw `fetch` calls.
+- Capability policy lives under `src/shared/auth/`. Route guards, navigation
+  visibility, and action availability should consume that shared policy for UX
+  and misoperation prevention only; the back-end capability guard remains the
+  security boundary.
 - When `VITE_AUTH_ENABLED=false`, the frontend only enters the dashboard after
   `/me` returns a development actor, and the shell shows an auth-disabled
   development marker.

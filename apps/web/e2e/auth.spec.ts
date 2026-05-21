@@ -40,6 +40,16 @@ function unauthorized() {
   };
 }
 
+function forbiddenEnvelope() {
+  return {
+    code: 403,
+    data: null,
+    msg: '当前账号没有执行该操作的权限。',
+    request_id: 'req-e2e-forbidden',
+    trace_id: 'trace-e2e-forbidden',
+  };
+}
+
 async function mockAuth(
   page: Page,
   options: { actor?: AuthActor; authenticated?: boolean } = {},
@@ -106,23 +116,23 @@ test('redirects protected routes to login and restores the original target', asy
   await page.goto('/events');
 
   await expect(page).toHaveURL(/\/login\?redirect=%2Fevents/);
-  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '登录' })).toBeVisible();
 
-  await page.getByLabel('Administrator password').fill('correct-password');
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByLabel('管理员密码').fill('correct-password');
+  await page.getByRole('button', { name: '登录' }).click();
 
   await expect(page).toHaveURL(/\/events/);
-  await expect(page.locator('.page-title')).toHaveText('Events');
+  await expect(page.locator('.page-title')).toHaveText('事件');
 });
 
 test('shows login failure without leaking submitted password', async ({ page }) => {
   await mockAuth(page);
 
   await page.goto('/login');
-  await page.getByLabel('Administrator password').fill('wrong-password');
-  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.getByLabel('管理员密码').fill('wrong-password');
+  await page.getByRole('button', { name: '登录' }).click();
 
-  await expect(page.getByRole('alert')).toHaveText('Password is invalid.');
+  await expect(page.getByRole('alert')).toHaveText('密码不正确。');
   await expect(page.getByText('wrong-password')).toHaveCount(0);
 });
 
@@ -131,10 +141,10 @@ test('restores an existing session through /me and logs out with CSRF', async ({
 
   await page.goto('/events');
 
-  await expect(page.locator('.page-title')).toHaveText('Events');
+  await expect(page.locator('.page-title')).toHaveText('事件');
   await expect(page.getByText('local_admin')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Logout' }).click();
+  await page.getByRole('button', { name: '退出登录' }).click();
 
   await expect(page).toHaveURL(/\/login/);
   expect(auth.getLogoutCsrf()).toBe('csrf-e2e');
@@ -148,6 +158,45 @@ test('auth-disabled development actor enters the dashboard with a visible marker
 
   await page.goto('/events');
 
-  await expect(page.getByText('Development auth disabled')).toBeVisible();
-  await expect(page.locator('.page-title')).toHaveText('Events');
+  await expect(page.getByText('开发环境已关闭鉴权')).toBeVisible();
+  await expect(page.locator('.page-title')).toHaveText('事件');
+});
+
+test('authenticated users without route capability stay in forbidden flow instead of returning to login', async ({
+  page,
+}) => {
+  await mockAuth(page, {
+    actor: {
+      ...actor,
+      capabilities: ['runtime.inspect'],
+    },
+    authenticated: true,
+  });
+
+  await page.goto('/plugins');
+
+  await expect(page).not.toHaveURL(/\/login/);
+  await expect(page.getByRole('heading', { name: '当前页面不可访问' })).toBeVisible();
+  await expect(page.getByText('当前账号没有执行该操作的权限。')).toBeVisible();
+  await expect(page.getByRole('link', { name: '插件' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '返回可访问入口' })).toBeVisible();
+});
+
+test('forbidden API responses preserve diagnostics without leaking sensitive values', async ({ page }) => {
+  await page.route('**/api/v1/me', async (route) => {
+    await route.fulfill({
+      body: JSON.stringify(forbiddenEnvelope()),
+      contentType: 'application/json',
+      status: 403,
+    });
+  });
+
+  await page.goto('/plugins');
+
+  await expect(page.getByRole('heading', { name: '当前页面不可访问' })).toBeVisible();
+  await expect(page.getByText('request_id')).toBeVisible();
+  await expect(page.getByText('req-e2e-forbidden')).toBeVisible();
+  await expect(page.getByText('trace_id')).toBeVisible();
+  await expect(page.getByText('trace-e2e-forbidden')).toBeVisible();
+  await expect(page.getByText('correct-password')).toHaveCount(0);
 });
