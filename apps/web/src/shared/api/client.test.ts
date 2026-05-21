@@ -37,7 +37,7 @@ describe("createApiClient", () => {
     expect(client.instance.defaults.withCredentials).toBe(true);
   });
 
-  it("injects Authorization when auth is enabled", async () => {
+  it("injects CSRF tokens into protected write requests", async () => {
     const adapter: Adapter = vi.fn(async (config) =>
       createEnvelopeResponse(config, {
         code: 0,
@@ -48,18 +48,17 @@ describe("createApiClient", () => {
 
     const client = createApiClient({
       adapter,
-      authEnabled: true,
-      getAccessToken: () => "test-token",
+      getCsrfToken: () => "csrf-test-token",
     });
 
-    await client.get<{ ok: boolean }>("/me");
+    await client.post<{ name: string }, { ok: boolean }>("/items", { name: "demo" });
 
     const requestConfig = vi.mocked(adapter).mock.calls[0]?.[0];
     const headers = AxiosHeaders.from(requestConfig?.headers);
-    expect(headers.get("Authorization")).toBe("Bearer test-token");
+    expect(headers.get("X-CSRF-Token")).toBe("csrf-test-token");
   });
 
-  it("does not inject Authorization when auth is disabled", async () => {
+  it("does not inject CSRF tokens into read requests", async () => {
     const adapter: Adapter = vi.fn(async (config) =>
       createEnvelopeResponse(config, {
         code: 0,
@@ -70,15 +69,39 @@ describe("createApiClient", () => {
 
     const client = createApiClient({
       adapter,
-      authEnabled: false,
-      getAccessToken: () => "test-token",
+      getCsrfToken: () => "csrf-test-token",
     });
 
     await client.get<{ ok: boolean }>("/me");
 
     const requestConfig = vi.mocked(adapter).mock.calls[0]?.[0];
     const headers = AxiosHeaders.from(requestConfig?.headers);
-    expect(headers.get("Authorization")).toBeUndefined();
+    expect(headers.get("X-CSRF-Token")).toBeUndefined();
+  });
+
+  it("allows callers to skip CSRF injection for login", async () => {
+    const adapter: Adapter = vi.fn(async (config) =>
+      createEnvelopeResponse(config, {
+        code: 0,
+        data: { ok: true },
+        msg: "ok",
+      }),
+    );
+
+    const client = createApiClient({
+      adapter,
+      getCsrfToken: () => "csrf-test-token",
+    });
+
+    await client.post<{ password: string }, { ok: boolean }>(
+      "/auth/login",
+      { password: "secret" },
+      { skipCsrf: true },
+    );
+
+    const requestConfig = vi.mocked(adapter).mock.calls[0]?.[0];
+    const headers = AxiosHeaders.from(requestConfig?.headers);
+    expect(headers.get("X-CSRF-Token")).toBeUndefined();
   });
 
   it("auto-unpacks successful envelopes", async () => {
@@ -154,100 +177,7 @@ describe("createApiClient", () => {
     });
   });
 
-  it("retries once after a successful 401 refresh", async () => {
-    let requestCount = 0;
-    const recover = vi.fn(async () => undefined);
-    const adapter: Adapter = vi.fn(async (config) => {
-      requestCount += 1;
-
-      if (requestCount === 1) {
-        throw new AxiosError(
-          "Unauthorized",
-          "ERR_BAD_REQUEST",
-          config,
-          undefined,
-          {
-            config,
-            data: {
-              code: 401,
-              data: null,
-              msg: "unauthorized",
-            },
-            headers: {},
-            status: 401,
-            statusText: "Unauthorized",
-          },
-        );
-      }
-
-      return createEnvelopeResponse(config, {
-        code: 0,
-        data: { ok: true },
-        msg: "ok",
-      });
-    });
-
-    const client = createApiClient({
-      adapter,
-      refreshAccessToken: recover,
-    });
-
-    await expect(client.get<{ ok: boolean }>("/refresh")).resolves.toEqual({
-      ok: true,
-    });
-    expect(recover).toHaveBeenCalledTimes(1);
-  });
-
-  it("shares one refresh promise across concurrent 401 responses", async () => {
-    let attempts = 0;
-    const recover = vi.fn(async () => {
-      await Promise.resolve();
-      return undefined;
-    });
-    const adapter: Adapter = vi.fn(async (config) => {
-      attempts += 1;
-
-      if (attempts <= 2) {
-        throw new AxiosError(
-          "Unauthorized",
-          "ERR_BAD_REQUEST",
-          config,
-          undefined,
-          {
-            config,
-            data: {
-              code: 401,
-              data: null,
-              msg: "unauthorized",
-            },
-            headers: {},
-            status: 401,
-            statusText: "Unauthorized",
-          },
-        );
-      }
-
-      return createEnvelopeResponse(config, {
-        code: 0,
-        data: { ok: true },
-        msg: "ok",
-      });
-    });
-
-    const client = createApiClient({
-      adapter,
-      refreshAccessToken: recover,
-    });
-
-    await Promise.all([
-      client.get<{ ok: boolean }>("/one", { dedupeKey: false }),
-      client.get<{ ok: boolean }>("/two", { dedupeKey: false }),
-    ]);
-
-    expect(recover).toHaveBeenCalledTimes(1);
-  });
-
-  it("calls onUnauthorized when refresh fails", async () => {
+  it("calls onUnauthorized when requests return 401", async () => {
     const onUnauthorized = vi.fn();
     const client = createApiClient({
       adapter: async (config) => {
@@ -270,57 +200,31 @@ describe("createApiClient", () => {
         );
       },
       onUnauthorized,
-      refreshAccessToken: async () => {
-        throw new Error("refresh failed");
-      },
     });
 
-    await expect(client.get("/refresh-fail")).rejects.toBeInstanceOf(ApiError);
+    await expect(client.get("/unauthorized")).rejects.toBeInstanceOf(ApiError);
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
   });
 
-  it("propagates replay errors after a successful refresh", async () => {
-    let requestCount = 0;
+  it("does not replay 401 responses through refresh token flows", async () => {
     const onError = vi.fn();
     const onUnauthorized = vi.fn();
     const adapter: Adapter = vi.fn(async (config) => {
-      requestCount += 1;
-
-      if (requestCount === 1) {
-        throw new AxiosError(
-          "Unauthorized",
-          "ERR_BAD_REQUEST",
-          config,
-          undefined,
-          {
-            config,
-            data: {
-              code: 401,
-              data: null,
-              msg: "unauthorized",
-            },
-            headers: {},
-            status: 401,
-            statusText: "Unauthorized",
-          },
-        );
-      }
-
       throw new AxiosError(
-        "Server error",
-        "ERR_BAD_RESPONSE",
+        "Unauthorized",
+        "ERR_BAD_REQUEST",
         config,
         undefined,
         {
           config,
           data: {
-            code: 50_000,
+            code: 401,
             data: null,
-            msg: "server exploded",
+            msg: "unauthorized",
           },
           headers: {},
-          status: 500,
-          statusText: "Server Error",
+          status: 401,
+          statusText: "Unauthorized",
         },
       );
     });
@@ -329,23 +233,16 @@ describe("createApiClient", () => {
       adapter,
       onError,
       onUnauthorized,
-      refreshAccessToken: async () => undefined,
     });
 
-    await expect(client.get("/refresh-then-fail")).rejects.toMatchObject({
-      code: 50_000,
-      msg: "server exploded",
-      status: 500,
+    await expect(client.get("/session-expired")).rejects.toMatchObject({
+      code: 401,
+      msg: "unauthorized",
+      status: 401,
     });
-    expect(onUnauthorized).not.toHaveBeenCalled();
+    expect(vi.mocked(adapter)).toHaveBeenCalledTimes(1);
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
     expect(onError).toHaveBeenCalledTimes(1);
-    expect(onError).toHaveBeenCalledWith(
-      expect.objectContaining({
-        code: 50_000,
-        msg: "server exploded",
-        status: 500,
-      }),
-    );
   });
 
   it("reuses inflight GET requests by default", async () => {
@@ -432,8 +329,7 @@ describe("createApiClient", () => {
 
     const client = createApiClient({
       adapter,
-      authEnabled: true,
-      getAccessToken: () => "test-token",
+      getCsrfToken: () => "csrf-test-token",
     });
 
     await expect(invoke(client, { signal: controller.signal })).resolves.toEqual({
@@ -442,7 +338,7 @@ describe("createApiClient", () => {
 
     const requestConfig = vi.mocked(adapter).mock.calls[0]?.[0];
     const headers = AxiosHeaders.from(requestConfig?.headers);
-    expect(headers.get("Authorization")).toBe("Bearer test-token");
+    expect(headers.get("X-CSRF-Token")).toBe("csrf-test-token");
     expect(requestConfig?.signal).toBe(controller.signal);
   });
 
