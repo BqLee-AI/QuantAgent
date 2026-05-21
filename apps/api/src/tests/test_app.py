@@ -442,7 +442,7 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertNotIn(self.settings.AUTH_COOKIE_NAME, str(body))
         self.assertIn("HttpOnly", response.headers["set-cookie"])
 
-    def test_me_refreshes_session_cookie_and_csrf_token(self) -> None:
+    def test_me_sets_cookie_and_returns_csrf_token(self) -> None:
         self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
 
         response = self.client.get("/api/v1/me")
