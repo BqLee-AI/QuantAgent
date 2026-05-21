@@ -20,9 +20,10 @@
 
 ## 4. API 私有 Auth 模块拆分
 
-- [ ] 4.1 将当前 Cookie Session 鉴权拆入 `auth/` 边界，按 actor/capability、session/cookie、CSRF/dependency 和 audit context 拆分职责。
-- [ ] 4.2 保持 login/logout/me、development auth bypass、production secure cookie 校验、session 签名、capability guard 和 CSRF guard 行为不变。
-- [ ] 4.3 确认 auth 模块仍留在 `apps/api`，不下沉到 `packages/core`，不扩展为 RBAC、多用户、OAuth 或 SSO。
+- [ ] 4.1 将当前 Cookie Session 鉴权拆入 `auth/` 边界，按 actor/capability、session/cookie、CSRF/dependency 和 audit context 拆分职责；`refresh_session` 等活动续期逻辑归入 session/cookie 边界。
+- [ ] 4.2 保持 login/logout/me、development auth bypass、production secure cookie 校验、session 签名、`/me` session refresh、capability guard 和 CSRF guard 行为不变。
+- [ ] 4.3 确认 `/api/v1/me` 在 session 模式下仍刷新 HttpOnly session cookie 和 `csrf_token`，development auth bypass 下仍不签发 session cookie。
+- [ ] 4.4 确认 auth 模块仍留在 `apps/api`，不下沉到 `packages/core`，不扩展为 RBAC、多用户、OAuth 或 SSO。
 
 ## 5. API v1 路由边界迁移
 
@@ -41,6 +42,6 @@
 
 - [ ] 7.1 运行 `cd apps/api && uv run python -m unittest discover -s src/tests`，确认 API runtime 和 OpenAPI 契约测试通过。
 - [ ] 7.2 人工确认 `/api/v1/health`、`/api/v1/ready`、`/api/v1/version`、`/api/v1/auth/login`、`/api/v1/auth/logout` 和 `/api/v1/me` 未发生路径、状态码、response_model、tags 或 envelope 行为变化。
-- [ ] 7.3 人工确认 public allowlist、protected-by-default、CSRF、production secure cookie 和 debug production gating 未回归。
+- [ ] 7.3 人工确认 public allowlist、protected-by-default、CSRF、`/me` session refresh、production secure cookie 和 debug production gating 未回归。
 - [ ] 7.4 在实现 PR 说明中链接 issue #105 和 `refactor-api-src-layout` change，说明依据、改动摘要、验证结果、最小兼容入口和未验证风险。
 - [ ] 7.5 确认实现 PR 不混入 OpenSpec-only 审核前新增的大幅 spec 修改；如实现发现 change 边界需要调整，先补 OpenSpec artifacts 并重新完成审核门槛。

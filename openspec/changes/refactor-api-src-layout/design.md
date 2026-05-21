@@ -36,7 +36,7 @@ issue #105 要求先通过 OpenSpec 明确目录重构边界，再进入实现�
 
 `auth/` 承接当前 `auth.py` 的现有职责，并按 actor/capability、session/cookie、CSRF/dependency、audit context 拆分。该模块仍属于 `apps/api` 私有鉴权边界，不因为拆目录而升级为共享鉴权包。
 
-实现阶段的默认拆分是把 actor model、capability 常量和 guard、session 签发/解析、cookie 设置/清理、CSRF 校验、FastAPI dependency 和 audit context 放入 `auth/` 下清晰命名的模块；模块名可以随现有代码形态调整，但不得继续让单个文件承载全部职责。
+实现阶段的默认拆分是把 actor model、capability 常量和 guard、session 签发/解析/刷新、cookie 设置/清理、CSRF 校验、FastAPI dependency 和 audit context 放入 `auth/` 下清晰命名的模块；模块名可以随现有代码形态调整，但不得继续让单个文件承载全部职责。`refresh_session` 这类活动续期能力应留在 session/cookie 边界内，迁移后仍只能基于当前 `CurrentActor` 的 actor id 和 capability snapshot 重签 session，不能绕过 session guard 扩大权限。
 
 替代方案是把鉴权能力下沉到 `packages/core`。当前只有 FastAPI 浏览器 Cookie Session 使用方，没有 worker、scheduler 或其他 package 复用需求；提前下沉会扩大公共契约，因此不采用。
 
@@ -68,8 +68,8 @@ issue #105 要求先通过 OpenSpec 明确目录重构边界，再进入实现�
   → Mitigation: 保留现有 route 定义语义，并运行 API runtime 与 OpenAPI 契约测试。
 - [Risk] 旧 import 路径保留过多，导致新旧路径长期并存。  
   → Mitigation: 只保留高风险公共入口薄 re-export，新增代码和文档统一指向新路径。
-- [Risk] 拆分 `auth.py` 时误改 session、cookie、CSRF 或 capability 行为。  
-  → Mitigation: 迁移前后复用现有测试断言，新增必要 import 边界测试时不得放宽行为验收。
+- [Risk] 拆分 `auth.py` 时误改 session、cookie、CSRF、`/me` 活动续期或 capability 行为。
+  → Mitigation: 迁移前后复用现有测试断言，特别保留 `/me` 在 session 模式下刷新 HttpOnly cookie 和 `csrf_token`、development bypass 下不签发 session 的断言；新增必要 import 边界测试时不得放宽行为验收。
 - [Risk] 新目录被误解为 API 层可以承载业务核心逻辑。  
   → Mitigation: README 和 AGENTS 明确禁止新增空的 `services/repositories/domain/models/usecases` 目录，并重申 `apps/api` 只承载 HTTP 边界。
 - [Risk] 文档和实际结构再次漂移。  

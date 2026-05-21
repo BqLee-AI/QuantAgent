@@ -14,6 +14,7 @@
 
 - **WHEN** 实现迁移当前本地 Cookie Session 鉴权代码
 - **THEN** actor/capability、session/cookie、CSRF/dependency 和 audit context 职责被拆入明确的 auth 模块边界
+- **AND** session refresh 逻辑仍属于 session/cookie 边界，并且只基于当前 `CurrentActor` 的 actor id 和 capability snapshot 重签 session
 - **AND** 该模块仍属于 `apps/api` 私有能力
 - **AND** 实现不得在没有新增复用方和 OpenSpec 依据的情况下把该鉴权能力上移到 `packages/core`
 
@@ -55,7 +56,9 @@
 - **WHEN** 目录重构完成后执行登录、登出、当前用户和受保护写操作
 - **THEN** login 仍只通过 HttpOnly cookie 建立 session 并返回非敏感 `csrf_token`
 - **AND** logout 仍要求有效 session 和有效 CSRF token
+- **AND** `/api/v1/me` 在 session 模式下仍刷新 HttpOnly session cookie，并返回随新 session 派生的非敏感 `csrf_token`
 - **AND** `/api/v1/me` 仍返回 actor、capabilities 和非敏感 `csrf_token`
+- **AND** development auth bypass 下 `/api/v1/me` 仍返回 development actor 和稳定 CSRF token，且不签发 session cookie
 - **AND** 响应体不得返回 raw session、cookie value、signing secret、password、password hash、secret 或 traceback
 
 #### Scenario: readiness 和 health 语义保持不变
