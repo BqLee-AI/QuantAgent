@@ -32,11 +32,10 @@ ALL_CAPABILITIES = frozenset(
 
 @dataclass(frozen=True)
 class CurrentActor:
-    """请求处理期间传递的脱敏身份快照，不包含 session/cookie 原文。"""
+    """请求处理期间传递的脱敏身份快照, 不包含 session/cookie 原文。"""
 
     actor_id: str
     actor_type: Literal["local_single_user"]
     capabilities: frozenset[str]
     csrf_token: str
     auth_mode: Literal["session", "development_bypass"]
-
