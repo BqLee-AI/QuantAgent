@@ -36,3 +36,10 @@
 - [ ] 5.5 测试重复插件 ID 被检测并标记冲突。
 - [ ] 5.6 测试 API 列表、详情、schema 查询、rescan 返回统一 envelope。
 - [ ] 5.7 运行与变更范围匹配的 Python 测试，并运行 `openspec validate plugin-registry-v1 --type change --strict --json`。
+
+## 6. 后续插件 demo 边界
+
+- [ ] 6.1 V1.1 单独设计最小官方 demo 插件，用于说明插件作者如何组织 `plugin.yaml`、`config.schema.json` 和最小 entrypoint。
+- [ ] 6.2 demo 插件优先采用 `source` 类型，只做只读或 mock 输出，不接真实外部副作用。
+- [ ] 6.3 demo 插件必须通过 Registry 扫描进入系统，不允许核心代码硬编码 class、import 列表或 if/else。
+- [ ] 6.4 demo 插件后续可作为 RuntimeContext、生命周期、ToolRegistry 或 RawEvent 链路的验收样例，但这些能力不混入 V1 Registry 实现。
