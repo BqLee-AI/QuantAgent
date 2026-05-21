@@ -6,14 +6,14 @@
 
 ## Graph Overview
 
-关键路径是 `B0 -> R0 -> B1 -> B2 -> P1/P2/P3 -> M1 -> V1 -> D1 -> V2 -> R2`。
+关键路径是 `B0 -> V0 -> R0 -> R1 -> B1 -> V1 -> B2 -> P1/P2/P3 -> M1 -> M2 -> D1/D2 -> V2 -> V3 -> R2`。
 
-- `B0-R0`：完成 OpenSpec-only 审核门槛，阻止未经审核的目录重构。
-- `B1-B2`：在实现分支建立测试基线和旧 import 兼容清单。
+- `B0-V0-R0-R1`：完成 OpenSpec-only 校验和审核门槛，阻止未经审核的目录重构。
+- `B1-V1-B2`：准备 implementation 分支，建立迁移前测试基线，并产出旧 import 兼容清单。
 - `P1/P2/P3`：HTTP、Auth、API v1 route 三个迁移切片可在 `B2` 后并行，但每个切片必须遵守 disjoint write boundary。
 - `M1`：统一合并 re-export、内部 import、route registration 和 OpenAPI 行为检查。
-- `D1`：代码结构稳定后同步 README/AGENTS。
-- `V2-R2`：最终验证和 PR 收口。
+- `M2-D1/D2`：确认 API 外部行为未变后，同步 README/AGENTS。
+- `V2-V3-R2`：最终验证、路径一致性检查和 PR 收口。
 
 ## Blocking Serial Path
 
@@ -21,7 +21,7 @@
 - [x] V0. 运行 `openspec validate refactor-api-src-layout --type change --strict --json`，确认 proposal、design、spec 和 tasks 通过 strict 校验。
 - [x] R0. 创建 OpenSpec-only PR，范围只包含 `openspec/changes/refactor-api-src-layout/**`。
 - [ ] R1. 等待维护者在 OpenSpec-only PR 下明确评论“没问题”或批准，再进入代码实现。
-- [ ] B1. 在 implementation 分支上运行 `cd apps/api && uv run python -m unittest discover -s src/tests`，记录目录重构前的 API 测试基线。
+- [ ] B1. 创建或确认 implementation 分支基于已审核的 OpenSpec change 和最新目标主线；在 R1 完成前不得开始源码迁移。
 - [ ] B2. 用 `rg "quantagent\\.api\\.(auth|middleware|responses|errors|exceptions|routers\\.register)" apps/api/src apps/api/README.md apps/api/AGENTS.md` 确认旧 import 和文档引用面，并产出最小兼容 re-export 清单。
 
 ## Parallel Work After B2
