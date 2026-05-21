@@ -18,6 +18,7 @@ export interface RequestConfig {
   headers?: Record<string, string>;
   params?: Record<string, boolean | number | string | null | undefined>;
   dedupeKey?: false | string;
+  skipCsrf?: boolean;
 }
 
 export interface ApiClientConfig {
@@ -25,10 +26,8 @@ export interface ApiClientConfig {
   timeout?: number;
   withCredentials?: boolean;
   headers?: Record<string, string>;
-  authEnabled?: boolean;
-  tokenStorageKeys?: readonly string[];
-  getAccessToken?: () => null | string | undefined;
-  refreshAccessToken?: () => Promise<null | string | undefined> | null | string | undefined;
+  csrfHeaderName?: string;
+  getCsrfToken?: () => null | string | undefined;
   onError?: (error: ApiError) => void;
   onUnauthorized?: (error: ApiError) => void;
   adapter?: AxiosAdapter;

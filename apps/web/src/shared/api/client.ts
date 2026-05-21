@@ -22,8 +22,8 @@ import type {
 
 interface InternalRequestConfig extends AxiosRequestConfig {
   dedupeKey?: false | string;
-  _isRetry?: boolean;
   _returnEnvelope?: boolean;
+  skipCsrf?: boolean;
 }
 
 export interface ApiClient {
@@ -57,40 +57,8 @@ export interface ApiClient {
 
 const DEFAULT_BASE_URL = "/api/v1";
 const DEFAULT_TIMEOUT = 10_000;
-const DEFAULT_TOKEN_STORAGE_KEYS = [
-  "quantagent.access_token",
-  "access_token",
-  "token",
-] as const;
-
-function readFromStorage(
-  storage: Storage | undefined,
-  keys: readonly string[],
-): string | null {
-  if (!storage) {
-    return null;
-  }
-
-  for (const key of keys) {
-    const value = storage.getItem(key);
-
-    if (value) {
-      return value;
-    }
-  }
-
-  return null;
-}
-
-function getStoredAccessToken(keys: readonly string[]): string | null {
-  const localToken = readFromStorage(globalThis.localStorage, keys);
-
-  if (localToken) {
-    return localToken;
-  }
-
-  return readFromStorage(globalThis.sessionStorage, keys);
-}
+const DEFAULT_CSRF_HEADER_NAME = "X-CSRF-Token";
+const CSRF_METHODS = new Set(["delete", "patch", "post", "put"]);
 
 function getDedupeKey(config: InternalRequestConfig): string | undefined {
   if (config.signal || config.dedupeKey === false) {
@@ -142,18 +110,6 @@ function normalizeResponse<TResponse>(
 
 export function createApiClient(config: ApiClientConfig = {}): ApiClient {
   const inflight = new Map<string, Promise<unknown>>();
-  const tokenStorageKeys = config.tokenStorageKeys ?? DEFAULT_TOKEN_STORAGE_KEYS;
-  const getAccessToken =
-    config.getAccessToken ??
-    (() => {
-      try {
-        return getStoredAccessToken(tokenStorageKeys);
-      } catch {
-        return null;
-      }
-    });
-
-  let refreshPromise: Promise<null | string | undefined> | null = null;
 
   const instance = axios.create({
     adapter: config.adapter,
@@ -165,14 +121,13 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
 
   instance.interceptors.request.use((requestConfig: InternalAxiosRequestConfig) => {
     const headers = AxiosHeaders.from(requestConfig.headers ?? {});
+    const internalConfig = requestConfig as InternalRequestConfig;
+    const method = requestConfig.method?.toLowerCase() ?? "get";
+    const csrfToken = config.getCsrfToken?.();
 
     // TODO: inject X-Request-Id / X-Trace-Id once backend tracing conventions are finalized.
-    if (config.authEnabled) {
-      const token = getAccessToken();
-
-      if (token) {
-        headers.set("Authorization", `Bearer ${token}`);
-      }
+    if (!internalConfig.skipCsrf && csrfToken && CSRF_METHODS.has(method)) {
+      headers.set(config.csrfHeaderName ?? DEFAULT_CSRF_HEADER_NAME, csrfToken);
     }
 
     requestConfig.headers = headers;
@@ -182,33 +137,7 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
   instance.interceptors.response.use(
     (response) => response,
     async (error) => {
-      const requestConfig = error.config as InternalRequestConfig | undefined;
       const apiError = toApiError(error);
-
-      if (
-        apiError.status === 401 &&
-        requestConfig &&
-        !requestConfig._isRetry &&
-        config.refreshAccessToken
-      ) {
-        requestConfig._isRetry = true;
-
-        if (!refreshPromise) {
-          refreshPromise = Promise.resolve(config.refreshAccessToken()).finally(() => {
-            refreshPromise = null;
-          });
-        }
-
-        try {
-          await refreshPromise;
-        } catch {
-          config.onUnauthorized?.(apiError);
-          config.onError?.(apiError);
-          return Promise.reject(apiError);
-        }
-
-        return instance.request(requestConfig);
-      }
 
       if (apiError.status === 401) {
         config.onUnauthorized?.(apiError);
@@ -331,7 +260,7 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
 }
 
 export const apiClient = createApiClient({
-  authEnabled: false,
+  withCredentials: true,
 });
 
 export type { ApiMethod };
