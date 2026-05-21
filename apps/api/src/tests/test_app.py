@@ -340,14 +340,15 @@ class ApiAppTestCase(unittest.TestCase):
         )
 
     def test_public_allowlist_builds_prefixed_routes_from_settings(self) -> None:
+        custom_prefix = "/internal/v9"
         self.assertEqual(
-            build_api_v1_public_route_allowlist(self.settings.API_V1_PREFIX),
+            build_api_v1_public_route_allowlist(custom_prefix),
             frozenset(
                 {
-                    ("GET", "/api/v1/health"),
-                    ("GET", "/api/v1/ready"),
-                    ("GET", "/api/v1/version"),
-                    ("POST", "/api/v1/auth/login"),
+                    ("GET", f"{custom_prefix}/health"),
+                    ("GET", f"{custom_prefix}/ready"),
+                    ("GET", f"{custom_prefix}/version"),
+                    ("POST", f"{custom_prefix}/auth/login"),
                 }
             ),
         )
