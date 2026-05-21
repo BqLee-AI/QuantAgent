@@ -1,6 +1,6 @@
 ## Context
 
-issue #106 建立在 issue #97 的前端 Cookie Session 登录接入之上。当前前端已经具备以下基础：
+issue #106 建立在 issue #97 的前端 Cookie Session 登录接入之上。本 change 以 “#97 已合入或至少已被维护者接受为实现基线” 为前提；在该前提下，前端将具备以下基础：
 
 - `GET /api/v1/me` 会返回 `actor_id`、`actor_type`、`capabilities` 和 `csrf_token`。
 - `AuthProvider` 已维护统一登录态，并通过 shared API client 集中处理 401/403。
@@ -45,12 +45,12 @@ issue #106 建立在 issue #97 的前端 Cookie Session 登录接入之上。当
 | `/approvals` | `approval.approve` OR `approval.amend` | route 进入受限页；导航项隐藏 | 列表页允许按“任一审批能力可进入”处理 |
 | `/plugins` | `plugin.configure` OR `plugin.install` | route 进入受限页；导航项隐藏 | route 层只决定是否可进入插件域 |
 | `/settings` | `secret.manage` | route 进入受限页；导航项隐藏 | 当前最敏感后台入口 |
-| Plugin install action | `plugin.install` | action visible-disabled | 入口可保留，但不得自行触发请求 |
-| Plugin configure / enable / disable action | `plugin.configure` | action visible-disabled | 禁用态需要明确原因 |
-| Approval approve / reject action | `approval.approve` | action visible-disabled | capability 不足时不应先提交再等 403 |
-| Approval amend action | `approval.amend` | action visible-disabled | 与 approve 独立判断 |
-| Executor dry-run action | `executor.dry_run` | action visible-disabled | 高风险操作，优先保留显式禁用态 |
-| Secret reveal / update action | `secret.manage` | action visible-disabled | 不因 capability 不足泄露敏感值 |
+| Plugin install action | `plugin.install` | `disabled-with-reason` | 入口可保留，但不得自行触发请求 |
+| Plugin configure / enable / disable action | `plugin.configure` | `disabled-with-reason` | 禁用态需要明确原因 |
+| Approval approve / reject action | `approval.approve` | `disabled-with-reason` | capability 不足时不应先提交再等 403 |
+| Approval amend action | `approval.amend` | `disabled-with-reason` | 与 approve 独立判断 |
+| Executor dry-run action | `executor.dry_run` | `disabled-with-reason` | 高风险操作，优先保留显式禁用态 |
+| Secret reveal / update action | `secret.manage` | `disabled-with-reason` | 不因 capability 不足泄露敏感值 |
 
 替代方案是先不定义基线映射，等真实页面落地后再补。该方案会让每个页面都先各自发明 capability 字符串和 UX，因此不采用。
 

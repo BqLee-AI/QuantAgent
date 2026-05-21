@@ -2,7 +2,7 @@
 
 issue #97 已经把前端登录、`/me` 会话恢复、受保护路由和 401/403 基础语义收住，但它明确只做到“capability 状态展示”，没有继续定义 capability policy、路由 guard、导航可见性和统一 403 权限不足体验。issue #106 正是承接这块留白。
 
-现在做这件事，是因为前端已经具备 capability snapshot、统一 auth provider 和集中 API error 边界；如果继续让后续 workspace 页面各自决定“入口该隐藏还是禁用、capability 不足是否跳 `/login`、403 怎么展示 request_id / trace_id”，权限语义会在真实页面接入前先分叉。
+现在做这件事，是因为 issue #97 合入后，前端将具备 capability snapshot、统一 auth provider 和集中 API error 边界；如果继续让后续 workspace 页面各自决定“入口该隐藏还是禁用、capability 不足是否跳 `/login`、403 怎么展示 request_id / trace_id”，权限语义会在真实页面接入前先分叉。
 
 ## What Changes
 
