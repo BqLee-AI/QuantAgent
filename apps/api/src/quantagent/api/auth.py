@@ -154,6 +154,21 @@ def issue_session(
     return _serialize_session(payload, app_settings.AUTH_SESSION_SECRET or ""), csrf_token
 
 
+def refresh_session(
+    actor: "CurrentActor",
+    app_settings: Settings,
+    *,
+    expires_at: int | None = None,
+) -> tuple[str, str]:
+    """基于当前 actor 能力集重签 session，用于活动续期。"""
+    return issue_session(
+        actor.actor_id,
+        app_settings,
+        capabilities=actor.capabilities,
+        expires_at=expires_at,
+    )
+
+
 def clear_session_cookie(response: Response, app_settings: Settings) -> None:
     """按当前 cookie 配置清除登录态，logout 和 development bypass login 共用。"""
     response.delete_cookie(

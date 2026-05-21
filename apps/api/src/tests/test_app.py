@@ -438,9 +438,23 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(body["data"]["actor_id"], "local_admin")
         self.assertEqual(body["data"]["actor_type"], "local_single_user")
         self.assertEqual(set(body["data"]["capabilities"]), ALL_CAPABILITIES)
-        self.assertEqual(body["data"]["csrf_token"], login_body["data"]["csrf_token"])
+        self.assertNotEqual(body["data"]["csrf_token"], login_body["data"]["csrf_token"])
         self.assertNotIn(self.settings.AUTH_SESSION_SECRET or "", str(body))
         self.assertNotIn(self.settings.AUTH_COOKIE_NAME, str(body))
+        self.assertIn("HttpOnly", response.headers["set-cookie"])
+
+    def test_me_refreshes_session_cookie_and_csrf_token(self) -> None:
+        login_response = self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+        initial_csrf_token = login_response.json()["data"]["csrf_token"]
+        initial_cookie = login_response.headers["set-cookie"]
+
+        response = self.client.get("/api/v1/me")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("HttpOnly", response.headers["set-cookie"])
+        self.assertNotEqual(response.headers["set-cookie"], initial_cookie)
+        self.assertNotEqual(body["data"]["csrf_token"], initial_csrf_token)
 
     def test_development_can_disable_auth_and_keep_actor_context(self) -> None:
         app = create_app(self._settings(AUTH_ENABLED=False))

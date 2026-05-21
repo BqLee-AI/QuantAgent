@@ -12,6 +12,7 @@ from quantagent.api.auth import (
     development_bypass_actor,
     get_current_actor,
     issue_session,
+    refresh_session,
     require_csrf,
     set_session_cookie,
 )
@@ -71,5 +72,22 @@ def logout(
 
 
 @protected_router.get("/me", response_model=ApiResponse[AuthenticatedActorResponse])
-def me(actor: CurrentActor = Depends(get_current_actor)) -> ApiResponse[AuthenticatedActorResponse]:
+def me(
+    response: Response,
+    request: Request,
+    actor: CurrentActor = Depends(get_current_actor),
+) -> ApiResponse[AuthenticatedActorResponse]:
+    app_settings = request.app.state.settings
+
+    if actor.auth_mode == "session":
+        session_value, csrf_token = refresh_session(actor, app_settings)
+        set_session_cookie(response, session_value, app_settings)
+        actor = CurrentActor(
+            actor_id=actor.actor_id,
+            actor_type=actor.actor_type,
+            capabilities=actor.capabilities,
+            csrf_token=csrf_token,
+            auth_mode=actor.auth_mode,
+        )
+
     return ApiResponse.success(_actor_response(actor))
