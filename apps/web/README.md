@@ -28,6 +28,16 @@
 
 ## Notes
 
+- Local single-user login uses the backend Cookie Session contract:
+  `POST /api/v1/auth/login`, `GET /api/v1/me`, and
+  `POST /api/v1/auth/logout`.
+- The browser owns the HttpOnly session cookie. Frontend auth state only keeps
+  actor metadata, capabilities, `csrf_token`, and non-sensitive status flags.
+- Protected writes and logout use `X-CSRF-Token` through `src/shared/api`;
+  page components should not handwrite auth headers or raw `fetch` calls.
+- When `VITE_AUTH_ENABLED=false`, the frontend only enters the dashboard after
+  `/me` returns a development actor, and the shell shows an auth-disabled
+  development marker.
 - The Playwright browser matrix is intentionally Chromium-only for this change.
 - In WSL or other mixed Windows/Linux setups, prefer the repo-local install commands above. `bunx playwright install` can populate a Windows-side cache that Linux CT runs cannot use.
 - `loadRuntimeConfig()` falls back to test-safe defaults when `VITE_API_BASE_URL`, `VITE_WEBSOCKET_URL`, or `VITE_AUTH_ENABLED` are unset.
