@@ -1,4 +1,5 @@
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
+import { useAuth } from '../../shared/auth'
 
 type NavItem = {
   label: string
@@ -28,6 +29,7 @@ const routeLabels = new Map<string, string>([
 ])
 
 export function MainLayout() {
+  const auth = useAuth()
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const breadcrumbs = getBreadcrumbs(pathname)
 
@@ -64,6 +66,17 @@ export function MainLayout() {
               </span>
             ))}
           </nav>
+          <div className="app-session" aria-label="Session status">
+            {auth.isAuthDisabled ? (
+              <span className="app-session-badge">Development auth disabled</span>
+            ) : null}
+            {auth.actor ? (
+              <span className="app-session-actor">{auth.actor.actor_id}</span>
+            ) : null}
+            <button className="app-session-logout" type="button" onClick={() => void auth.logout()}>
+              Logout
+            </button>
+          </div>
         </header>
 
         <main className="app-content">

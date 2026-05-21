@@ -1,8 +1,10 @@
 import { createRouter } from '@tanstack/react-router'
 
 import { routeTree } from '../routeTree.gen'
+import type { AuthState } from '../shared/auth'
 
 export type RouterContext = {
+  auth?: Pick<AuthState, 'capabilities' | 'status'>
   capabilities: Set<string>
 }
 

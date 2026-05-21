@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ToolsIndexRouteImport } from './routes/tools/index'
 import { Route as SkillsIndexRouteImport } from './routes/skills/index'
@@ -19,6 +20,11 @@ import { Route as IndustriesIndexRouteImport } from './routes/industries/index'
 import { Route as EventsIndexRouteImport } from './routes/events/index'
 import { Route as ApprovalsIndexRouteImport } from './routes/approvals/index'
 
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -67,6 +73,7 @@ const ApprovalsIndexRoute = ApprovalsIndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/approvals/': typeof ApprovalsIndexRoute
   '/events/': typeof EventsIndexRoute
   '/industries/': typeof IndustriesIndexRoute
@@ -78,6 +85,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/approvals': typeof ApprovalsIndexRoute
   '/events': typeof EventsIndexRoute
   '/industries': typeof IndustriesIndexRoute
@@ -90,6 +98,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/approvals/': typeof ApprovalsIndexRoute
   '/events/': typeof EventsIndexRoute
   '/industries/': typeof IndustriesIndexRoute
@@ -103,6 +112,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/login'
     | '/approvals/'
     | '/events/'
     | '/industries/'
@@ -114,6 +124,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/login'
     | '/approvals'
     | '/events'
     | '/industries'
@@ -125,6 +136,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/login'
     | '/approvals/'
     | '/events/'
     | '/industries/'
@@ -137,6 +149,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  LoginRoute: typeof LoginRoute
   ApprovalsIndexRoute: typeof ApprovalsIndexRoute
   EventsIndexRoute: typeof EventsIndexRoute
   IndustriesIndexRoute: typeof IndustriesIndexRoute
@@ -149,6 +162,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -217,6 +237,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  LoginRoute: LoginRoute,
   ApprovalsIndexRoute: ApprovalsIndexRoute,
   EventsIndexRoute: EventsIndexRoute,
   IndustriesIndexRoute: IndustriesIndexRoute,
