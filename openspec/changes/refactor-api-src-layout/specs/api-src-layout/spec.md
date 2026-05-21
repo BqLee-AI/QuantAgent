@@ -66,7 +66,8 @@
 - **WHEN** 目录重构完成后调用 health 和 readiness probe
 - **THEN** `GET /api/v1/health` 仍只验证 API 进程存活
 - **AND** `GET /api/v1/ready` 仍只验证已配置数据库可达
-- **AND** readiness probe 不得依赖 sample provider、业务表结构或请求级 DB session dependency
+- **AND** readiness probe 可以复用请求级 DB session dependency 执行轻量连接验证
+- **AND** readiness probe 不得依赖 sample provider 或业务表结构
 
 ### Requirement: 最小兼容 import 和文档同步
 
