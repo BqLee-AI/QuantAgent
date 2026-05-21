@@ -5,7 +5,7 @@ import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import { fileURLToPath } from "node:url";
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [
     tanstackRouter({
       target: "react",
@@ -24,9 +24,23 @@ export default defineConfig({
       "@heroui/react",
       "@heroui/system",
     ],
-    alias: {
-      "@": fileURLToPath(new URL("./src", import.meta.url)),
-    },
+    alias: [
+      {
+        find: /^@\/debug\/route-api\.runtime$/,
+        replacement: fileURLToPath(
+          new URL(
+            mode === "production"
+              ? "./src/debug/route-api.production.ts"
+              : "./src/debug/route-api.development.tsx",
+            import.meta.url,
+          ),
+        ),
+      },
+      {
+        find: "@",
+        replacement: fileURLToPath(new URL("./src", import.meta.url)),
+      },
+    ],
   },
   server: {
     proxy: {
@@ -42,4 +56,4 @@ export default defineConfig({
       ],
     },
   },
-});
+}));
