@@ -29,7 +29,7 @@
 - [x] P1. HTTP 传输层迁移。
   - 输入：B2 兼容清单、`design.md` Decision 1、`spec.md` 的 HTTP 边界 requirement。
   - 输出：响应信封、API 层错误类型、异常处理注册和 Request ID middleware 落入明确 HTTP 边界。
-  - 写入边界：`apps/api/src/quantagent/api/http/**` 或同等 HTTP 边界目录，旧 `responses.py`、`errors.py`、`exceptions.py`、`middleware.py` 的最小 re-export，相关 import 和测试 import。
+  - 写入边界：`apps/api/src/quantagent/api/http/**` 或同等 HTTP 边界目录，相关 import 和测试 import。
   - 依赖：B2。
   - 并行条件：不修改 Auth 行为和 API v1 registration 语义。
   - 节点验证：错误响应仍使用 `code/data/msg/error` envelope，响应 header 与错误体中的 `request_id` 保持一致。
@@ -45,7 +45,7 @@
 - [x] P3. API v1 route registration 边界迁移。
   - 输入：B2 兼容清单、`design.md` Decision 3、`spec.md` 的 route registration requirement。
   - 输出：标准 API v1 route、debug route 和 registration helper 收敛到显式 `routers/v1/` 边界。
-  - 写入边界：`apps/api/src/quantagent/api/routers/v1/**` 或同等 v1 route 边界，旧 `routers/register.py` 和旧 route 模块的最小 re-export，registration tests。
+  - 写入边界：`apps/api/src/quantagent/api/routers/v1/**` 或同等 v1 route 边界，registration tests。
   - 依赖：B2。
   - 并行条件：不修改 HTTP envelope 实现和 Auth session/cookie 内部实现。
   - 节点验证：`STANDARD_API_V1_ROUTER_REGISTRATIONS` 和 public/protected 分类仍是 API v1 route 注册真源；production 环境仍不注册 debug route，非 production debug route 仍不加入 public allowlist。
@@ -54,10 +54,10 @@
 
 - [x] M1. 合并 P1/P2/P3 后统一收敛内部 import 和兼容入口。
   - 输入：P1、P2、P3 输出。
-  - 输出：内部引用使用新路径；只为 B2 清单中的高风险旧入口保留薄 re-export；re-export 只转发新路径符号，不写入新逻辑。
+  - 输出：内部引用统一使用新路径；旧入口已从 `apps/api` 代码内移除，不再保留兼容 re-export。
   - 写入边界：`apps/api/src/quantagent/api/**`、`apps/api/src/tests/**`。
   - 依赖：P1、P2、P3。
-  - 验证：运行 `rg "quantagent\\.api\\.(auth|middleware|responses|errors|exceptions|routers\\.register)" apps/api/src apps/api/README.md apps/api/AGENTS.md`，逐项解释保留命中是否属于已确认兼容入口。
+  - 验证：运行 `rg "quantagent\\.api\\.(auth|middleware|responses|errors|exceptions|routers\\.register)" apps/api/src apps/api/README.md apps/api/AGENTS.md`，确认无旧入口残留命中。
 
 - [x] M2. 人工确认 API 外部行为未变。
   - 输入：M1 后代码。
@@ -94,7 +94,7 @@
 - [x] V0. OpenSpec 校验：`openspec validate refactor-api-src-layout --type change --strict --json`。
 - [x] V1. 实现分支基线验证：`cd apps/api && uv run python -m unittest discover -s src/tests`，在迁移前执行。
 - [x] V2. 迁移后 API 验证：`cd apps/api && uv run python -m unittest discover -s src/tests`。
-- [x] V3. 文档路径一致性检查：`rg "routers/register|routers/v1|http/|auth/" apps/api/README.md apps/api/AGENTS.md apps/api/src apps/api/src/tests`，确认旧路径只作为已登记兼容入口出现。
+- [x] V3. 文档路径一致性检查：`rg "routers/register|routers/v1|http/|auth/" apps/api/README.md apps/api/AGENTS.md apps/api/src apps/api/src/tests`，确认文档与代码只指向新路径。
 - [x] V4. OpenSpec 收口校验：如 implementation 期间修改本 change artifacts，再运行 `openspec validate refactor-api-src-layout --type change --strict --json`。
 
 ## Multi-Agent Plan
