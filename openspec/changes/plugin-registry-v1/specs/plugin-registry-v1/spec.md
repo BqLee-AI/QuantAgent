@@ -1,138 +1,138 @@
 ## ADDED Requirements
 
-### Requirement: Plugin Manifest Is The Registry Source
+### Requirement: 插件 manifest 是 Registry 真源
 
-QuantAgent SHALL use `plugin.yaml` as the Plugin Registry V1 source of truth for official and runtime plugins.
+QuantAgent SHALL 使用 `plugin.yaml` 作为 Plugin Registry V1 对官方插件和运行时插件的登记真源。
 
-#### Scenario: Official and runtime plugin directories are scanned
-- **WHEN** the Registry scans for plugins
-- **THEN** it reads plugin manifests from `plugins/**/plugin.yaml`
-- **AND** it reads plugin manifests from `runtime/plugins/**/plugin.yaml` when the runtime directory exists
-- **AND** a missing `runtime/plugins` directory is treated as an empty plugin source
+#### Scenario: 扫描官方与运行时插件目录
+- **WHEN** Registry 扫描插件
+- **THEN** Registry 读取 `plugins/**/plugin.yaml` 中的插件 manifest
+- **AND** 当运行时目录存在时，Registry 读取 `runtime/plugins/**/plugin.yaml` 中的插件 manifest
+- **AND** 缺失的 `runtime/plugins` 目录被视为空插件来源
 
-#### Scenario: Directories without plugin manifest are ignored
-- **WHEN** the Registry encounters directories under plugin roots that do not contain `plugin.yaml`
-- **THEN** those directories are ignored
-- **AND** their absence does not create failed plugin records
+#### Scenario: 忽略没有 manifest 的目录
+- **WHEN** Registry 在插件根目录下遇到不包含 `plugin.yaml` 的目录
+- **THEN** 这些目录被忽略
+- **AND** 这些目录不会生成失败的插件记录
 
-#### Scenario: Entry point is metadata only in V1
-- **WHEN** a manifest declares an `entrypoint`
-- **THEN** the Registry validates that the field exists and is non-empty
-- **AND** the Registry does not import, instantiate, or execute that entrypoint in V1
+#### Scenario: V1 中 entrypoint 只是元数据
+- **WHEN** manifest 声明 `entrypoint`
+- **THEN** Registry 只校验该字段存在且非空
+- **AND** Registry 在 V1 中不会 import、实例化或执行该 entrypoint
 
-### Requirement: Plugin Manifest Validation Is Structured
+### Requirement: 插件 manifest 校验是结构化的
 
-The Registry SHALL validate plugin manifests into structured records without letting one invalid plugin break the full scan.
+Registry SHALL 将插件 manifest 校验为结构化记录，并保证单个非法插件不会破坏完整扫描。
 
-#### Scenario: Valid placeholder plugin is discovered
-- **WHEN** the Registry scans `plugins/sources/placeholder-source/plugin.yaml`
-- **THEN** it returns a plugin record with id `quantagent.official.source.placeholder`
-- **AND** the record includes type, version, capabilities, config schema path, source, path and status
+#### Scenario: 合法 placeholder 插件可被发现
+- **WHEN** Registry 扫描 `plugins/sources/placeholder-source/plugin.yaml`
+- **THEN** Registry 返回 id 为 `quantagent.official.source.placeholder` 的插件记录
+- **AND** 该记录包含 type、version、capabilities、config schema 路径、source、path 和 status
 
-#### Scenario: Required manifest fields are enforced
-- **WHEN** a manifest omits any of `id`, `name`, `type`, `version`, `entrypoint`, `capabilities` or `config_schema`
-- **THEN** the corresponding plugin record is marked `invalid`
-- **AND** `last_error` explains the missing or invalid field
+#### Scenario: 必填 manifest 字段会被强制校验
+- **WHEN** manifest 缺少 `id`、`name`、`type`、`version`、`entrypoint`、`capabilities` 或 `config_schema` 中任一字段
+- **THEN** 对应插件记录被标记为 `invalid`
+- **AND** `last_error` 说明缺失或非法字段
 
-#### Scenario: Config schema file must exist
-- **WHEN** a manifest references `config_schema`
-- **THEN** the referenced JSON Schema file must exist under the plugin directory
-- **AND** a missing schema marks the plugin record `invalid`
-- **AND** the full scan continues for other plugins
+#### Scenario: 配置 schema 文件必须存在
+- **WHEN** manifest 引用 `config_schema`
+- **THEN** 被引用的 JSON Schema 文件必须存在于插件目录下
+- **AND** schema 文件缺失会让插件记录被标记为 `invalid`
+- **AND** 完整扫描会继续处理其他插件
 
-#### Scenario: Unknown plugin type is rejected
-- **WHEN** a manifest declares a type outside the supported V1 type set
-- **THEN** the plugin record is marked `invalid`
-- **AND** `last_error` contains a structured unknown type summary
+#### Scenario: 未知插件类型会被拒绝
+- **WHEN** manifest 声明的 type 不在 V1 支持集合内
+- **THEN** 该插件记录被标记为 `invalid`
+- **AND** `last_error` 包含结构化的未知类型摘要
 
-### Requirement: Plugin Types Use Canonical Trade Executor Naming
+### Requirement: 插件类型使用 canonical trade executor 命名
 
-The Registry SHALL use canonical plugin type names and preserve a compatibility path for historical executor manifests.
+Registry SHALL 使用 canonical 插件类型命名，并为历史 `executor` manifest 保留兼容路径。
 
-#### Scenario: Executor alias is normalized
-- **WHEN** a manifest declares `type: executor`
-- **THEN** the Registry may accept it as a compatibility alias
-- **AND** the canonical type exposed by the Registry is `trade_executor`
-- **AND** this compatibility does not enable real trade execution
+#### Scenario: executor alias 会被归一化
+- **WHEN** manifest 声明 `type: executor`
+- **THEN** Registry 可以将其作为兼容别名接受
+- **AND** Registry 对外暴露的 canonical type 是 `trade_executor`
+- **AND** 该兼容行为不会启用真实交易执行
 
-#### Scenario: Supported V1 plugin types are explicit
-- **WHEN** the Registry validates plugin type
-- **THEN** supported canonical types are `source`, `industry`, `strategy`, `notification` and `trade_executor`
-- **AND** unsupported types are reported as invalid
+#### Scenario: V1 支持类型是显式集合
+- **WHEN** Registry 校验插件 type
+- **THEN** 支持的 canonical type 是 `source`、`industry`、`strategy`、`notification` 和 `trade_executor`
+- **AND** 不支持的类型会被报告为 invalid
 
-### Requirement: Registry Scan Failures Stay Local
+### Requirement: Registry 扫描失败只影响局部插件
 
-The Registry SHALL keep plugin scan failures local to the affected plugin record.
+Registry SHALL 将插件扫描失败限制在受影响的插件记录内。
 
-#### Scenario: Malformed YAML does not abort the full scan
-- **WHEN** one plugin manifest cannot be parsed as YAML
-- **THEN** that plugin result is represented as `invalid` or `failed`
-- **AND** other valid plugins are still returned
+#### Scenario: YAML 格式错误不会中断完整扫描
+- **WHEN** 某个插件 manifest 无法按 YAML 解析
+- **THEN** 该插件结果表示为 `invalid` 或 `failed`
+- **AND** 其他合法插件仍然会被返回
 
-#### Scenario: Duplicate plugin id is reported
-- **WHEN** two manifests declare the same plugin id
-- **THEN** the Registry marks the conflict in affected plugin records
-- **AND** V1 does not attempt dependency solving or version selection
+#### Scenario: 重复插件 id 会被报告
+- **WHEN** 两个 manifest 声明相同插件 id
+- **THEN** Registry 在受影响的插件记录中标记冲突
+- **AND** V1 不尝试依赖求解或版本选择
 
-#### Scenario: Errors are safe for API responses
-- **WHEN** a plugin record contains `last_error`
-- **THEN** the error contains structured code, message, stage and details suitable for API responses
-- **AND** it does not expose secrets, stack traces or local environment values
+#### Scenario: 错误信息适合 API 响应
+- **WHEN** 插件记录包含 `last_error`
+- **THEN** 错误信息包含适合 API 响应的结构化 code、message、stage 和 details
+- **AND** 错误信息不暴露 secret、stack trace 或本地环境值
 
-### Requirement: Minimal Plugin Status Model Exists
+### Requirement: 存在最小插件状态模型
 
-The Registry SHALL expose a minimal V1 status model for discovery and management state without implying plugin code execution.
+Registry SHALL 暴露最小 V1 状态模型，用于表达发现和管理状态，但不暗示插件代码已经执行。
 
-#### Scenario: V1 status values are bounded
-- **WHEN** a plugin record is returned by the Registry
-- **THEN** its status is one of `discovered`, `valid`, `invalid`, `enabled`, `disabled` or `failed`
+#### Scenario: V1 状态值有明确边界
+- **WHEN** Registry 返回插件记录
+- **THEN** 插件 status 是 `discovered`、`valid`、`invalid`、`enabled`、`disabled` 或 `failed` 之一
 
-#### Scenario: Enabled does not mean loaded
-- **WHEN** a plugin is marked `enabled` in V1
-- **THEN** that state only represents management configuration
-- **AND** it does not imply the plugin entrypoint was imported
-- **AND** it does not imply `load`, `start`, scheduler subscription or tool registration happened
+#### Scenario: enabled 不等于 loaded
+- **WHEN** V1 中插件被标记为 `enabled`
+- **THEN** 该状态只代表管理配置状态
+- **AND** 该状态不表示插件 entrypoint 已经被 import
+- **AND** 该状态不表示 `load`、`start`、scheduler subscription 或 tool registration 已经发生
 
-### Requirement: Plugin Management API Is A Thin Boundary
+### Requirement: 插件管理 API 是薄边界
 
-The API SHALL expose a minimal protected plugin management surface backed by the core Registry.
+API SHALL 暴露最小受保护插件管理面，并由 core Registry 提供数据。
 
-#### Scenario: Plugin list endpoint returns envelope
-- **WHEN** an authenticated caller requests `GET /api/v1/plugins`
-- **THEN** the API returns a standard `ApiResponse` envelope
-- **AND** the data contains plugin records produced by the core Registry
+#### Scenario: 插件列表 endpoint 返回 envelope
+- **WHEN** 已认证调用方请求 `GET /api/v1/plugins`
+- **THEN** API 返回标准 `ApiResponse` envelope
+- **AND** data 包含 core Registry 产生的插件记录
 
-#### Scenario: Plugin detail endpoint returns one record
-- **WHEN** an authenticated caller requests `GET /api/v1/plugins/{plugin_id}`
-- **THEN** the API returns the matching plugin record in a standard envelope
-- **AND** an unknown plugin id returns the existing not found envelope pattern
+#### Scenario: 插件详情 endpoint 返回单条记录
+- **WHEN** 已认证调用方请求 `GET /api/v1/plugins/{plugin_id}`
+- **THEN** API 在标准 envelope 中返回匹配插件记录
+- **AND** 未知 plugin id 返回现有 not found envelope 形态
 
-#### Scenario: Config schema endpoint returns manifest schema
-- **WHEN** an authenticated caller requests `GET /api/v1/plugins/{plugin_id}/config-schema`
-- **THEN** the API returns the plugin config JSON Schema referenced by the manifest
-- **AND** the route does not import or instantiate the plugin entrypoint
+#### Scenario: 配置 schema endpoint 返回 manifest schema
+- **WHEN** 已认证调用方请求 `GET /api/v1/plugins/{plugin_id}/config-schema`
+- **THEN** API 返回 manifest 引用的插件配置 JSON Schema
+- **AND** route 不 import 或实例化插件 entrypoint
 
-#### Scenario: Rescan endpoint refreshes registry view
-- **WHEN** an authenticated caller requests `POST /api/v1/plugins/actions/rescan`
-- **THEN** the API invokes the Registry scanner
-- **AND** the response includes a scan summary and standard envelope
-- **AND** the route does not install dependencies, hot reload plugin code or execute plugin hooks
+#### Scenario: rescan endpoint 刷新 registry 视图
+- **WHEN** 已认证调用方请求 `POST /api/v1/plugins/actions/rescan`
+- **THEN** API 调用 Registry scanner
+- **AND** 响应包含 scan summary 和标准 envelope
+- **AND** route 不安装依赖、不热重载插件代码、不执行插件 hook
 
-### Requirement: Plugin Registry V1 Defers Runtime Execution
+### Requirement: Plugin Registry V1 推迟运行时执行
 
-Plugin Registry V1 SHALL defer runtime execution, dependency installation and high-risk action capabilities to later changes.
+Plugin Registry V1 SHALL 将运行时执行、依赖安装和高风险动作能力推迟到后续 change。
 
-#### Scenario: No dependency auto-install occurs
-- **WHEN** a manifest declares plugin, Python or system dependencies
-- **THEN** V1 may preserve that metadata
-- **AND** V1 does not install missing dependencies automatically
+#### Scenario: 不自动安装依赖
+- **WHEN** manifest 声明 plugin、Python 或 system dependencies
+- **THEN** V1 可以保留这些元数据
+- **AND** V1 不自动安装缺失依赖
 
-#### Scenario: No real trade execution occurs
-- **WHEN** a plugin declares `trade_executor` capabilities
-- **THEN** V1 treats those capabilities as metadata only
-- **AND** V1 does not expose real order execution, broker adapter calls or live trading actions
+#### Scenario: 不发生真实交易执行
+- **WHEN** 插件声明 `trade_executor` capabilities
+- **THEN** V1 只把这些 capabilities 视为元数据
+- **AND** V1 不暴露真实下单、broker adapter 调用或 live trading actions
 
-#### Scenario: Source sample is deferred to V1.1
-- **WHEN** implementation work begins after this OpenSpec is approved
-- **THEN** the initial implementation focuses on Registry, API and diagnostics
-- **AND** a pull source sample and RawEvent production path are handled by a later change or follow-up implementation phase
+#### Scenario: Source 样板推迟到 V1.1
+- **WHEN** 本 OpenSpec 被批准后开始实现
+- **THEN** 初始实现聚焦 Registry、API 和诊断能力
+- **AND** pull source 样板和 RawEvent 产出链路由后续 change 或后续实现阶段处理

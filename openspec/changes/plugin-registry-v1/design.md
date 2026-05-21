@@ -1,10 +1,10 @@
-## Context
+## 背景
 
 当前仓库已有插件系统的方向性设计，但实现层仍处在骨架期：官方插件目录和 runtime 插件目录已存在，一个 placeholder source manifest 已存在，`packages/plugin-sdk` 仍是预留 package，API 和前端只有插件管理占位。V1 需要先建立可验证的登记处，而不是直接进入动态加载、热重载、自动安装依赖或交易执行。
 
-## Goals / Non-Goals
+## 目标与非目标
 
-**Goals:**
+**目标：**
 
 - 以 `plugin.yaml` 为 V1 插件真源，扫描 `plugins/` 与 `runtime/plugins/`。
 - 校验 manifest 必填字段、插件 ID、版本、类型、capabilities 和 config schema 路径。
@@ -13,7 +13,7 @@
 - 暴露最小插件管理 API：列表、详情、配置 schema 查询、重新扫描。
 - 保证 V1 不 import 插件 entrypoint、不自动安装依赖、不执行交易动作。
 
-**Non-Goals:**
+**非目标：**
 
 - 不实现插件市场、Git URL 安装、本地 zip 安装或 Python 依赖自动安装。
 - 不实现生产热重载、动态代码隔离、多版本插件求解或 entry point discovery。
@@ -21,7 +21,7 @@
 - 不实现真实 `trade_executor.execute`、broker adapter、交易下单或高风险动作放行。
 - 不实现插件自定义前端或 schema-driven 配置表单 UI。
 
-## Decisions
+## 决策
 
 ### 1. 采用 manifest-first，而不是 Python entry points first
 
@@ -53,16 +53,16 @@ Registry 扫描 SHALL 捕获 YAML 解析、字段校验、未知类型、schema 
 
 替代方案是遇到非法插件直接中断扫描。该方案会让一个 runtime 私有插件破坏官方插件可见性，因此不采用。
 
-## Risks / Trade-offs
+## 风险与取舍
 
-- [Risk] V1 不加载 entrypoint，用户可能误以为插件已经可执行。
-  -> Mitigation: API 状态和文档明确 `enabled` 不是 `loaded/started`，后续生命周期另开 change。
+- [风险] V1 不加载 entrypoint，用户可能误以为插件已经可执行。
+  -> 缓解：API 状态和文档明确 `enabled` 不是 `loaded/started`，后续生命周期另开 change。
 
-- [Risk] `executor` 改名为 `trade_executor` 可能与草案文档不一致。
-  -> Mitigation: V1 接受 `executor` alias，并在 PR 中说明这是对草案命名的收敛，不是实现真实交易。
+- [风险] `executor` 改名为 `trade_executor` 可能与草案文档不一致。
+  -> 缓解：V1 接受 `executor` alias，并在 PR 中说明这是对草案命名的收敛，不是实现真实交易。
 
-- [Risk] 不做持久化会让 enable/disable 状态暂时难以跨进程保留。
-  -> Mitigation: V1 只定义行为和最小 API；实现阶段可先用内存状态，后续配置持久化另开 change。
+- [风险] 不做持久化会让 enable/disable 状态暂时难以跨进程保留。
+  -> 缓解：V1 只定义行为和最小 API；实现阶段可先用内存状态，后续配置持久化另开 change。
 
-- [Risk] 后续 agent 可能把 Registry 与 ToolRegistry、SourceBinding 一起做大。
-  -> Mitigation: tasks 明确拆阶段，OpenSpec-only PR 审核通过前不写实现。
+- [风险] 后续 agent 可能把 Registry 与 ToolRegistry、SourceBinding 一起做大。
+  -> 缓解：tasks 明确拆阶段，OpenSpec-only PR 审核通过前不写实现。
