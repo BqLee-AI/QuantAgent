@@ -1,6 +1,6 @@
 ## 1. OpenSpec And Capability Baseline
 
-- [ ] 1.1 复核 issue #106、`docs/design/09-frontend-architecture-design.md`、`openspec/changes/web-login-cookie-session-auth/**` 与当前 `apps/web` 实现，并确认 proposal / design 明确写出：本轮只收 capability policy、route guard、navigation / entry policy 与统一 403 UX，不扩展 RBAC、多用户、租户、后端 capability 来源或新鉴权服务。
+- [ ] 1.1 复核 issue #106、`docs/design/09-frontend-architecture-design.md`、issue #97 与 `openspec/specs/api-cookie-session-auth/spec.md` / `openspec/specs/router-layout/spec.md` / `openspec/specs/api-client-error-governance/spec.md`，并确认 proposal / design 明确写出：本轮只收 capability policy、route guard、navigation / entry policy 与统一 403 UX，不扩展 RBAC、多用户、租户、后端 capability 来源或新鉴权服务。
 - [ ] 1.2 在 design 中形成首批 capability-to-route / action policy 表，至少覆盖当前 capability 集、workspace 入口和高风险 action 分类。
 - [ ] 1.3 完成 `web-capability-guard-403-ux` 的 OpenSpec artifacts，并运行 `openspec validate web-capability-guard-403-ux --type change --strict --json` 通过。
 - [ ] 1.4 在任何 `apps/web` 实现代码改动前提交 OpenSpec-only PR，等待维护者明确评论“没问题”或批准后再进入实现代码阶段。
