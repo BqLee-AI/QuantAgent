@@ -37,7 +37,7 @@ class PluginRegistry:
         try:
             with record.config_schema_path.open("r", encoding="utf-8") as schema_file:
                 schema_data = json.load(schema_file)
-        except (OSError, json.JSONDecodeError):
+        except (OSError, UnicodeError, json.JSONDecodeError):
             return None
         return schema_data if isinstance(schema_data, dict) else None
 

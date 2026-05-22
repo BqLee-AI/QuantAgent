@@ -117,7 +117,7 @@ class RegistryScanner:
                 details={"error": exc.__class__.__name__},
                 root=root,
             )
-        except OSError as exc:
+        except (OSError, UnicodeError) as exc:
             return self._error_record(
                 source=source,
                 plugin_dir=plugin_dir,
@@ -376,12 +376,12 @@ def _resolve_inside_plugin_dir(plugin_dir: Path, configured_path: str | None) ->
     candidate = Path(configured_path)
     if candidate.is_absolute():
         return None
-    resolved_plugin_dir = plugin_dir.resolve()
-    resolved_schema_path = (plugin_dir / candidate).resolve()
     try:
+        resolved_plugin_dir = plugin_dir.resolve()
+        resolved_schema_path = (plugin_dir / candidate).resolve()
         # 防止 manifest 通过 ../ 引用插件目录外的本地文件或 secret。
         resolved_schema_path.relative_to(resolved_plugin_dir)
-    except ValueError:
+    except (OSError, RuntimeError, ValueError):
         return None
     return resolved_schema_path
 
@@ -389,7 +389,7 @@ def _resolve_inside_plugin_dir(plugin_dir: Path, configured_path: str | None) ->
 def _is_path_inside_root(path: Path, root: Path) -> bool:
     try:
         path.resolve().relative_to(root.resolve())
-    except ValueError:
+    except (OSError, RuntimeError, ValueError):
         return False
     return True
 
@@ -405,7 +405,7 @@ def _synthetic_plugin_id(source: PluginSource, plugin_dir: Path, root: Path | No
         except ValueError:
             try:
                 relative_path = plugin_dir.resolve().relative_to(root.resolve()).as_posix()
-            except ValueError:
+            except (OSError, RuntimeError, ValueError):
                 relative_path = plugin_dir.name
     else:
         relative_path = plugin_dir.name

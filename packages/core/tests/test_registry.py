@@ -52,6 +52,9 @@ class PluginRegistryScannerTestCase(unittest.TestCase):
                 runtime_root / "bad-yaml",
                 "id: runtime.bad\ncapabilities:\n  - source.fetch\n  - [",
             )
+            bad_encoding_dir = runtime_root / "bad-encoding"
+            bad_encoding_dir.mkdir(parents=True)
+            (bad_encoding_dir / "plugin.yaml").write_bytes(b"\xff\xfe\xfa")
             self._write_raw_manifest(
                 runtime_root / "missing-field",
                 "id: runtime.missing\nname: Missing Field\ntype: source\nversion: 0.1.0\nentrypoint: missing:plugin\n",
@@ -88,6 +91,7 @@ class PluginRegistryScannerTestCase(unittest.TestCase):
         self.assertEqual(by_id["runtime.unknown"].last_error.code, "PLUGIN_TYPE_UNKNOWN")
         self.assertEqual(by_id["runtime.missing_schema"].last_error.code, "PLUGIN_CONFIG_SCHEMA_NOT_FOUND")
         self.assertTrue(any(record.last_error and record.last_error.code == "PLUGIN_MANIFEST_YAML_INVALID" for record in records))
+        self.assertTrue(any(record.last_error and record.last_error.code == "PLUGIN_MANIFEST_READ_FAILED" for record in records))
         synthetic_ids = [record.id for record in records if record.id.startswith("invalid:runtime:")]
         self.assertTrue(synthetic_ids)
         self.assertTrue(all(Path(tmpdir).name not in plugin_id for plugin_id in synthetic_ids))
@@ -199,6 +203,18 @@ class PluginRegistryScannerTestCase(unittest.TestCase):
             registry = PluginRegistry(RegistryScanner(official_root=official_root, runtime_root=root / "runtime"))
 
             schema = registry.read_config_schema("invalid.json.schema")
+
+        self.assertIsNone(schema)
+
+    def test_registry_returns_none_for_non_utf8_config_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            official_root = root / "plugins"
+            self._write_plugin(official_root / "sources" / "non-utf8-json", plugin_id="non.utf8.schema")
+            (official_root / "sources" / "non-utf8-json" / "config.schema.json").write_bytes(b"\xff\xfe\xfa")
+            registry = PluginRegistry(RegistryScanner(official_root=official_root, runtime_root=root / "runtime"))
+
+            schema = registry.read_config_schema("non.utf8.schema")
 
         self.assertIsNone(schema)
 
