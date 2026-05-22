@@ -185,7 +185,7 @@ runtime_errors 0..1 ── 0..n audit_logs
 | `tool_invocation_id` | `uuid` | nullable, foreign key | 关联工具调用 ID |
 | `decision_result_id` | `uuid` | nullable, foreign key | 关联 Decision 结果 ID |
 | `approval_record_id` | `uuid` | nullable, foreign key | 关联 Approval 记录 ID |
-| `notification_record_id` | `uuid` | nullable | 关联 Notification 记录 ID；为避免循环外键，初版可不建 FK |
+| `notification_record_id` | `uuid` | nullable, foreign key | 关联 Notification 记录 ID |
 | `request_id` | `text` | nullable | HTTP 请求 ID 或后台任务请求 ID |
 | `trace_id` | `text` | not null | 跨表追踪 ID |
 | `correlation_id` | `text` | nullable | 与上游任务或 Event Envelope 关联的 correlation ID |
@@ -213,6 +213,7 @@ runtime_errors 0..1 ── 0..n audit_logs
 - `tool_invocation_id` 外键引用 `tool_invocations.id`，建议 `on delete set null`。
 - `decision_result_id` 外键引用 `decision_results.id`，建议 `on delete set null`。
 - `approval_record_id` 外键引用 `approval_records.id`，建议 `on delete set null`。
+- `notification_record_id` 外键引用 `notification_records.id`，建议 `on delete set null`。
 - `index(component, status, severity)`，支持 Runtime 页面筛选。
 - `index(error_code, last_seen_at desc)`，支持错误聚合和排查。
 - `index(status, last_seen_at desc)`，支持查看未处理错误。

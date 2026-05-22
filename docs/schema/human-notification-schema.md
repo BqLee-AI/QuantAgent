@@ -198,7 +198,7 @@ approval_records 1 ── 0..n notification_records
 - `index(decision_result_id)`，支持从 Decision 回查审批。
 - `index(target_type, target_id)`，支持按审批目标查询。
 - `index(actor_type, actor_id)`，支持按操作者查询。
-- `index(approval_token_hash)`，支持一次性授权 link 校验。
+- `partial unique index(approval_token_hash) where approval_token_hash is not null`，支持一次性授权 link 校验，并确保单个 token hash 只映射一条审批记录。
 - `index(trace_id)`，支持跨表追踪。
 
 ### 写入规则
@@ -206,6 +206,7 @@ approval_records 1 ── 0..n notification_records
 - 用户拒绝后，不允许同一 Decision 继续进入 executor。
 - 文本通道输入不能直接等价于批准，必须经过 `evaluation_summary` 或更强确认流程。
 - 一次性授权 link 只保存 token hash，必须绑定目标 action、过期时间和风险摘要。
+- 一次性授权 token hash 必须唯一映射到单条审批记录，不允许复用。
 - `execute_then_notify` 必须记录为 `executed_then_notified`，不能伪装成待审批。
 - 人工确认不能绕过系统级风险限制；Policy Gate 可以将请求记为 `blocked`。
 - Approval 处理结果应在同一业务事务内更新事件状态，并追加事件状态流转记录。
