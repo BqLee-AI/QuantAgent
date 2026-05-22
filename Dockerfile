@@ -32,6 +32,7 @@ ENV PATH="/opt/venv/bin:$PATH" \
 COPY --from=builder /opt/venv /opt/venv
 COPY --from=builder /app/packages/core/alembic.ini /app/packages/core/alembic.ini
 COPY --from=builder /app/packages/core/alembic /app/packages/core/alembic
+COPY plugins ./plugins
 
 RUN useradd --create-home --shell /usr/sbin/nologin quantagent \
     && mkdir -p /app/runtime \
