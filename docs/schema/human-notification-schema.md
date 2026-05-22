@@ -157,7 +157,7 @@ approval_records 1 ── 0..n notification_records
 | `tool_invocation_id` | `uuid` | nullable, foreign key | 触发该审批的高风险工具调用 ID |
 | `target_type` | `text` | not null | 审批目标类型，例如 `decision`、`tool_invocation`、`executor_action`、`plugin_config` |
 | `target_id` | `text` | not null | 审批目标 ID，使用 text 以兼容不同目标表 |
-| `action_type` | `text` | not null | 请求动作类型，例如 `notify`、`monitor`、`dry_run`、`execute_order`、`reduce_position` |
+| `action_type` | `text` | not null | 请求动作类型，例如 `notify`、`monitor`、`dry_run`、`execute_order`、`reduce_position`；`dry_run` 表示虚盘，不操作实盘 |
 | `action_side` | `text` | not null | 风险方向，按 `action_side` 值约束，用于前端风险提示和 Policy Gate |
 | `risk_level` | `text` | not null | 风险等级，建议值为 `low`、`medium`、`high`、`critical` |
 | `urgency` | `text` | not null | 时效等级，按 `approval_urgency` 值约束 |

@@ -211,7 +211,7 @@ captured
 约束：
 
 - 插件不能随意跳过 Decision 阶段。
-- 真实交易执行状态暂不进入初版主路径。
+- 实盘交易执行状态暂不进入初版主路径；虚盘状态继续使用协议值 `dry_run_executed`。
 - 数据库层只保证引用完整性和历史可回放；合法状态跳转由 core repository 或 service 控制。
 
 ## 与 Event Envelope 的对应
