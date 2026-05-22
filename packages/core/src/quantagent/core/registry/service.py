@@ -33,7 +33,7 @@ class PluginRegistry:
     def read_config_schema(self, plugin_id: str) -> dict[str, Any] | None:
         """读取插件声明的 JSON Schema；插件非法或 schema 不可用时返回 None。"""
         record = self.get_plugin(plugin_id)
-        if record is None or record.config_schema_path is None:
+        if record is None or record.status != PluginStatus.VALID or record.config_schema_path is None:
             return None
         try:
             with record.config_schema_path.open("r", encoding="utf-8") as schema_file:

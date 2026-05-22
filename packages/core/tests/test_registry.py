@@ -126,6 +126,39 @@ class PluginRegistryScannerTestCase(unittest.TestCase):
         self.assertTrue(all(record.status == PluginStatus.INVALID for record in records))
         self.assertTrue(all(record.last_error and record.last_error.code == "PLUGIN_ID_DUPLICATE" for record in records))
 
+    def test_registry_does_not_read_config_schema_for_invalid_duplicate_plugin(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            official_root = root / "plugins"
+            runtime_root = root / "runtime" / "plugins"
+            self._write_plugin(official_root / "sources" / "one", plugin_id="duplicate.schema")
+            self._write_plugin(runtime_root / "sources" / "two", plugin_id="duplicate.schema")
+            registry = PluginRegistry(RegistryScanner(official_root=official_root, runtime_root=runtime_root))
+
+            schema = registry.read_config_schema("duplicate.schema")
+
+        self.assertIsNone(schema)
+
+    def test_symlinked_manifest_file_outside_root_is_marked_invalid(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            official_root = root / "plugins"
+            external_root = root / "external"
+            self._write_plugin(external_root / "outside", plugin_id="outside.root")
+            linked_plugin_dir = official_root / "linked"
+            linked_plugin_dir.mkdir(parents=True)
+            (linked_plugin_dir / "plugin.yaml").symlink_to(external_root / "outside" / "plugin.yaml")
+
+            records = RegistryScanner(official_root=official_root, runtime_root=root / "runtime" / "plugins").scan()
+
+        self.assertEqual(len(records), 1)
+        record = records[0]
+        self.assertEqual(record.status, PluginStatus.INVALID)
+        self.assertIsNone(record.manifest)
+        self.assertEqual(record.last_error.code, "PLUGIN_MANIFEST_OUTSIDE_ROOT")
+        self.assertTrue(record.id.startswith("invalid:official:"))
+        self.assertNotIn(Path(tmpdir).name, record.id)
+
     def test_registry_reads_config_schema_for_valid_plugin(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

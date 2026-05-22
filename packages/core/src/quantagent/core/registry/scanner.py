@@ -79,11 +79,24 @@ class RegistryScanner:
                     code="PLUGIN_ROOT_NOT_DIRECTORY",
                     message="Plugin root is not a directory.",
                     stage="discover",
+                    root=root,
                 )
             ]
 
         records: list[PluginRecord] = []
         for manifest_path in sorted(root.rglob("plugin.yaml")):
+            if not _is_path_inside_root(manifest_path, root):
+                records.append(
+                    self._error_record(
+                        source=source,
+                        plugin_dir=manifest_path.parent,
+                        code="PLUGIN_MANIFEST_OUTSIDE_ROOT",
+                        message="Plugin manifest must resolve inside the configured plugin root.",
+                        stage="discover",
+                        root=root,
+                    )
+                )
+                continue
             records.append(self._load_manifest(manifest_path, source, root))
         return records
 
@@ -371,6 +384,14 @@ def _resolve_inside_plugin_dir(plugin_dir: Path, configured_path: str | None) ->
     except ValueError:
         return None
     return resolved_schema_path
+
+
+def _is_path_inside_root(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True
 
 
 def _is_synthetic_plugin_id(plugin_id: str) -> bool:

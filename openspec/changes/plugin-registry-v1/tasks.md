@@ -35,7 +35,7 @@
 - [x] 5.4 测试 manifest 缺必填字段、未知插件类型、config schema 缺失均返回 `invalid + last_error`。
 - [x] 5.5 测试重复插件 ID 被检测并标记冲突。
 - [ ] 5.6 测试 API 列表、详情、schema 查询、rescan 返回统一 envelope。
-- [ ] 5.7 运行与变更范围匹配的 Python 测试，并运行 `openspec validate plugin-registry-v1 --type change --strict --json`。
+- [x] 5.7 运行与变更范围匹配的 Python 测试，并运行 `openspec validate plugin-registry-v1 --type change --strict --json`。
 
 ## 6. 后续插件 demo 边界
 
