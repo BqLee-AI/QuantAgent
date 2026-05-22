@@ -852,6 +852,7 @@ dependencies = [
     { name = "alembic" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
+    { name = "pyyaml" },
     { name = "sqlalchemy" },
 ]
 
@@ -860,6 +861,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.17.2" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.2" },
     { name = "pydantic-settings", specifier = ">=2.14.1" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "sqlalchemy", specifier = ">=2.0.44" },
 ]
 
