@@ -21,11 +21,11 @@
 
 ## 4. API 管理面
 
-- [ ] 4.1 新增 `GET /api/v1/plugins`，返回统一 envelope 的插件列表。
-- [ ] 4.2 新增 `GET /api/v1/plugins/{plugin_id}`，返回插件详情或统一 404 envelope。
-- [ ] 4.3 新增 `GET /api/v1/plugins/{plugin_id}/config-schema`，返回配置 JSON Schema 或清晰错误。
-- [ ] 4.4 新增 `POST /api/v1/plugins/actions/rescan`，触发重新扫描并返回扫描摘要。
-- [ ] 4.5 API route 只调用 core Registry，不直接解析 YAML、不 import 插件代码、不返回 ORM model。
+- [x] 4.1 新增 `GET /api/v1/plugins`，返回统一 envelope 的插件列表。
+- [x] 4.2 新增 `GET /api/v1/plugins/{plugin_id}`，返回插件详情或统一 404 envelope。
+- [x] 4.3 新增 `GET /api/v1/plugins/{plugin_id}/config-schema`，返回配置 JSON Schema 或清晰错误。
+- [x] 4.4 新增 `POST /api/v1/plugins/actions/rescan`，触发重新扫描并返回扫描摘要。
+- [x] 4.5 API route 只调用 core Registry，不直接解析 YAML、不 import 插件代码、不返回 ORM model。
 
 ## 5. 验证
 
@@ -34,7 +34,7 @@
 - [x] 5.3 测试缺少 `plugin.yaml` 的目录被忽略。
 - [x] 5.4 测试 manifest 缺必填字段、未知插件类型、config schema 缺失均返回 `invalid + last_error`。
 - [x] 5.5 测试重复插件 ID 被检测并标记冲突。
-- [ ] 5.6 测试 API 列表、详情、schema 查询、rescan 返回统一 envelope。
+- [x] 5.6 测试 API 列表、详情、schema 查询、rescan 返回统一 envelope。
 - [x] 5.7 运行与变更范围匹配的 Python 测试，并运行 `openspec validate plugin-registry-v1 --type change --strict --json`。
 
 ## 6. 后续插件 demo 边界
