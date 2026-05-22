@@ -15,6 +15,7 @@ class PluginRegistry:
     def __init__(self, scanner: RegistryScanner) -> None:
         self.scanner = scanner
         self._records: list[PluginRecord] | None = None
+        self._records_by_id: dict[str, PluginRecord] = {}
 
     def list_plugins(self) -> list[PluginRecord]:
         """返回当前 Registry 视图，首次调用时自动扫描。"""
@@ -25,10 +26,8 @@ class PluginRegistry:
 
     def get_plugin(self, plugin_id: str) -> PluginRecord | None:
         """按插件 ID 查询单条记录，找不到时返回 None 交给 API 映射错误。"""
-        for record in self.list_plugins():
-            if record.id == plugin_id:
-                return record
-        return None
+        self.list_plugins()
+        return self._records_by_id.get(plugin_id)
 
     def read_config_schema(self, plugin_id: str) -> dict[str, Any] | None:
         """读取插件声明的 JSON Schema；插件非法或 schema 不可用时返回 None。"""
@@ -45,6 +44,9 @@ class PluginRegistry:
     def rescan(self) -> PluginScanSummary:
         """刷新 Registry 视图，并返回本次扫描摘要。"""
         self._records = self.scanner.scan()
+        self._records_by_id = {}
+        for record in self._records:
+            self._records_by_id.setdefault(record.id, record)
         return summarize_plugin_records(self._records)
 
 

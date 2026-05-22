@@ -401,9 +401,12 @@ def _is_synthetic_plugin_id(plugin_id: str) -> bool:
 def _synthetic_plugin_id(source: PluginSource, plugin_dir: Path, root: Path | None) -> str:
     if root is not None:
         try:
-            relative_path = plugin_dir.resolve().relative_to(root.resolve()).as_posix()
+            relative_path = plugin_dir.relative_to(root).as_posix()
         except ValueError:
-            relative_path = plugin_dir.name
+            try:
+                relative_path = plugin_dir.resolve().relative_to(root.resolve()).as_posix()
+            except ValueError:
+                relative_path = plugin_dir.name
     else:
         relative_path = plugin_dir.name
     digest = hashlib.sha256(relative_path.encode("utf-8")).hexdigest()[:12]

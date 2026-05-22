@@ -159,6 +159,26 @@ class PluginRegistryScannerTestCase(unittest.TestCase):
         self.assertTrue(record.id.startswith("invalid:official:"))
         self.assertNotIn(Path(tmpdir).name, record.id)
 
+    def test_outside_root_synthetic_ids_use_root_relative_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            official_root = root / "plugins"
+            external_root = root / "external"
+            self._write_plugin(external_root / "one", plugin_id="outside.one")
+            self._write_plugin(external_root / "two", plugin_id="outside.two")
+            for parent, target in (("a", "one"), ("b", "two")):
+                linked_plugin_dir = official_root / parent / "linked"
+                linked_plugin_dir.mkdir(parents=True)
+                (linked_plugin_dir / "plugin.yaml").symlink_to(external_root / target / "plugin.yaml")
+
+            records = RegistryScanner(official_root=official_root, runtime_root=root / "runtime" / "plugins").scan()
+
+        self.assertEqual(len(records), 2)
+        self.assertTrue(all(record.status == PluginStatus.INVALID for record in records))
+        self.assertEqual(len({record.id for record in records}), 2)
+        self.assertTrue(all(record.id.startswith("invalid:official:") for record in records))
+        self.assertTrue(all(Path(tmpdir).name not in record.id for record in records))
+
     def test_registry_reads_config_schema_for_valid_plugin(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
