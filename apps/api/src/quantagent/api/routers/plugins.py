@@ -64,6 +64,23 @@ def get_plugin_config_schema(plugin_id: str, request: Request) -> ApiResponse[di
     return ApiResponse.success(schema)
 
 
+@router.post("/actions/rescan", response_model=ApiResponse[PluginRescanResponse])
+def rescan_plugins(
+    request: Request,
+    _actor: CurrentActor = Depends(require_csrf),
+) -> ApiResponse[PluginRescanResponse]:
+    """重新扫描插件目录；作为写动作，需要登录态和 CSRF。"""
+    registry = _get_plugin_registry(request)
+    summary = registry.rescan()
+    records = registry.list_plugins()
+    return ApiResponse.success(
+        PluginRescanResponse(
+            summary=_summary_response(summary),
+            plugins=[_record_response(record) for record in records],
+        )
+    )
+
+
 def _get_plugin_registry(request: Request) -> PluginRegistry:
     """从 app.state 取 Registry，不存在时按当前运行目录创建一个。"""
     registry = getattr(request.app.state, "plugin_registry", None)
