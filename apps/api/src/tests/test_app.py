@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import SQLAlchemyError
@@ -31,7 +32,7 @@ from quantagent.api.routers.v1.register import (
     build_api_v1_public_route_allowlist,
     register_api_v1_protected_router,
 )
-from fastapi.routing import APIRoute
+from quantagent.core.registry import PluginRegistry, RegistryScanner
 
 
 class FakeSession:
@@ -591,6 +592,106 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(body["data"], {"status": "protected"})
 
+    def test_plugin_list_requires_session(self) -> None:
+        response = self.client.get("/api/v1/plugins")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+
+    def test_plugin_list_detail_and_config_schema_use_envelope(self) -> None:
+        self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+
+        list_response = self.client.get("/api/v1/plugins")
+        list_body = list_response.json()
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(list_body["code"], 0)
+        self.assertIsNone(list_body["error"])
+
+        plugins = list_body["data"]
+        placeholder = next(
+            plugin for plugin in plugins if plugin["id"] == "quantagent.official.source.placeholder"
+        )
+        self.assertEqual(placeholder["source"], "official")
+        self.assertEqual(placeholder["status"], "valid")
+        self.assertEqual(placeholder["manifest"]["type"], "source")
+        self.assertEqual(placeholder["path"], "plugins/sources/placeholder-source")
+
+        detail_response = self.client.get("/api/v1/plugins/quantagent.official.source.placeholder")
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_response.json()["data"]["id"], "quantagent.official.source.placeholder")
+
+        schema_response = self.client.get("/api/v1/plugins/quantagent.official.source.placeholder/config-schema")
+        schema_body = schema_response.json()
+        self.assertEqual(schema_response.status_code, 200)
+        self.assertEqual(schema_body["data"]["title"], "Placeholder Source Plugin Config")
+
+    def test_plugin_detail_unknown_id_uses_not_found_envelope(self) -> None:
+        self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+
+        response = self.client.get("/api/v1/plugins/missing.plugin")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(body["error"]["code"], "NOT_FOUND")
+        self.assertEqual(body["error"]["details"], {"plugin_id": "missing.plugin"})
+
+    def test_plugin_rescan_requires_csrf_and_returns_summary(self) -> None:
+        login_response = self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+
+        forbidden_response = self.client.post("/api/v1/plugins/actions/rescan")
+        self.assertEqual(forbidden_response.status_code, 403)
+        self.assertEqual(forbidden_response.json()["error"]["code"], "FORBIDDEN")
+
+        csrf_token = login_response.json()["data"]["csrf_token"]
+        response = self.client.post(
+            "/api/v1/plugins/actions/rescan",
+            headers={self.settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+        )
+        body = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["code"], 0)
+        self.assertGreaterEqual(body["data"]["summary"]["total"], 1)
+        self.assertTrue(body["data"]["plugins"])
+
+    def test_plugin_config_schema_for_invalid_plugin_uses_bad_request_envelope(self) -> None:
+        app = create_app(self._settings())
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = os.path.abspath(tmpdir)
+            invalid_plugin = os.path.join(root, "plugins", "invalid")
+            os.makedirs(invalid_plugin)
+            with open(os.path.join(invalid_plugin, "plugin.yaml"), "w", encoding="utf-8") as manifest_file:
+                manifest_file.write(
+                    "id: invalid.schema\n"
+                    "name: Invalid Schema\n"
+                    "type: source\n"
+                    "version: 0.1.0\n"
+                    "entrypoint: invalid:plugin\n"
+                    "capabilities:\n"
+                    "  - source.fetch\n"
+                    "config_schema: missing.json\n"
+                )
+            app.state.plugin_registry = PluginRegistry(
+                RegistryScanner(
+                    official_root=os.path.join(root, "plugins"),
+                    runtime_root=os.path.join(root, "runtime", "plugins"),
+                )
+            )
+
+            with TestClient(app) as client:
+                client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+                response = client.get("/api/v1/plugins/invalid.schema/config-schema")
+
+        body = response.json()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(body["error"]["code"], "BAD_REQUEST")
+        self.assertEqual(body["error"]["details"]["plugin"]["id"], "invalid.schema")
+        self.assertEqual(
+            body["error"]["details"]["plugin"]["last_error"]["code"],
+            "PLUGIN_CONFIG_SCHEMA_NOT_FOUND",
+        )
+
     def test_missing_capability_is_forbidden(self) -> None:
         reduced_capabilities = frozenset({"plugin.configure"})
         session_value, csrf_token = issue_session("local_admin", self.settings, capabilities=reduced_capabilities)
@@ -640,6 +741,10 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertIn("auth", schema["paths"]["/api/v1/auth/login"]["post"]["tags"])
         self.assertIn("auth", schema["paths"]["/api/v1/auth/logout"]["post"]["tags"])
         self.assertIn("auth", schema["paths"]["/api/v1/me"]["get"]["tags"])
+        self.assertIn("plugins", schema["paths"]["/api/v1/plugins"]["get"]["tags"])
+        self.assertIn("plugins", schema["paths"]["/api/v1/plugins/{plugin_id}"]["get"]["tags"])
+        self.assertIn("plugins", schema["paths"]["/api/v1/plugins/{plugin_id}/config-schema"]["get"]["tags"])
+        self.assertIn("plugins", schema["paths"]["/api/v1/plugins/actions/rescan"]["post"]["tags"])
         self.assertNotIn("/api/v1/auth/test-actions/runtime-inspect", schema["paths"])
 
         login_schema = self._resolve_response_schema(schema, "/api/v1/auth/login", method="post")
@@ -651,6 +756,9 @@ class ApiAppTestCase(unittest.TestCase):
         me_schema = self._resolve_response_schema(schema, "/api/v1/me")
         me_data_schema = self._resolve_schema_ref(schema, me_schema["properties"]["data"])
         self.assertTrue({"actor_id", "actor_type", "capabilities", "csrf_token"}.issubset(me_data_schema["properties"]))
+
+        plugins_schema = self._resolve_response_schema(schema, "/api/v1/plugins")
+        self.assertTrue({"code", "data", "msg", "error"}.issubset(plugins_schema["properties"].keys()))
 
     def test_production_openapi_excludes_debug_routes(self) -> None:
         production_app = create_app(self._settings(APP_ENV="production"))
