@@ -210,7 +210,7 @@ events 1 ── 0..n decision_results
 | `provider_plugin_version` | `text` | nullable | 提供该工具的插件版本 |
 | `risk_level` | `text` | not null | 工具风险等级，建议值为 `low`、`medium`、`high`、`critical` |
 | `requires_human_approval` | `boolean` | not null, default `false` | 调用该工具是否需要人工确认 |
-| `status` | `tool_invocation_status` | not null | 工具调用状态 |
+| `status` | `text` | not null | 工具调用状态，按 `tool_invocation_status` 值约束 |
 | `input_summary` | `jsonb` | not null, default `{}` | 工具输入脱敏摘要，不保存 secret 或敏感参数原文 |
 | `output_summary` | `jsonb` | nullable | 工具输出脱敏摘要，必须可序列化 |
 | `input_schema_hash` | `text` | nullable | 调用时使用的输入 schema hash |
