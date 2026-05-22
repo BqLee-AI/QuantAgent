@@ -2,6 +2,10 @@
 
 本文档中心分为两层：`docs/design/` 是最终设计真相来源，`docs/prd/` 是按设计同步后的产品需求与索引。
 
+## 开发示例
+
+- [Plugin Registry V1 伪代码使用示例](plugin-registry-v1-pseudocode-demo.md)
+
 ## 设计文档索引
 
 | 序号 | 文档 | 作用 |
