@@ -70,15 +70,27 @@ class PluginRegistryScannerTestCase(unittest.TestCase):
                     "entrypoint: missing_schema:plugin\ncapabilities:\n  - source.fetch\nconfig_schema: missing.json\n"
                 ),
             )
+            self._write_raw_manifest(
+                runtime_root / "bad-required-type",
+                (
+                    "id: runtime.bad_required_type\nname: Bad Required Type\ntype: source\nversion:\n"
+                    "  major: 0\nentrypoint: bad_required_type:plugin\ncapabilities:\n"
+                    "  - source.fetch\nconfig_schema: config.schema.json\n"
+                ),
+            )
 
             records = RegistryScanner(official_root=official_root, runtime_root=runtime_root).scan()
 
         by_id = {record.id: record for record in records}
         self.assertEqual(by_id["quantagent.official.source.valid"].status, PluginStatus.VALID)
         self.assertEqual(by_id["runtime.missing"].last_error.code, "PLUGIN_MANIFEST_REQUIRED_FIELD_MISSING")
+        self.assertEqual(by_id["runtime.bad_required_type"].last_error.code, "PLUGIN_MANIFEST_FIELD_INVALID")
         self.assertEqual(by_id["runtime.unknown"].last_error.code, "PLUGIN_TYPE_UNKNOWN")
         self.assertEqual(by_id["runtime.missing_schema"].last_error.code, "PLUGIN_CONFIG_SCHEMA_NOT_FOUND")
         self.assertTrue(any(record.last_error and record.last_error.code == "PLUGIN_MANIFEST_YAML_INVALID" for record in records))
+        synthetic_ids = [record.id for record in records if record.id.startswith("invalid:runtime:")]
+        self.assertTrue(synthetic_ids)
+        self.assertTrue(all(Path(tmpdir).name not in plugin_id for plugin_id in synthetic_ids))
 
     def test_duplicate_plugin_ids_are_marked_invalid(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -87,6 +99,26 @@ class PluginRegistryScannerTestCase(unittest.TestCase):
             runtime_root = root / "runtime" / "plugins"
             self._write_plugin(official_root / "sources" / "one", plugin_id="duplicate.plugin")
             self._write_plugin(runtime_root / "sources" / "two", plugin_id="duplicate.plugin")
+
+            records = RegistryScanner(official_root=official_root, runtime_root=runtime_root).scan()
+
+        self.assertEqual(len(records), 2)
+        self.assertTrue(all(record.status == PluginStatus.INVALID for record in records))
+        self.assertTrue(all(record.last_error and record.last_error.code == "PLUGIN_ID_DUPLICATE" for record in records))
+
+    def test_duplicate_plugin_ids_include_invalid_manifest_records(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            official_root = root / "plugins"
+            runtime_root = root / "runtime" / "plugins"
+            self._write_plugin(official_root / "sources" / "valid", plugin_id="duplicate.invalid")
+            self._write_raw_manifest(
+                runtime_root / "sources" / "invalid",
+                (
+                    "id: duplicate.invalid\nname: Duplicate Invalid\ntype: source\nversion: 0.1.0\n"
+                    "entrypoint: invalid:plugin\ncapabilities:\n  - source.fetch\nconfig_schema: missing.json\n"
+                ),
+            )
 
             records = RegistryScanner(official_root=official_root, runtime_root=runtime_root).scan()
 
@@ -104,6 +136,37 @@ class PluginRegistryScannerTestCase(unittest.TestCase):
             schema = registry.read_config_schema("valid.schema")
 
         self.assertEqual(schema["title"], "Plugin Config")
+
+    def test_registry_returns_none_for_invalid_json_config_schema(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            official_root = root / "plugins"
+            self._write_plugin(official_root / "sources" / "invalid-json", plugin_id="invalid.json.schema")
+            (official_root / "sources" / "invalid-json" / "config.schema.json").write_text("{", encoding="utf-8")
+            registry = PluginRegistry(RegistryScanner(official_root=official_root, runtime_root=root / "runtime"))
+
+            schema = registry.read_config_schema("invalid.json.schema")
+
+        self.assertIsNone(schema)
+
+    def test_registry_records_do_not_expose_mutable_nested_mappings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            official_root = root / "plugins"
+            self._write_plugin(official_root / "sources" / "valid", plugin_id="immutable.record")
+            plugin_dir = official_root / "sources" / "valid"
+            manifest_text = (plugin_dir / "plugin.yaml").read_text(encoding="utf-8")
+            (plugin_dir / "plugin.yaml").write_text(
+                manifest_text + "dependencies:\n  quantagent-core: '>=0.1.0'\n",
+                encoding="utf-8",
+            )
+
+            records = RegistryScanner(official_root=official_root, runtime_root=root / "runtime").scan()
+
+        manifest = records[0].manifest
+        self.assertIsNotNone(manifest)
+        with self.assertRaises(TypeError):
+            manifest.dependencies["new"] = "value"  # type: ignore[index]
 
     def _write_plugin(
         self,

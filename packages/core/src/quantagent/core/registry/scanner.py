@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
@@ -25,6 +26,16 @@ REQUIRED_MANIFEST_FIELDS = frozenset(
         "version",
         "entrypoint",
         "capabilities",
+        "config_schema",
+    }
+)
+REQUIRED_STRING_MANIFEST_FIELDS = frozenset(
+    {
+        "id",
+        "name",
+        "type",
+        "version",
+        "entrypoint",
         "config_schema",
     }
 )
@@ -73,10 +84,10 @@ class RegistryScanner:
 
         records: list[PluginRecord] = []
         for manifest_path in sorted(root.rglob("plugin.yaml")):
-            records.append(self._load_manifest(manifest_path, source))
+            records.append(self._load_manifest(manifest_path, source, root))
         return records
 
-    def _load_manifest(self, manifest_path: Path, source: PluginSource) -> PluginRecord:
+    def _load_manifest(self, manifest_path: Path, source: PluginSource, root: Path) -> PluginRecord:
         """读取并校验一个 plugin.yaml，始终返回一条可诊断记录。"""
         plugin_dir = manifest_path.parent
         try:
@@ -91,6 +102,7 @@ class RegistryScanner:
                 message="Plugin manifest is not valid YAML.",
                 stage="parse",
                 details={"error": exc.__class__.__name__},
+                root=root,
             )
         except OSError as exc:
             return self._error_record(
@@ -101,6 +113,7 @@ class RegistryScanner:
                 stage="read",
                 details={"error": exc.__class__.__name__},
                 status=PluginStatus.FAILED,
+                root=root,
             )
 
         if not isinstance(manifest_data, dict):
@@ -110,10 +123,11 @@ class RegistryScanner:
                 code="PLUGIN_MANIFEST_INVALID",
                 message="Plugin manifest must be a mapping.",
                 stage="validate",
+                root=root,
             )
 
         manifest_id = _optional_string(manifest_data.get("id"))
-        missing_fields = sorted(field for field in REQUIRED_MANIFEST_FIELDS if not _has_value(manifest_data.get(field)))
+        missing_fields = _missing_required_fields(manifest_data)
         if missing_fields:
             return self._error_record(
                 source=source,
@@ -123,6 +137,20 @@ class RegistryScanner:
                 message="Plugin manifest is missing required fields.",
                 stage="validate",
                 details={"fields": missing_fields},
+                root=root,
+            )
+
+        invalid_string_fields = _invalid_required_string_fields(manifest_data)
+        if invalid_string_fields:
+            return self._error_record(
+                source=source,
+                plugin_dir=plugin_dir,
+                plugin_id=manifest_id,
+                code="PLUGIN_MANIFEST_FIELD_INVALID",
+                message="Plugin manifest required string fields must be non-empty strings.",
+                stage="validate",
+                details={"fields": invalid_string_fields},
+                root=root,
             )
 
         raw_type = _optional_string(manifest_data.get("type"))
@@ -139,6 +167,7 @@ class RegistryScanner:
                     "type": raw_type,
                     "supported_types": [item.value for item in PluginType],
                 },
+                root=root,
             )
 
         capabilities = manifest_data.get("capabilities")
@@ -154,9 +183,14 @@ class RegistryScanner:
                 code="PLUGIN_CAPABILITIES_INVALID",
                 message="Plugin capabilities must be a non-empty list of strings.",
                 stage="validate",
+                root=root,
             )
 
-        config_schema = _optional_string(manifest_data.get("config_schema"))
+        plugin_id = _required_string(manifest_data, "id")
+        name = _required_string(manifest_data, "name")
+        version = _required_string(manifest_data, "version")
+        entrypoint = _required_string(manifest_data, "entrypoint")
+        config_schema = _required_string(manifest_data, "config_schema")
         config_schema_path = _resolve_inside_plugin_dir(plugin_dir, config_schema)
         if config_schema_path is None:
             return self._error_record(
@@ -166,6 +200,7 @@ class RegistryScanner:
                 code="PLUGIN_CONFIG_SCHEMA_OUTSIDE_PLUGIN",
                 message="Plugin config schema must be inside the plugin directory.",
                 stage="validate",
+                root=root,
             )
         if not config_schema_path.is_file():
             return self._error_record(
@@ -176,16 +211,17 @@ class RegistryScanner:
                 message="Plugin config schema file does not exist.",
                 stage="validate",
                 details={"config_schema": config_schema},
+                root=root,
             )
 
         manifest = PluginManifest(
-            id=str(manifest_id),
-            name=str(_optional_string(manifest_data.get("name"))),
+            id=plugin_id,
+            name=name,
             type=plugin_type,
-            version=str(_optional_string(manifest_data.get("version"))),
-            entrypoint=str(_optional_string(manifest_data.get("entrypoint"))),
+            version=version,
+            entrypoint=entrypoint,
             capabilities=tuple(item.strip() for item in capabilities),
-            config_schema=str(config_schema),
+            config_schema=config_schema,
             description=_optional_string(manifest_data.get("description")),
             permissions=_string_tuple(manifest_data.get("permissions")),
             dependencies=manifest_data.get("dependencies") if isinstance(manifest_data.get("dependencies"), dict) else {},
@@ -204,8 +240,8 @@ class RegistryScanner:
         record_list = list(records)
         by_id: dict[str, list[PluginRecord]] = defaultdict(list)
         for record in record_list:
-            if record.manifest is not None:
-                by_id[record.manifest.id].append(record)
+            if not _is_synthetic_plugin_id(record.id):
+                by_id[record.id].append(record)
 
         duplicate_ids = {plugin_id for plugin_id, items in by_id.items() if len(items) > 1}
         if not duplicate_ids:
@@ -213,7 +249,7 @@ class RegistryScanner:
 
         marked: list[PluginRecord] = []
         for record in record_list:
-            if record.manifest is None or record.manifest.id not in duplicate_ids:
+            if record.id not in duplicate_ids:
                 marked.append(record)
                 continue
             marked.append(
@@ -228,7 +264,7 @@ class RegistryScanner:
                         code="PLUGIN_ID_DUPLICATE",
                         message="Plugin id is declared by multiple manifests.",
                         stage="validate",
-                        details={"plugin_id": record.manifest.id},
+                        details={"plugin_id": record.id},
                     ),
                 )
             )
@@ -246,10 +282,11 @@ class RegistryScanner:
         details: dict[str, Any] | None = None,
         retryable: bool = False,
         status: PluginStatus = PluginStatus.INVALID,
+        root: Path | None = None,
     ) -> PluginRecord:
         """构造脱敏错误记录，避免把底层异常或本机路径细节直接外泄。"""
         return PluginRecord(
-            id=plugin_id or _synthetic_plugin_id(source, plugin_dir),
+            id=plugin_id or _synthetic_plugin_id(source, plugin_dir, root),
             source=source,
             path=plugin_dir,
             status=status,
@@ -286,11 +323,31 @@ def _has_value(value: object) -> bool:
     return True
 
 
+def _missing_required_fields(manifest_data: dict[str, Any]) -> list[str]:
+    return sorted(field for field in REQUIRED_MANIFEST_FIELDS if not _has_value(manifest_data.get(field)))
+
+
+def _invalid_required_string_fields(manifest_data: dict[str, Any]) -> list[str]:
+    invalid_fields: list[str] = []
+    for field in sorted(REQUIRED_STRING_MANIFEST_FIELDS):
+        value = manifest_data.get(field)
+        if _has_value(value) and not _optional_string(value):
+            invalid_fields.append(field)
+    return invalid_fields
+
+
 def _optional_string(value: object) -> str | None:
     if not isinstance(value, str):
         return None
     stripped = value.strip()
     return stripped or None
+
+
+def _required_string(manifest_data: dict[str, Any], field: str) -> str:
+    value = _optional_string(manifest_data.get(field))
+    if value is None:
+        raise ValueError(f"validated manifest field is missing: {field}")
+    return value
 
 
 def _string_tuple(value: object) -> tuple[str, ...]:
@@ -316,6 +373,17 @@ def _resolve_inside_plugin_dir(plugin_dir: Path, configured_path: str | None) ->
     return resolved_schema_path
 
 
-def _synthetic_plugin_id(source: PluginSource, plugin_dir: Path) -> str:
-    safe_name = "-".join(part for part in plugin_dir.parts[-3:] if part)
-    return f"invalid:{source.value}:{safe_name or 'plugin'}"
+def _is_synthetic_plugin_id(plugin_id: str) -> bool:
+    return plugin_id.startswith("invalid:")
+
+
+def _synthetic_plugin_id(source: PluginSource, plugin_dir: Path, root: Path | None) -> str:
+    if root is not None:
+        try:
+            relative_path = plugin_dir.resolve().relative_to(root.resolve()).as_posix()
+        except ValueError:
+            relative_path = plugin_dir.name
+    else:
+        relative_path = plugin_dir.name
+    digest = hashlib.sha256(relative_path.encode("utf-8")).hexdigest()[:12]
+    return f"invalid:{source.value}:{digest}"

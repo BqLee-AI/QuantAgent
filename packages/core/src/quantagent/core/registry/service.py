@@ -35,8 +35,11 @@ class PluginRegistry:
         record = self.get_plugin(plugin_id)
         if record is None or record.config_schema_path is None:
             return None
-        with record.config_schema_path.open("r", encoding="utf-8") as schema_file:
-            schema_data = json.load(schema_file)
+        try:
+            with record.config_schema_path.open("r", encoding="utf-8") as schema_file:
+                schema_data = json.load(schema_file)
+        except (OSError, json.JSONDecodeError):
+            return None
         return schema_data if isinstance(schema_data, dict) else None
 
     def rescan(self) -> PluginScanSummary:
