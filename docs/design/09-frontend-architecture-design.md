@@ -439,7 +439,7 @@ HITL 采用审批工作台 + 紧急授权浮层 + 一次性授权页。
 
 - 前端基于 `/runtime/health` 或 `/me` 类接口获取 capabilities。
 - UI 隐藏不可用入口，但后端仍必须做真正权限校验。
-- 插件启停、secret 配置、approval、executor dry-run 都必须显示权限状态。
+- 插件启停、secret 配置、approval、executor 能力都必须显示权限状态；初版 executor 只做虚盘，不操作实盘。
 - 一次性授权 link 页面只展示该 token 允许查看和操作的最小信息。
 - 权限不足错误需要展示 `request_id`，方便排查。
 
@@ -488,4 +488,3 @@ runtime.inspect
 8. Approval Inbox、Approval Detail、一次性授权 link 页面。
 9. Native WebSocket topic client 和 query invalidation。
 10. 轻量运行状态图表。
-

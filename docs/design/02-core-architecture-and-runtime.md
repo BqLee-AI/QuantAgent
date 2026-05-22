@@ -17,8 +17,8 @@
 - 核心运行时采用事件驱动管线。
 - 行业包必须输出统一结构，不能各自返回任意格式。
 - Decision 独立成模块，行业包可以提出分析、建议和执行请求，但不能绕过 Decision / Policy Gate。
-- 初版优先实现 notification + human approval；executor 插件接口保留，真实执行必须由配置、评分、权限和风控共同放行。
-- Executor 插件初版至少支持 disabled / dry-run / mock，真实执行作为受控能力逐步接入。
+- 初版优先实现 notification + human approval；executor 插件接口保留真实执行边界，但初版只做虚盘，不操作实盘。
+- Executor 插件初版至少支持 disabled / 虚盘 / mock，未来真实执行作为受控能力逐步接入。
 - 持久化是核心运行时的一部分，负责事件状态、插件状态、配置、审计和用户操作记录。
 
 ## 核心运行时流程
@@ -43,10 +43,10 @@ Source Plugin
 | Router Agent | 识别实体、行业和候选插件 | Routing decision |
 | Industry Plugin | 执行行业分析和市场映射 | Industry analysis |
 | Scoring / Debate | 聚合支持和反对观点，计算置信度 | Scored analysis |
-| Decision | 决定通知、人工确认、dry-run 或拒绝 | Decision result |
+| Decision | 决定通知、人工确认、虚盘或拒绝 | Decision result |
 | Notification | 推送或展示建议 | Notification record |
 | Human Approval | 用户确认、拒绝或要求重分析 | Approval record |
-| Executor | 预留真实执行能力 | 初版 disabled / dry-run |
+| Executor | 预留真实执行能力 | 初版 disabled / 虚盘 |
 | Persistence / Audit | 保存事件、状态、配置、审计记录 | Database records |
 
 ## Event 核心模型
@@ -334,14 +334,13 @@ reject
 
 ## Executor 初版边界
 
-Executor 插件结构保留。真实下单不是默认能力，必须通过明确配置和风控策略放行。
+Executor 插件结构保留。初版只做虚盘，不操作实盘；未来真实下单必须通过明确配置和风控策略放行。
 
 初版 executor 支持：
 
 - disabled。
-- dry-run。
+- 虚盘，不操作实盘。
 - mock execution record。
-- gated real execution。
 
 默认不支持：
 
@@ -353,7 +352,7 @@ Executor 插件结构保留。真实下单不是默认能力，必须通过明�
 - 自动交易涉及资金、权限、合规、风控和审计，不能默认开放。
 - 行业包和 Agent 可以通过 executor tool 请求执行。
 - executor tool 必须检查用户配置、市场权限、confidence score、risk flags、仓位限制和是否需要 human approval。
-- 先打通事件、分析、决策、通知、人工确认和 dry-run，真实执行再按行业包和 executor 配置逐步打开。
+- 先打通事件、分析、决策、通知、人工确认和虚盘；实盘执行后续再按行业包和 executor 配置逐步打开。
 
 ## 插件生命周期
 
@@ -417,7 +416,7 @@ RuntimeError
 - Decision 独立模块。
 - Notification 基础能力。
 - Human Approval 基础状态。
-- Executor dry-run 接口。
+- Executor 虚盘接口，不操作实盘。
 
 暂缓实现：
 

@@ -14,7 +14,7 @@
 - API 采用资源 REST 为主，`actions` endpoint 为辅。
 - API DTO 必须独立于 ORM model，禁止直接返回 ORM model。
 - 接口响应统一使用 `code/data/msg/error` envelope。
-- Web 前端、插件后台、Agent 运行调试、HITL 授权、通知和 executor dry-run 都必须有可查询、可审计接口。
+- Web 前端、插件后台、Agent 运行调试、HITL 授权、通知和 executor 能力都必须有可查询、可审计接口；初版 executor 只做虚盘，不操作实盘。
 - 插件配置、secret、交易策略、私有关键词、prompt 和敏感上下文不得通过 API 明文泄露。
 - 任何高风险动作最终都必须经过 Policy Gate，不能只靠前端按钮、文本回复或 AI 判断绕过风控。
 
@@ -182,7 +182,7 @@ ApiResponse<T>
 - HITL 授权请求到达提醒。
 - 插件安装、启停、reload 状态变化。
 - Scheduler run 状态变化。
-- Notification / executor dry-run 状态变化。
+- Notification / executor 状态变化；初版 executor 状态只覆盖虚盘，不操作实盘。
 - Runtime error 提醒。
 
 实时通道不负责：
@@ -408,7 +408,7 @@ ApprovalRequest
 | 等级 | 含义 | 示例 |
 | --- | --- | --- |
 | `informational` | 只通知，不需要确认 | 普通分析完成 |
-| `soft_confirm` | 文本同意可以接受 | 发送通知、继续分析、低风险 dry-run |
+| `soft_confirm` | 文本同意可以接受 | 发送通知、继续分析、低风险虚盘 |
 | `strong_confirm` | 需要明确结构化确认 | 开启盯盘、调整策略参数 |
 | `link_confirm` | 需要一次性链接确认 | 高风险交易请求、启用 executor |
 | `manual_only` | 只能 Web 后台或本地控制台确认 | 真实下单、大额杠杆、敏感插件启用 |
@@ -569,7 +569,7 @@ Agent、Tool、Skill 需要暴露运行摘要和审计摘要，但不暴露完�
 
 原因：
 
-- 插件配置、API key、HITL 授权、executor dry-run 都是敏感能力，不能完全裸奔。
+- 插件配置、API key、HITL 授权、executor 能力都是敏感能力，不能完全裸奔；初版 executor 只做虚盘，不操作实盘。
 - 当前阶段重点是插件、Agent、事件链路和审批策略，不适合先做复杂用户体系。
 - 代码结构上保留 `actor`、`actor_type`、`permission`、`audit` 字段，后续可扩展 RBAC。
 
@@ -665,4 +665,3 @@ GET /events?limit=50&cursor=xxx&sort=-created_at&status=decision_ready
 5. Native WebSocket topic 通知。
 6. ApprovalPolicyResolver 与 `expires_at` / `expiration_action`。
 7. 前端生成 client、types 和 Zod schema。
-

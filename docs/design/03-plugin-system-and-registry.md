@@ -24,7 +24,7 @@
 | `industry` | 对事件进行行业分析 | Oil、Semiconductor、Memory |
 | `strategy` | 将分析结果映射为策略建议 | 趋势策略、事件冲击策略、期权策略 |
 | `notification` | 发送通知或展示提醒 | UI、Discord、Telegram、Email |
-| `executor` | 交易执行或 dry-run 执行 | 美股券商、Binance、OKX、Mock executor |
+| `executor` | 交易执行能力；初版只做虚盘，不操作实盘 | 美股券商、Binance、OKX、Mock executor |
 
 ## 插件目录来源
 

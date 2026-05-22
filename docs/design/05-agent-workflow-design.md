@@ -230,7 +230,7 @@ RouterAgent
 | strategy tool | `generate_trade_plan`、`validate_trade_plan` | 生成或校验交易计划 |
 | notification tool | `notify_user` | 通知用户或请求人工确认 |
 | monitoring tool | `request_monitoring` | 请求后续盯盘或特征监控 |
-| executor tool | `request_executor_action` | 请求交易执行或 dry-run |
+| executor tool | `request_executor_action` | 请求交易执行；初版只做虚盘，不操作实盘 |
 
 ### 高风险工具
 
@@ -281,7 +281,7 @@ ToolDefinition
 | --- | --- | --- |
 | low | 读取公开 RSS、读取缓存事件 | 默认允许 |
 | medium | 调用外部 API、抓取网页 | 需要限流和日志 |
-| high | 写配置、触发通知、dry-run executor | 需要审计，可要求确认 |
+| high | 写配置、触发通知、虚盘 executor | 需要审计，可要求确认 |
 | critical | 真实交易执行 | 初版禁用 |
 
 ## 插件自定义工具
