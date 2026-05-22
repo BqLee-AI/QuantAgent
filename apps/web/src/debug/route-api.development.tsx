@@ -1,4 +1,5 @@
 import { Link, Outlet, createRoute, useNavigate } from '@tanstack/react-router'
+import type { AnyRoute } from '@tanstack/react-router'
 import type { CSSProperties } from 'react'
 
 import { PageEmpty } from '../app/components/PageEmpty'
@@ -511,14 +512,24 @@ function DebugRoutePlaygroundPage({ preview }: { preview?: DebugRoutePreview }) 
 
 export const debugRouteApi: DebugRouteApi = {
   attachDebugRoutes: (routeTree) => {
-    const existingChildren = Array.isArray(routeTree.children) ? routeTree.children : []
+    const rootChildren: AnyRoute[] = Array.isArray(routeTree.children) ? routeTree.children : []
+    const workspaceRoute = rootChildren.find((child: AnyRoute) => child.id === '/_app/(workspace)')
+    const workspaceChildren: AnyRoute[] = Array.isArray(workspaceRoute?.children)
+      ? workspaceRoute.children
+      : []
 
-    if (existingChildren.some((child) => child.id === '/debug' || child.fullPath === '/debug')) {
+    if (
+      workspaceChildren.some((child: AnyRoute) => child.id === '/debug' || child.fullPath === '/debug')
+    ) {
       return routeTree
     }
 
+    if (!workspaceRoute) {
+      throw new Error('未找到 /_app/(workspace) layout route，无法挂载开发态 /debug 工作台。')
+    }
+
     const debugRoute = createRoute({
-      getParentRoute: () => routeTree,
+      getParentRoute: () => workspaceRoute,
       path: '/debug',
       component: DebugWorkbenchPage,
     })
@@ -581,6 +592,15 @@ export const debugRouteApi: DebugRouteApi = {
       debugRoutePlaygroundRoute,
     ])
 
-    return routeTree.addChildren([...existingChildren, debugRouteTree])
+    const workspaceRouteWithDebugChildren = workspaceRoute.addChildren([
+      ...workspaceChildren,
+      debugRouteTree,
+    ])
+
+    const nextRootChildren = rootChildren.map((child: AnyRoute) =>
+      child.id === '/_app/(workspace)' ? workspaceRouteWithDebugChildren : child,
+    )
+
+    return routeTree.addChildren(nextRootChildren)
   },
 }
