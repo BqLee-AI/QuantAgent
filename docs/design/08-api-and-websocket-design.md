@@ -15,6 +15,7 @@
 - API DTO 必须独立于 ORM model，禁止直接返回 ORM model。
 - 接口响应统一使用 `code/data/msg/error` envelope。
 - Web 前端、插件后台、Agent 运行调试、HITL 授权、通知和 executor 能力都必须有可查询、可审计接口；初版 executor 只做虚盘，不操作实盘。
+- 虚盘在 API、WebSocket topic 和 action type 中仍使用 `dry_run` 命名，不新增并行字段名。
 - 插件配置、secret、交易策略、私有关键词、prompt 和敏感上下文不得通过 API 明文泄露。
 - 任何高风险动作最终都必须经过 Policy Gate，不能只靠前端按钮、文本回复或 AI 判断绕过风控。
 
