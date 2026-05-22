@@ -47,13 +47,13 @@ class SourceFetchService:
 
         timer = perf_counter()
         plugin_started = False
+        stored: list[StoredRawEvent] = []
+        duplicates = 0
         try:
             plugin.load(RuntimeContext(plugin_id=binding.source_plugin_id))
             plugin.start()
             plugin_started = True
             drafts = plugin.fetch(cursor, binding.effective_config)
-            stored: list[StoredRawEvent] = []
-            duplicates = 0
             for draft in drafts:
                 result = self._raw_events.store_if_new(draft)
                 if result.is_duplicate:
@@ -75,6 +75,8 @@ class SourceFetchService:
         except Exception as exc:
             run.status = SourceFetchRunStatus.failed
             run.error_summary = f"{type(exc).__name__}: {exc}"
+            run.stored_count = len(stored)
+            run.duplicate_count = duplicates
             return SourceFetchResult(
                 status=run.status.value,
                 fetched_count=run.fetched_count,
