@@ -179,6 +179,7 @@ events 1 ── 0..n decision_results
 
 - `agent_run_id` 外键引用 `agent_runs.id`，建议 `on delete restrict`。
 - `event_id` 外键引用 `events.id`，建议 `on delete restrict`。
+- `agent_run_steps.event_id` 必须与关联 `agent_runs.event_id` 一致；落地时可通过复合外键约束或 service 层写入校验保证。
 - `unique(agent_run_id, step_index)`，保证同一运行内步骤序号稳定。
 - `index(agent_run_id, step_index asc)`，支持按顺序读取运行轨迹。
 - `index(event_id, created_at desc)`，支持按事件读取步骤。
@@ -187,6 +188,7 @@ events 1 ── 0..n decision_results
 ### 写入规则
 
 - 该表保存步骤摘要，不保存完整 provider 原始响应。
+- 写入时必须校验冗余 `event_id` 与所属 `agent_run_id` 指向的事件一致，避免事件回放和统计漂移。
 - 工具调用的详细输入输出摘要应写入 `tool_invocations`，步骤中只保留关联摘要。
 - 步骤记录原则上追加；如运行中需要更新状态，只更新当前步骤的状态和结束字段，不改写已完成步骤语义。
 

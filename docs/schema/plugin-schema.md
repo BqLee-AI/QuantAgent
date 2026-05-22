@@ -220,6 +220,7 @@ plugin_versions 1 ── 0..n plugin_dependency_records
 | `archived_reason` | `text` | nullable | 配置归档原因摘要，必须脱敏 |
 | `metadata` | `jsonb` | not null, default `{}` | 扩展信息，不能保存 secret、私有策略或敏感工具参数 |
 | `created_at` | `timestamptz` | not null, default `now()` | 配置快照创建时间 |
+| `updated_at` | `timestamptz` | not null, default `now()` | 配置快照最近更新时间 |
 
 ### 约束与索引
 
@@ -232,10 +233,12 @@ plugin_versions 1 ── 0..n plugin_dependency_records
 - `index(archived_at)`，支持管理台筛选已归档配置。
 - `plugin_record_id` 外键引用 `plugin_records.id`，建议 `on delete restrict`。
 - `plugin_version_id` 外键引用 `plugin_versions.id`，建议 `on delete restrict`。
+- `plugin_configs.plugin_record_id` 必须与关联 `plugin_versions.plugin_record_id` 一致；落地时可通过复合外键约束或 service 层写入校验保证。
 
 ### 写入规则
 
 - 数据库不长期保存 `masked_config`，避免 masked view 与真实配置漂移。
+- 写入或更新配置状态时，必须校验 `plugin_record_id` 与 `plugin_version_id` 的归属一致性。
 - API 返回配置时，应根据 `config_schema` 和 `sensitive_fields` 动态生成 masked view。
 - 配置中的敏感项默认保存 secret reference，例如 `secret://x_api/main`。
 - 确实必须入库的敏感值需要先加密，并且 API、日志和测试断言不得输出原文。
@@ -287,10 +290,13 @@ plugin_versions 1 ── 0..n plugin_dependency_records
 - `plugin_version_id` 外键引用 `plugin_versions.id`，建议 `on delete restrict`。
 - `resolved_plugin_record_id` 外键引用 `plugin_records.id`，建议 `on delete restrict`。
 - `resolved_plugin_version_id` 外键引用 `plugin_versions.id`，建议 `on delete restrict`。
+- `plugin_dependency_records.plugin_record_id` 必须与关联 `plugin_versions.plugin_record_id` 一致；落地时可通过复合外键约束或 service 层写入校验保证。
+- 当 `resolved_plugin_record_id` 和 `resolved_plugin_version_id` 同时非空时，`resolved_plugin_record_id` 必须与关联 `plugin_versions.plugin_record_id` 一致。
 
 ### 写入规则
 
 - 依赖记录必须同时保留 manifest 原始声明和 Registry 解析结果。
+- 写入依赖记录时，必须校验声明方和解析结果中的 `plugin_record_id` / `plugin_version_id` 归属一致性。
 - `plugin` 依赖可尝试从已配置插件源自动安装。
 - `python` 依赖只能通过受控安装流程安装到插件运行环境，不污染主 Python 环境。
 - `system` 依赖初版只检查不自动安装。
