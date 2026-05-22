@@ -687,6 +687,7 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(body["error"]["code"], "BAD_REQUEST")
         self.assertEqual(body["error"]["details"]["plugin"]["id"], "invalid.schema")
+        self.assertEqual(set(body["error"]["details"]["plugin"]["last_error"]), {"code", "stage", "retryable"})
         self.assertEqual(
             body["error"]["details"]["plugin"]["last_error"]["code"],
             "PLUGIN_CONFIG_SCHEMA_NOT_FOUND",

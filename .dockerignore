@@ -26,6 +26,8 @@ apps/web
 docs
 examples
 plugins
+!plugins
+!plugins/**
 infra
 packages/agent
 packages/adapters

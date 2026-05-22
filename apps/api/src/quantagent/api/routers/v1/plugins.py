@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
 from quantagent.api.auth import CurrentActor, require_csrf
-from quantagent.api.errors import BadRequestError, NotFoundError
-from quantagent.api.responses import ApiResponse
+from quantagent.api.http.errors import BadRequestError, NotFoundError
+from quantagent.api.http.responses import ApiResponse
 from quantagent.api.schemas.plugins import (
     PluginErrorResponse,
     PluginManifestResponse,
@@ -131,7 +132,7 @@ def _manifest_response(manifest: PluginManifest) -> PluginManifestResponse:
         config_schema=manifest.config_schema,
         description=manifest.description,
         permissions=list(manifest.permissions),
-        dependencies=manifest.dependencies,
+        dependencies=dict(manifest.dependencies),
     )
 
 
@@ -140,7 +141,7 @@ def _error_response(error: PluginError) -> PluginErrorResponse:
         code=error.code,
         message=error.message,
         stage=error.stage,
-        details=error.details,
+        details=dict(error.details),
         retryable=error.retryable,
     )
 
@@ -151,7 +152,7 @@ def _summary_response(summary: PluginScanSummary) -> PluginScanSummaryResponse:
         valid=summary.valid,
         invalid=summary.invalid,
         failed=summary.failed,
-        sources=summary.sources,
+        sources=dict(summary.sources),
     )
 
 
@@ -161,7 +162,11 @@ def _record_error_details(record: PluginRecord) -> dict[str, Any]:
         "status": record.status.value,
     }
     if record.last_error is not None:
-        details["last_error"] = _error_response(record.last_error).model_dump(mode="json")
+        details["last_error"] = {
+            "code": record.last_error.code,
+            "stage": record.last_error.stage,
+            "retryable": record.last_error.retryable,
+        }
     return details
 
 
@@ -169,10 +174,11 @@ def _display_path(path: Path) -> str:
     repo_root = _find_repo_root()
     try:
         return path.resolve().relative_to(repo_root).as_posix()
-    except ValueError:
+    except (OSError, RuntimeError, ValueError):
         return path.name
 
 
+@lru_cache(maxsize=1)
 def _find_repo_root() -> Path:
     """定位包含 plugins/ 或 runtime/ 的项目根，兼容源码运行和镜像运行。"""
     candidates = [Path.cwd(), *Path(__file__).resolve().parents]
