@@ -232,6 +232,9 @@ events 1 ── 0..n decision_results
 - `event_id` 外键引用 `events.id`，建议 `on delete restrict`。
 - `agent_run_id` 外键引用 `agent_runs.id`，建议 `on delete set null`。
 - `agent_run_step_id` 外键引用 `agent_run_steps.id`，建议 `on delete set null`。
+- 当 `agent_run_id` 非空时，`tool_invocations.event_id` 必须与关联 `agent_runs.event_id` 一致。
+- 当 `agent_run_step_id` 非空时，`tool_invocations.event_id` 必须与关联 `agent_run_steps.event_id` 一致。
+- 当 `agent_run_id` 和 `agent_run_step_id` 同时非空时，关联的 `agent_run_steps.agent_run_id` 必须等于 `tool_invocations.agent_run_id`。
 - `index(event_id, created_at desc)`，支持事件轨迹展示。
 - `index(agent_run_id, created_at asc)`，支持 Agent run 工具调用回放。
 - `index(tool_id, status)`，支持按工具排查失败。
@@ -242,6 +245,7 @@ events 1 ── 0..n decision_results
 ### 写入规则
 
 - 所有 Agent 外部行动都应表达为工具调用，并写入本表。
+- 写入时必须由 service 层校验 `event_id`、`agent_run_id`、`agent_run_step_id` 的一致性；如果后续需要数据库强约束，可通过复合外键或触发器补齐。
 - 高风险工具被策略阻止时，仍应写入 `status = blocked` 和阻塞原因。
 - 工具调用触发的审批由 `approval_records.tool_invocation_id` 反查，本表不保存 `approval_record_id`，避免双向 nullable 关系漂移。
 - 工具输入输出必须脱敏；API key、secret、账户信息和敏感工具参数不得明文入库。
