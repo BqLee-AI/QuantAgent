@@ -1,8 +1,8 @@
 ## Status
 
-- 当前阶段：OpenSpec-only 文档评审。
-- 实现状态：Blocked，必须先提交 OpenSpec-only PR，并等维护者明确评论“没问题”或批准后，才能进入实现 PR。
-- 当前 change 不允许写实现代码、迁移、依赖升级、生成 contracts 或无关 docs。
+- 当前阶段：`packages/core` 核心实现已完成，等待 API / Policy Gate 集成。
+- 实现状态：B2-B4 与 V1 已完成；P1 / P2 / M1 / V2 / V3 仍待后续切片推进。
+- 当前 change 的本轮实现仅覆盖 `packages/core` 领域契约、持久化、迁移、服务和核心测试，不包含 API、Policy Gate 或后续 phase 能力。
 
 ## Graph Overview
 
@@ -53,7 +53,7 @@ B2 领域契约冻结
   - 并行性：否。未通过审核前不得实现代码。
   - 验证：`openspec validate add-portfolio-wallet-core-v1 --type change --strict --json`。
 
-- [ ] B2. 冻结 wallet core 领域契约
+- [x] B2. 冻结 wallet core 领域契约
   - 输入：`design.md` 的目标、非目标、事实层/证据层/投影层决策；`spec.md` 的 requirement。
   - 输出：领域对象和服务入口草案，覆盖 `TradingAccount`、`CashBalance`、`Position`、`PaperOrder`、`PaperExecution`、`WalletLedgerEntry`、`FxRateSnapshot`。
   - 写入边界：`packages/core/src/quantagent/core/**` 中 wallet / portfolio 模块；必要的 core package export。
@@ -61,7 +61,7 @@ B2 领域契约冻结
   - 并行性：否。后续持久化、API 和测试都依赖这些契约。
   - 验证：core 单元测试能导入领域对象；类型、枚举和值对象不依赖 `apps/api`、`apps/web` 或具体插件实现。
 
-- [ ] B3. 定义持久化、迁移和事务边界
+- [x] B3. 定义持久化、迁移和事务边界
   - 输入：B2 领域契约；`packages/core` Alembic 规则；spec 中 append-only ledger、snapshot 分离、Decimal/Numeric 和幂等来源键要求。
   - 输出：ORM model、迁移和 repository 边界；账户范围内 paper execution 幂等唯一约束；ledger 与 snapshot 同事务写入约束。
   - 写入边界：`packages/core/src/quantagent/core/db/**`、`packages/core/alembic/**`、`packages/core/tests/**`。
@@ -69,7 +69,7 @@ B2 领域契约冻结
   - 并行性：否。数据模型和迁移是后续 service/API 的基础。
   - 验证：迁移配置可解析；repository 测试覆盖 Decimal/Numeric、append-only ledger、snapshot 分离和幂等唯一约束。
 
-- [ ] B4. 实现 wallet 入账和查询服务
+- [x] B4. 实现 wallet 入账和查询服务
   - 输入：B3 repository / transaction 边界；spec 中 paper execution、ledger、facts query、人工调整和脱敏要求。
   - 输出：core wallet service，支持虚盘账户初始化、虚拟入金/出金/人工调整、paper execution 幂等入账、cash/position/ledger 查询、Policy Gate facts 查询。
   - 写入边界：`packages/core/src/quantagent/core/**` wallet / portfolio service；`packages/core/tests/**` service 测试。
@@ -139,7 +139,7 @@ B2 领域契约冻结
   - 命令：`openspec validate add-portfolio-wallet-core-v1 --type change --strict --json`
   - 当前结果：已通过。
 
-- [ ] V1. Core wallet validation
+- [x] V1. Core wallet validation
   - 触发点：B4 完成后。
   - 覆盖：单账户 paper wallet、余额、持仓、虚拟订单、虚拟成交、账本写入、多币种 cash balance、Decimal/Numeric、重复 execution 幂等、人工调整不绕过 ledger。
   - 推荐命令：在实现阶段按 `packages/core` 现有测试入口运行最小相关 Python 测试。

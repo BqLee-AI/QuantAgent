@@ -7,6 +7,7 @@ from sqlalchemy.engine import Engine
 
 from quantagent.core.config.settings import Settings
 from quantagent.core.db.base import Base
+from quantagent.core.db import wallet_models
 from quantagent.core.db.session import create_session_factory, create_sync_engine, require_database_url
 
 
@@ -31,7 +32,8 @@ class CorePackageTestCase(unittest.TestCase):
 
     def test_base_metadata_is_importable(self) -> None:
         self.assertIsNotNone(Base.metadata)
-        self.assertEqual(Base.metadata.tables, {})
+        self.assertIn("trading_accounts", Base.metadata.tables)
+        self.assertIn("wallet_ledger_entries", Base.metadata.tables)
 
     def test_database_url_is_required_for_default_engine(self) -> None:
         with self.assertRaisesRegex(ValueError, "DATABASE_URL must be configured"):
