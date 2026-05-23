@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from sqlalchemy import Select, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from quantagent.core.wallet.domain import PositionSide
@@ -50,8 +51,17 @@ class WalletRepository:
             locked=0,
             unsettled=0,
         )
-        self._session.add(balance)
-        return balance
+        try:
+            # 初始 snapshot 行受唯一约束保护；并发首笔入账时用 savepoint 吃掉重复插入。
+            with self._session.begin_nested():
+                self._session.add(balance)
+                self._session.flush()
+            return balance
+        except IntegrityError:
+            existing = self.get_cash_balance(account_id, currency)
+            if existing is None:
+                raise
+            return existing
 
     def get_position(
         self,
@@ -97,8 +107,17 @@ class WalletRepository:
             unrealized_pnl=0,
             currency=currency,
         )
-        self._session.add(position)
-        return position
+        try:
+            # 多列唯一键同样可能被并发首笔成交撞上，冲突后回读胜出的 snapshot 行。
+            with self._session.begin_nested():
+                self._session.add(position)
+                self._session.flush()
+            return position
+        except IntegrityError:
+            existing = self.get_position(account_id, instrument, market, side, currency)
+            if existing is None:
+                raise
+            return existing
 
     def get_order(self, order_id: str) -> PaperOrderModel | None:
         return self._session.get(PaperOrderModel, order_id)

@@ -286,6 +286,31 @@ class WalletServiceTestCase(unittest.TestCase):
                 )
             )
 
+    def test_cash_adjustment_uses_normalized_timestamp_for_snapshot(self) -> None:
+        account = self.service.create_trading_account(
+            CreateTradingAccountCommand(
+                account_id="acct_cash_time_norm",
+                name="Cash Time Norm",
+                base_currency="USD",
+            )
+        )
+        occurred_at = datetime(2026, 5, 23, 20, 0, tzinfo=timezone(timedelta(hours=8)))
+
+        entry = self.service.record_cash_adjustment(
+            RecordCashAdjustmentCommand(
+                account_id=account.account_id,
+                currency="USD",
+                amount="100",
+                entry_type=WalletLedgerEntryType.DEPOSIT,
+                occurred_at=occurred_at,
+            )
+        )
+        balances = self.service.list_cash_balances(account.account_id)
+        expected_utc = datetime(2026, 5, 23, 12, 0, tzinfo=timezone.utc)
+
+        self.assertEqual(entry.occurred_at.replace(tzinfo=timezone.utc), expected_utc)
+        self.assertEqual(balances[0].updated_at.replace(tzinfo=timezone.utc), expected_utc)
+
     def test_execution_must_match_referenced_order(self) -> None:
         account = self.service.create_trading_account(
             CreateTradingAccountCommand(
@@ -453,6 +478,29 @@ class WalletServiceTestCase(unittest.TestCase):
         self.assertTrue(first.created)
         self.assertFalse(second.created)
         self.assertEqual(first.execution.execution_id, second.execution.execution_id)
+
+    def test_blank_execution_idempotency_key_is_rejected(self) -> None:
+        account = self.service.create_trading_account(
+            CreateTradingAccountCommand(
+                account_id="acct_blank_idempotency_key",
+                name="Blank Idempotency Key",
+                base_currency="USD",
+            )
+        )
+
+        with self.assertRaisesRegex(ValueError, "Execution idempotency_key must not be empty"):
+            self.service.ingest_paper_execution(
+                RecordPaperExecutionCommand(
+                    account_id=account.account_id,
+                    idempotency_key="   ",
+                    instrument="META",
+                    market="NASDAQ",
+                    side=OrderSide.BUY,
+                    quantity="1",
+                    price="100",
+                    currency="USD",
+                )
+            )
 
     def test_naive_timestamp_is_rejected_with_clear_error(self) -> None:
         account = self.service.create_trading_account(

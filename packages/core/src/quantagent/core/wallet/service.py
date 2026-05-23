@@ -93,7 +93,7 @@ class WalletService:
                 balance_id=self._new_id("bal"),
             )
             self._apply_balance_delta(balance, total_delta=amount, available_delta=amount)
-            self._touch_snapshot(balance, command.occurred_at)
+            self._touch_snapshot(balance, occurred_at)
             entry = WalletLedgerEntryModel(
                 id=self._new_id("led"),
                 account_id=command.account_id,
@@ -150,12 +150,13 @@ class WalletService:
             raise ValueError("Execution fee_amount must not be negative.")
         trade_currency = self._normalize_currency(command.currency)
         fee_currency = self._normalize_currency(command.fee_currency or command.currency)
+        idempotency_key = self._require_non_empty(command.idempotency_key, "Execution idempotency_key")
         instrument = self._require_non_empty(command.instrument, "Execution instrument")
         market = self._require_non_empty(command.market, "Execution market")
         executed_at = self._normalize_timestamp(command.executed_at, field_name="Execution executed_at")
         with self._session_factory() as read_session:
             repository = WalletRepository(read_session)
-            existing = repository.get_execution_by_idempotency_key(command.account_id, command.idempotency_key)
+            existing = repository.get_execution_by_idempotency_key(command.account_id, idempotency_key)
             if existing is not None:
                 return ExecutionIngestionResult(execution=self._to_execution_snapshot(existing), created=False)
 
@@ -185,7 +186,7 @@ class WalletService:
                     id=execution_id,
                     account_id=command.account_id,
                     order_id=command.order_id,
-                    idempotency_key=command.idempotency_key,
+                    idempotency_key=idempotency_key,
                     instrument=instrument,
                     market=market,
                     side=command.side,
@@ -257,7 +258,7 @@ class WalletService:
                         currency=trade_currency,
                         amount=trade_cash_delta,
                         source_type=WalletLedgerSourceType.PAPER_EXECUTION,
-                        source_ref=command.idempotency_key,
+                        source_ref=idempotency_key,
                         occurred_at=executed_at,
                         order_id=command.order_id,
                         execution_id=execution_id,
@@ -277,7 +278,7 @@ class WalletService:
                             currency=fee_currency,
                             amount=-fee_amount,
                             source_type=WalletLedgerSourceType.PAPER_EXECUTION,
-                            source_ref=command.idempotency_key,
+                            source_ref=idempotency_key,
                             occurred_at=executed_at,
                             order_id=command.order_id,
                             execution_id=execution_id,
@@ -297,7 +298,7 @@ class WalletService:
         except IntegrityError:
             with self._session_factory() as session:
                 repository = WalletRepository(session)
-                existing = repository.get_execution_by_idempotency_key(command.account_id, command.idempotency_key)
+                existing = repository.get_execution_by_idempotency_key(command.account_id, idempotency_key)
                 if existing is None:
                     raise
                 return ExecutionIngestionResult(execution=self._to_execution_snapshot(existing), created=False)
