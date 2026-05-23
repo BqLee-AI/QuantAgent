@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import create_engine
@@ -363,6 +364,75 @@ class WalletServiceTestCase(unittest.TestCase):
 
         self.assertEqual(account.base_currency, "USD")
         self.assertEqual(balances[0].currency, "USD")
+
+    def test_execution_reuses_existing_record_after_idempotency_conflict(self) -> None:
+        account = self.service.create_trading_account(
+            CreateTradingAccountCommand(
+                account_id="acct_conflict",
+                name="Conflict Guard",
+                base_currency="USD",
+            )
+        )
+        self.service.record_cash_adjustment(
+            RecordCashAdjustmentCommand(
+                account_id=account.account_id,
+                currency="USD",
+                amount="1000",
+                entry_type=WalletLedgerEntryType.DEPOSIT,
+                source_ref="capital",
+            )
+        )
+        first = self.service.ingest_paper_execution(
+            RecordPaperExecutionCommand(
+                account_id=account.account_id,
+                execution_id="exe_conflict_1",
+                idempotency_key="conflict-key",
+                instrument="META",
+                market="NASDAQ",
+                side=OrderSide.BUY,
+                quantity="1",
+                price="100",
+                currency="USD",
+            )
+        )
+        second = self.service.ingest_paper_execution(
+            RecordPaperExecutionCommand(
+                account_id=account.account_id,
+                execution_id="exe_conflict_2",
+                idempotency_key="conflict-key",
+                instrument="META",
+                market="NASDAQ",
+                side=OrderSide.BUY,
+                quantity="1",
+                price="100",
+                currency="USD",
+            )
+        )
+
+        self.assertTrue(first.created)
+        self.assertFalse(second.created)
+        self.assertEqual(first.execution.execution_id, second.execution.execution_id)
+
+    def test_naive_timestamp_is_rejected_with_clear_error(self) -> None:
+        account = self.service.create_trading_account(
+            CreateTradingAccountCommand(
+                account_id="acct_naive_time",
+                name="Naive Time",
+                base_currency="USD",
+            )
+        )
+        naive_time = datetime(2026, 5, 23, 12, 0, 0)
+
+        with self.assertRaisesRegex(ValueError, "timezone-aware"):
+            self.service.record_cash_adjustment(
+                RecordCashAdjustmentCommand(
+                    account_id=account.account_id,
+                    currency="USD",
+                    amount="100",
+                    entry_type=WalletLedgerEntryType.DEPOSIT,
+                    occurred_at=naive_time,
+                )
+            )
 
     def test_non_paper_account_mode_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "only supports paper accounts"):

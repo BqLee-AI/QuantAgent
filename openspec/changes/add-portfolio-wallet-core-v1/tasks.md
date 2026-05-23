@@ -1,6 +1,6 @@
 ## Status
 
-- 当前阶段：`packages/core` 核心实现已完成，等待 API / Policy Gate 集成。
+- 当前阶段：OpenSpec 审核已完成，`packages/core` 核心实现已完成，等待 API / Policy Gate 集成。
 - 实现状态：B2-B4 与 V1 已完成；P1 / P2 / M1 / V2 / V3 仍待后续切片推进。
 - 当前 change 的本轮实现仅覆盖 `packages/core` 领域契约、持久化、迁移、服务和核心测试，不包含 API、Policy Gate 或后续 phase 能力。
 
@@ -37,7 +37,7 @@ B2 领域契约冻结
 
 ## Blocking Serial Path
 
-- [ ] B0. OpenSpec review 修订
+- [x] B0. OpenSpec review 修订
   - 输入：issue #120、评论中 “only 虚盘，不操作实盘” 约束、本 change 的 proposal/design/spec/tasks、本轮 review findings。
   - 输出：修订后的 OpenSpec artifacts，补齐 simulator -> wallet core 官方路径、首批股票类 spot 范围、可卖持仓 fact、docs/design dry-run 收敛边界。
   - 写入边界：`openspec/changes/add-portfolio-wallet-core-v1/**`。
@@ -45,7 +45,7 @@ B2 领域契约冻结
   - 并行性：否。OpenSpec artifacts 需要统一收敛。
   - 验证：`openspec validate add-portfolio-wallet-core-v1 --type change --strict --json`。
 
-- [ ] B1. OpenSpec-only PR 审核
+- [x] B1. OpenSpec-only PR 审核
   - 输入：issue #120、评论中 “only 虚盘，不操作实盘” 约束、本 change 的 proposal/design/spec/tasks。
   - 输出：维护者在 OpenSpec-only PR 下明确评论“没问题”或批准。
   - 写入边界：`openspec/changes/add-portfolio-wallet-core-v1/**`。
@@ -123,7 +123,7 @@ B2 领域契约冻结
 
 ## Review Checkpoints
 
-- [ ] R1. OpenSpec review gate
+- [x] R1. OpenSpec review gate
   - 条件：B1 完成。
   - 检查：proposal/design/spec/tasks 是否仍一致；维护者是否明确同意 V1 范围。
   - 失败处理：只更新 OpenSpec artifacts，重新验证并等待确认。
@@ -154,7 +154,7 @@ B2 领域契约冻结
   - 覆盖：API route 调 core service；Policy Gate / risk check 消费 wallet facts；wallet core 不自行放行真实或高风险动作。
   - 推荐命令：core/API 相关测试组合，必要时补最小集成测试。
 
-- [ ] V4. Final OpenSpec validation
+- [x] V4. Final OpenSpec validation
   - 触发点：实现期间如果修改本 change artifacts。
   - 命令：`openspec validate add-portfolio-wallet-core-v1 --type change --strict --json`
 

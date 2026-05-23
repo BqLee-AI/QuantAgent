@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from quantagent.core.wallet.domain import (
@@ -80,6 +81,7 @@ class WalletService:
         if amount == 0:
             raise ValueError("Cash adjustment amount must not be zero.")
         currency = self._normalize_currency(command.currency)
+        occurred_at = self._normalize_timestamp(command.occurred_at, field_name="Cash adjustment occurred_at")
         self._validate_manual_entry_type(command.entry_type, amount)
         with self._session_factory.begin() as session:
             repository = WalletRepository(session)
@@ -99,7 +101,7 @@ class WalletService:
                 amount=amount,
                 source_type=WalletLedgerSourceType.MANUAL,
                 source_ref=command.source_ref or f"manual:{command.entry_type}:{uuid4().hex}",
-                occurred_at=command.occurred_at,
+                occurred_at=occurred_at,
                 metadata_json=self._note_metadata(command.note),
             )
             repository.add(entry)
@@ -111,6 +113,7 @@ class WalletService:
         limit_price = None if command.limit_price is None else to_decimal(command.limit_price)
         if limit_price is not None and limit_price <= 0:
             raise ValueError("Order limit_price must be greater than zero.")
+        requested_at = self._normalize_timestamp(command.requested_at, field_name="Order requested_at")
         order_id = command.order_id or self._new_id("ord")
         client_order_id = command.client_order_id or order_id
         with self._session_factory.begin() as session:
@@ -128,7 +131,7 @@ class WalletService:
                 limit_price=limit_price,
                 currency=self._normalize_currency(command.currency),
                 status=PaperOrderStatus.OPEN,
-                requested_at=command.requested_at,
+                requested_at=requested_at,
             )
             repository.add(order)
             repository.flush()
@@ -144,131 +147,158 @@ class WalletService:
         fee_currency = self._normalize_currency(command.fee_currency or command.currency)
         instrument = self._require_non_empty(command.instrument, "Execution instrument")
         market = self._require_non_empty(command.market, "Execution market")
-        with self._session_factory.begin() as session:
-            repository = WalletRepository(session)
-            self._require_paper_account(repository, command.account_id)
+        executed_at = self._normalize_timestamp(command.executed_at, field_name="Execution executed_at")
+        with self._session_factory() as read_session:
+            repository = WalletRepository(read_session)
             existing = repository.get_execution_by_idempotency_key(command.account_id, command.idempotency_key)
             if existing is not None:
                 return ExecutionIngestionResult(execution=self._to_execution_snapshot(existing), created=False)
 
-            order = None
-            if command.order_id is not None:
-                order = repository.get_order(command.order_id)
-                if order is None or order.account_id != command.account_id:
-                    raise ValueError(f"Unknown paper order: {command.order_id}")
-                self._validate_execution_against_order(
-                    order=order,
+        try:
+            with self._session_factory.begin() as session:
+                repository = WalletRepository(session)
+                self._require_paper_account(repository, command.account_id)
+
+                order = None
+                if command.order_id is not None:
+                    order = repository.get_order(command.order_id)
+                    if order is None or order.account_id != command.account_id:
+                        raise ValueError(f"Unknown paper order: {command.order_id}")
+                    self._validate_execution_against_order(
+                        order=order,
+                        instrument=instrument,
+                        market=market,
+                        side=command.side,
+                        quantity=quantity,
+                        price=price,
+                        currency=trade_currency,
+                    )
+
+                gross_amount = quantity * price
+                execution_id = command.execution_id or self._new_id("exe")
+                execution = PaperExecutionModel(
+                    id=execution_id,
+                    account_id=command.account_id,
+                    order_id=command.order_id,
+                    idempotency_key=command.idempotency_key,
                     instrument=instrument,
                     market=market,
                     side=command.side,
                     quantity=quantity,
                     price=price,
+                    gross_amount=gross_amount,
                     currency=trade_currency,
+                    fee_amount=fee_amount,
+                    fee_currency=fee_currency,
+                    executed_at=executed_at,
                 )
+                repository.add(execution)
 
-            gross_amount = quantity * price
-            execution_id = command.execution_id or self._new_id("exe")
-            execution = PaperExecutionModel(
-                id=execution_id,
-                account_id=command.account_id,
-                order_id=command.order_id,
-                idempotency_key=command.idempotency_key,
-                instrument=instrument,
-                market=market,
-                side=command.side,
-                quantity=quantity,
-                price=price,
-                gross_amount=gross_amount,
-                currency=trade_currency,
-                fee_amount=fee_amount,
-                fee_currency=fee_currency,
-                executed_at=command.executed_at,
-            )
-            repository.add(execution)
+                # 先抢占账户内唯一幂等键，再推进 snapshot / ledger，避免并发重复入账。
+                repository.flush()
 
-            # 现金、持仓、成交和账本必须在同一事务内推进，避免留下半笔入账状态。
-            trade_cash_delta = gross_amount if command.side is OrderSide.SELL else -gross_amount
-            cash_balance = repository.get_or_create_cash_balance(
-                command.account_id,
-                trade_currency,
-                balance_id=self._new_id("bal"),
-            )
-            self._apply_balance_delta(cash_balance, total_delta=trade_cash_delta, available_delta=trade_cash_delta)
-            self._touch_snapshot(cash_balance, command.executed_at)
+                # 现金、持仓、成交和账本必须在同一事务内推进，避免留下半笔入账状态。
+                trade_cash_delta = gross_amount if command.side is OrderSide.SELL else -gross_amount
+                cash_balance = repository.get_or_create_cash_balance(
+                    command.account_id,
+                    trade_currency,
+                    balance_id=self._new_id("bal"),
+                )
+                self._apply_balance_delta(
+                    cash_balance,
+                    total_delta=trade_cash_delta,
+                    available_delta=trade_cash_delta,
+                )
+                self._touch_snapshot(cash_balance, executed_at)
 
-            fee_balance = cash_balance
-            if fee_amount > 0:
-                if fee_currency != trade_currency:
-                    fee_balance = repository.get_or_create_cash_balance(
-                        command.account_id,
-                        fee_currency,
-                        balance_id=self._new_id("bal"),
+                fee_balance = cash_balance
+                if fee_amount > 0:
+                    if fee_currency != trade_currency:
+                        fee_balance = repository.get_or_create_cash_balance(
+                            command.account_id,
+                            fee_currency,
+                            balance_id=self._new_id("bal"),
+                        )
+                    self._apply_balance_delta(
+                        fee_balance,
+                        total_delta=-fee_amount,
+                        available_delta=-fee_amount,
                     )
-                self._apply_balance_delta(fee_balance, total_delta=-fee_amount, available_delta=-fee_amount)
-                self._touch_snapshot(fee_balance, command.executed_at)
+                    self._touch_snapshot(fee_balance, executed_at)
 
-            position = repository.get_or_create_position(
-                command.account_id,
-                instrument,
-                market,
-                PositionSide.LONG,
-                trade_currency,
-                position_id=self._new_id("pos"),
-            )
-            # V1 没有独立市价快照，当前持仓市值先以最新成交价近似，后续再由行情/估值模块接管。
-            self._apply_execution_to_position(
-                position=position,
-                side=command.side,
-                quantity=quantity,
-                price=price,
-                fee_amount=fee_amount if fee_currency == trade_currency else Decimal("0"),
-            )
-            self._touch_snapshot(position, command.executed_at)
-
-            repository.add(
-                WalletLedgerEntryModel(
-                    id=self._new_id("led"),
-                    account_id=command.account_id,
-                    entry_type=WalletLedgerEntryType.TRADE,
-                    currency=trade_currency,
-                    amount=trade_cash_delta,
-                    source_type=WalletLedgerSourceType.PAPER_EXECUTION,
-                    source_ref=command.idempotency_key,
-                    occurred_at=command.executed_at,
-                    order_id=command.order_id,
-                    execution_id=execution_id,
-                    metadata_json={
-                        "instrument": instrument,
-                        "market": market,
-                        "side": command.side.value,
-                    },
+                position = repository.get_or_create_position(
+                    command.account_id,
+                    instrument,
+                    market,
+                    PositionSide.LONG,
+                    trade_currency,
+                    position_id=self._new_id("pos"),
                 )
-            )
-            if fee_amount > 0:
+                # V1 没有独立市价快照，当前持仓市值先以最新成交价近似，后续再由行情/估值模块接管。
+                self._apply_execution_to_position(
+                    position=position,
+                    side=command.side,
+                    quantity=quantity,
+                    price=price,
+                    fee_amount=fee_amount if fee_currency == trade_currency else Decimal("0"),
+                )
+                self._touch_snapshot(position, executed_at)
+
                 repository.add(
                     WalletLedgerEntryModel(
                         id=self._new_id("led"),
                         account_id=command.account_id,
-                        entry_type=WalletLedgerEntryType.FEE,
-                        currency=fee_currency,
-                        amount=-fee_amount,
+                        entry_type=WalletLedgerEntryType.TRADE,
+                        currency=trade_currency,
+                        amount=trade_cash_delta,
                         source_type=WalletLedgerSourceType.PAPER_EXECUTION,
                         source_ref=command.idempotency_key,
-                        occurred_at=command.executed_at,
+                        occurred_at=executed_at,
                         order_id=command.order_id,
                         execution_id=execution_id,
-                        metadata_json={"fee_currency": fee_currency},
+                        metadata_json={
+                            "instrument": instrument,
+                            "market": market,
+                            "side": command.side.value,
+                        },
                     )
                 )
+                if fee_amount > 0:
+                    repository.add(
+                        WalletLedgerEntryModel(
+                            id=self._new_id("led"),
+                            account_id=command.account_id,
+                            entry_type=WalletLedgerEntryType.FEE,
+                            currency=fee_currency,
+                            amount=-fee_amount,
+                            source_type=WalletLedgerSourceType.PAPER_EXECUTION,
+                            source_ref=command.idempotency_key,
+                            occurred_at=executed_at,
+                            order_id=command.order_id,
+                            execution_id=execution_id,
+                            metadata_json={"fee_currency": fee_currency},
+                        )
+                    )
 
-            if order is not None:
-                order.status = PaperOrderStatus.FILLED
-                order.completed_at = command.executed_at
+                if order is not None:
+                    order.status = PaperOrderStatus.FILLED
+                    order.completed_at = executed_at
 
-            repository.flush()
-            return ExecutionIngestionResult(execution=self._to_execution_snapshot(execution), created=True)
+                repository.flush()
+                return ExecutionIngestionResult(
+                    execution=self._to_execution_snapshot(execution),
+                    created=True,
+                )
+        except IntegrityError:
+            with self._session_factory() as session:
+                repository = WalletRepository(session)
+                existing = repository.get_execution_by_idempotency_key(command.account_id, command.idempotency_key)
+                if existing is None:
+                    raise
+                return ExecutionIngestionResult(execution=self._to_execution_snapshot(existing), created=False)
 
     def record_fx_rate_snapshot(self, command: RecordFxRateSnapshotCommand) -> FxRateSnapshotRecord:
+        captured_at = self._normalize_timestamp(command.captured_at, field_name="FX captured_at")
         with self._session_factory.begin() as session:
             repository = WalletRepository(session)
             snapshot = FxRateSnapshotModel(
@@ -277,7 +307,7 @@ class WalletService:
                 to_currency=self._normalize_currency(command.to_currency),
                 rate=self._require_positive_decimal(command.rate, "FX rate"),
                 source=self._require_non_empty(command.source, "FX source"),
-                captured_at=command.captured_at,
+                captured_at=captured_at,
             )
             repository.add(snapshot)
             repository.flush()
@@ -432,7 +462,7 @@ class WalletService:
                 raise ValueError("Sell execution price must not be below the order limit_price.")
 
     def _touch_snapshot(self, model: CashBalanceModel | PositionModel, occurred_at: datetime) -> None:
-        model.updated_at = occurred_at.astimezone(timezone.utc)
+        model.updated_at = self._normalize_timestamp(occurred_at, field_name="Snapshot occurred_at")
 
     def _validate_manual_entry_type(self, entry_type: WalletLedgerEntryType, amount: Decimal) -> None:
         if entry_type is WalletLedgerEntryType.DEPOSIT and amount < 0:
@@ -457,6 +487,11 @@ class WalletService:
         if not normalized:
             raise ValueError("Currency must not be empty.")
         return normalized
+
+    def _normalize_timestamp(self, timestamp: datetime, *, field_name: str) -> datetime:
+        if timestamp.tzinfo is None or timestamp.tzinfo.utcoffset(timestamp) is None:
+            raise ValueError(f"{field_name} must be timezone-aware.")
+        return timestamp.astimezone(timezone.utc)
 
     def _position_key(self, instrument: str, market: str, currency: str) -> str:
         return f"{instrument}:{market}:{currency}"

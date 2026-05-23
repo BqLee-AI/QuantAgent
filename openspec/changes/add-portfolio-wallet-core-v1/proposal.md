@@ -28,7 +28,7 @@ QuantAgent 当前主流程已经围绕 Event、Decision / Policy Gate、Approval
 ## 影响
 
 - `packages/core/src/quantagent/core/**`：后续实现 wallet / portfolio 领域模型、repository、service、账本和幂等写入的首选落位。
-- `packages/core/alembic/**`：后续实现数据库表、迁移和持久化约束时的落位；本 OpenSpec-only change 不修改迁移。
+- `packages/core/alembic/**`：数据库表、迁移和持久化约束的落位；本轮实现已在这里落地首版 wallet core 迁移。
 - `apps/api/src/quantagent/api/routers/**` 与 `apps/api/src/quantagent/api/schemas/**`：后续实现账户、余额、持仓、账本、虚拟订单和虚拟成交 API 的薄封装落位。
 - `packages/contracts/**`：V1 OpenSpec 阶段不单独手写 contracts schema；后续实现阶段以 API/OpenAPI 路线同步契约。
-- `docs/design/**`：后续需要把 wallet / asset-state 相关的 “only dry-run” 表述收敛为 “only 虚盘，不操作实盘”，但不混入本 OpenSpec-only PR 的实现范围；executor dry-run 作为系统阶段能力的通用表述不在本 change 中误改。
+- `docs/design/**`：后续需要把 wallet / asset-state 相关的 “only dry-run” 表述收敛为 “only 虚盘，不操作实盘”，但不混入本轮 `packages/core` 实现范围；executor dry-run 作为系统阶段能力的通用表述不在本 change 中误改。
