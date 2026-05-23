@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import create_engine
@@ -163,6 +163,8 @@ class WalletServiceTestCase(unittest.TestCase):
                 base_currency="USD",
             )
         )
+        buy_time = datetime(2026, 5, 23, 12, 0, tzinfo=timezone.utc)
+        sell_time = buy_time + timedelta(minutes=1)
         self.service.record_cash_adjustment(
             RecordCashAdjustmentCommand(
                 account_id=account.account_id,
@@ -182,6 +184,7 @@ class WalletServiceTestCase(unittest.TestCase):
                 quantity="5",
                 price="100",
                 currency="USD",
+                executed_at=buy_time,
             )
         )
         self.service.ingest_paper_execution(
@@ -195,18 +198,20 @@ class WalletServiceTestCase(unittest.TestCase):
                 price="120",
                 currency="USD",
                 fee_amount="1",
+                executed_at=sell_time,
             )
         )
 
         balances = self.service.list_cash_balances(account.account_id)
         positions = self.service.list_positions(account.account_id)
         facts = self.service.get_wallet_facts(account.account_id)
+        executions = self.service.list_paper_executions(account.account_id)
 
         self.assertEqual(balances[0].total, Decimal("4739.00000000"))
         self.assertEqual(positions[0].quantity, Decimal("3.00000000"))
         self.assertEqual(positions[0].sellable_quantity, Decimal("3.00000000"))
         self.assertEqual(facts.single_instrument_exposure["MSFT:NASDAQ:USD"], Decimal("360.00000000"))
-        self.assertEqual(positions[0].updated_at, self.service.list_paper_executions(account.account_id)[1].executed_at)
+        self.assertEqual(positions[0].updated_at, executions[1].executed_at)
 
     def test_fx_rate_snapshots_preserve_original_currency_records(self) -> None:
         account = self.service.create_trading_account(

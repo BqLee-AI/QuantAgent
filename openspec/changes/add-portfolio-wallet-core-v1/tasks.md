@@ -1,7 +1,7 @@
 ## Status
 
-- 当前阶段：OpenSpec 审核已完成，`packages/core` 核心实现已完成，等待 API / Policy Gate 集成。
-- 实现状态：B2-B4 与 V1 已完成；P1 / P2 / M1 / V2 / V3 仍待后续切片推进。
+- 当前阶段：当前 PR 作为 `packages/core` 实现 PR 提交，OpenSpec artifacts 与核心实现一并接受 review。
+- 实现状态：B2-B4 与 V1 代表当前分支内已完成并通过本地验证的实现切片；P1 / P2 / M1 / V2 / V3 仍待后续切片推进。
 - 当前 change 的本轮实现仅覆盖 `packages/core` 领域契约、持久化、迁移、服务和核心测试，不包含 API、Policy Gate 或后续 phase 能力。
 
 ## Graph Overview
