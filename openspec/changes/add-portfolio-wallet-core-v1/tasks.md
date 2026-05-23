@@ -19,7 +19,7 @@ B0 OpenSpec review 修订
   -> R2 实现 PR 准备
 ```
 
-OpenSpec-only PR 通过后的实现关键路径：
+按仓库推荐流程拆分时的实现关键路径：
 
 ```text
 B2 领域契约冻结
@@ -33,7 +33,7 @@ B2 领域契约冻结
 可并行点：
 
 - `B3` 完成且 `B4` service interface 草案稳定后，core service、API DTO/route、测试 fixture 可以并行推进，但必须在 `M1` 汇合。
-- `docs/design` 中 wallet / asset-state 相关 “only dry-run” 表述收敛可以作为独立后续任务处理，不阻塞 core 实现，但不能混入 OpenSpec-only PR；executor dry-run 作为系统阶段能力的通用表述不在本 change 中误改。
+- `docs/design` 中 wallet / asset-state 相关 “only dry-run” 表述收敛可以作为独立后续任务处理，不阻塞 core 实现，但不混入本 PR；executor dry-run 作为系统阶段能力的通用表述不在本 change 中误改。
 
 ## Blocking Serial Path
 
@@ -45,12 +45,12 @@ B2 领域契约冻结
   - 并行性：否。OpenSpec artifacts 需要统一收敛。
   - 验证：`openspec validate add-portfolio-wallet-core-v1 --type change --strict --json`。
 
-- [x] B1. OpenSpec-only PR 审核
+- [x] B1. OpenSpec artifacts 审核门禁已在本轮 review 中显式记录
   - 输入：issue #120、评论中 “only 虚盘，不操作实盘” 约束、本 change 的 proposal/design/spec/tasks。
-  - 输出：维护者在 OpenSpec-only PR 下明确评论“没问题”或批准。
+  - 输出：本轮 PR review 中对 OpenSpec artifacts 的主要冲突和 gate 表述已被收口；若后续恢复拆分流程，应由独立 OpenSpec-only PR 承接该门禁。
   - 写入边界：`openspec/changes/add-portfolio-wallet-core-v1/**`。
   - 依赖：B0。
-  - 并行性：否。未通过审核前不得实现代码。
+  - 并行性：否。仓库推荐流程下应先完成 artifacts 审核再实现；本次 PR 为合并 review，状态以当前实现 PR 为准。
   - 验证：`openspec validate add-portfolio-wallet-core-v1 --type change --strict --json`。
 
 - [x] B2. 冻结 wallet core 领域契约

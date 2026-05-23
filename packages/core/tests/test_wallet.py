@@ -88,6 +88,27 @@ class WalletServiceTestCase(unittest.TestCase):
 
         self.assertTrue(entry.source_ref.startswith("manual:deposit:"))
 
+    def test_blank_manual_source_ref_falls_back_to_generated_value(self) -> None:
+        account = self.service.create_trading_account(
+            CreateTradingAccountCommand(
+                account_id="acct_blank_manual_ref",
+                name="Blank Manual Ref",
+                base_currency="USD",
+            )
+        )
+
+        entry = self.service.record_cash_adjustment(
+            RecordCashAdjustmentCommand(
+                account_id=account.account_id,
+                currency="USD",
+                amount="100",
+                entry_type=WalletLedgerEntryType.DEPOSIT,
+                source_ref="   ",
+            )
+        )
+
+        self.assertTrue(entry.source_ref.startswith("manual:deposit:"))
+
     def test_paper_execution_is_idempotent_and_updates_order_cash_position_and_ledger(self) -> None:
         account = self.service.create_trading_account(
             CreateTradingAccountCommand(
@@ -467,6 +488,32 @@ class WalletServiceTestCase(unittest.TestCase):
                     currency="USD",
                 )
             )
+
+    def test_blank_order_id_and_client_order_id_fall_back_to_generated_values(self) -> None:
+        account = self.service.create_trading_account(
+            CreateTradingAccountCommand(
+                account_id="acct_blank_order_ids",
+                name="Blank Order Ids",
+                base_currency="USD",
+            )
+        )
+
+        order = self.service.record_paper_order(
+            RecordPaperOrderCommand(
+                account_id=account.account_id,
+                order_id="   ",
+                client_order_id="   ",
+                instrument="AAPL",
+                market="NASDAQ",
+                side=OrderSide.BUY,
+                order_type=OrderType.MARKET,
+                quantity="1",
+                currency="USD",
+            )
+        )
+
+        self.assertTrue(order.order_id.startswith("ord_"))
+        self.assertEqual(order.client_order_id, order.order_id)
 
     def test_currency_is_normalized_to_uppercase(self) -> None:
         account = self.service.create_trading_account(

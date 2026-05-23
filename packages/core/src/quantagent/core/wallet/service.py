@@ -83,6 +83,7 @@ class WalletService:
             raise ValueError("Cash adjustment amount must not be zero.")
         currency = self._normalize_currency(command.currency)
         occurred_at = self._normalize_timestamp(command.occurred_at, field_name="Cash adjustment occurred_at")
+        source_ref = self._normalize_optional_identifier(command.source_ref)
         self._validate_manual_entry_type(command.entry_type, amount)
         with self._session_factory.begin() as session:
             repository = WalletRepository(session)
@@ -101,7 +102,7 @@ class WalletService:
                 currency=currency,
                 amount=amount,
                 source_type=WalletLedgerSourceType.MANUAL,
-                source_ref=command.source_ref or f"manual:{command.entry_type.value}:{uuid4().hex}",
+                source_ref=source_ref or f"manual:{command.entry_type.value}:{uuid4().hex}",
                 occurred_at=occurred_at,
                 metadata_json=self._note_metadata(command.note),
             )
@@ -119,8 +120,8 @@ class WalletService:
         if command.order_type is OrderType.MARKET and limit_price is not None:
             raise ValueError("MARKET orders must not include limit_price.")
         requested_at = self._normalize_timestamp(command.requested_at, field_name="Order requested_at")
-        order_id = command.order_id or self._new_id("ord")
-        client_order_id = command.client_order_id or order_id
+        order_id = self._normalize_optional_identifier(command.order_id) or self._new_id("ord")
+        client_order_id = self._normalize_optional_identifier(command.client_order_id) or order_id
         try:
             with self._session_factory.begin() as session:
                 repository = WalletRepository(session)
@@ -511,6 +512,12 @@ class WalletService:
         if not normalized:
             raise ValueError(f"{field_name} must not be empty.")
         return normalized
+
+    def _normalize_optional_identifier(self, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
 
     def _normalize_currency(self, currency: str) -> str:
         normalized = currency.strip().upper()

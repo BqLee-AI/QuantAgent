@@ -28,7 +28,7 @@
 - 不实现自动仓位管理、自动止损止盈、组合优化、保证金模型、期货逐日盯市或期权希腊值。
 - 不把 executor 插件硬编码进 core，不让插件直接持有数据库 session。
 - 不把 wallet 核心逻辑放入 `apps/api` route、controller 或 DTO 层。
-- 不在未获 OpenSpec 审核确认前修改迁移、实现代码、依赖或生成 contracts；当前 PR 已基于已审核 artifacts 进入 `packages/core` 实现阶段。
+- 不将 “先 OpenSpec-only PR、后实现 PR” 误写成本 change 已实际执行的门禁事实；当前 PR 为 artifacts 与 `packages/core` 实现合并 review 的实现 PR，相关 gate 说明只保留为仓库推荐流程，不再表述为本次已先行完成的前置审批。
 
 ## 决策
 

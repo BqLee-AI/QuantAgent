@@ -8,7 +8,7 @@ from sqlalchemy import engine_from_config, pool
 from quantagent.core.config.settings import settings
 from quantagent.core.db.base import Base
 from quantagent.core.db.session import require_database_url
-from quantagent.core.wallet import models as wallet_models  # noqa: F401
+import quantagent.core.wallet.models as wallet_models  # noqa: F401
 
 config = context.config
 
