@@ -52,7 +52,7 @@ class WalletRepository:
             unsettled=0,
         )
         try:
-            # 初始 snapshot 行受唯一约束保护；并发首笔入账时用 savepoint 吃掉重复插入。
+            # 初始 snapshot 行受唯一约束保护; 并发首笔入账时用 savepoint 吃掉重复插入.
             with self._session.begin_nested():
                 self._session.add(balance)
                 self._session.flush()
@@ -108,7 +108,7 @@ class WalletRepository:
             currency=currency,
         )
         try:
-            # 多列唯一键同样可能被并发首笔成交撞上，冲突后回读胜出的 snapshot 行。
+            # 多列唯一键同样可能被并发首笔成交撞上, 冲突后回读胜出的 snapshot 行.
             with self._session.begin_nested():
                 self._session.add(position)
                 self._session.flush()
@@ -123,7 +123,7 @@ class WalletRepository:
         return self._session.get(PaperOrderModel, order_id)
 
     def get_execution_by_idempotency_key(self, account_id: str, idempotency_key: str) -> PaperExecutionModel | None:
-        # 幂等查询限定在账户范围内，避免不同 paper 账户之间的 source key 互相污染。
+        # 幂等查询限定在账户范围内, 避免不同 paper 账户之间的 source key 互相污染.
         statement = select(PaperExecutionModel).where(
             PaperExecutionModel.account_id == account_id,
             PaperExecutionModel.idempotency_key == idempotency_key,

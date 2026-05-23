@@ -502,6 +502,21 @@ class WalletServiceTestCase(unittest.TestCase):
                 )
             )
 
+    def test_ledger_entries_limit_must_be_positive(self) -> None:
+        account = self.service.create_trading_account(
+            CreateTradingAccountCommand(
+                account_id="acct_ledger_limit",
+                name="Ledger Limit",
+                base_currency="USD",
+            )
+        )
+
+        with self.assertRaisesRegex(ValueError, "limit must be greater than zero"):
+            self.service.list_ledger_entries(account.account_id, limit=0)
+
+        with self.assertRaisesRegex(ValueError, "limit must be greater than zero"):
+            self.service.list_ledger_entries(account.account_id, limit=-1)
+
     def test_naive_timestamp_is_rejected_with_clear_error(self) -> None:
         account = self.service.create_trading_account(
             CreateTradingAccountCommand(

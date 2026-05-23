@@ -200,10 +200,10 @@ class WalletService:
                 )
                 repository.add(execution)
 
-                # 先抢占账户内唯一幂等键，再推进 snapshot / ledger，避免并发重复入账。
+                # 先抢占账户内唯一幂等键, 再推进 snapshot / ledger, 避免并发重复入账.
                 repository.flush()
 
-                # 现金、持仓、成交和账本必须在同一事务内推进，避免留下半笔入账状态。
+                # 现金、持仓、成交和账本必须在同一事务内推进, 避免留下半笔入账状态.
                 trade_cash_delta = gross_amount if command.side is OrderSide.SELL else -gross_amount
                 cash_balance = repository.get_or_create_cash_balance(
                     command.account_id,
@@ -240,7 +240,7 @@ class WalletService:
                     trade_currency,
                     position_id=self._new_id("pos"),
                 )
-                # V1 没有独立市价快照，当前持仓市值先以最新成交价近似，后续再由行情/估值模块接管。
+                # V1 没有独立市价快照, 当前持仓市值先以最新成交价近似, 后续再由行情/估值模块接管.
                 self._apply_execution_to_position(
                     position=position,
                     side=command.side,
@@ -340,6 +340,8 @@ class WalletService:
             return [self._to_execution_snapshot(execution) for execution in repository.list_executions(account_id)]
 
     def list_ledger_entries(self, account_id: str, *, limit: int | None = None) -> Sequence[WalletLedgerEntrySnapshot]:
+        if limit is not None and limit <= 0:
+            raise ValueError("limit must be greater than zero.")
         with self._session_factory() as session:
             repository = WalletRepository(session)
             return [self._to_ledger_snapshot(entry) for entry in repository.list_ledger_entries(account_id, limit=limit)]
