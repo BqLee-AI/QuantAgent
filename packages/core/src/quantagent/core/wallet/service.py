@@ -101,7 +101,7 @@ class WalletService:
                 currency=currency,
                 amount=amount,
                 source_type=WalletLedgerSourceType.MANUAL,
-                source_ref=command.source_ref or f"manual:{command.entry_type}:{uuid4().hex}",
+                source_ref=command.source_ref or f"manual:{command.entry_type.value}:{uuid4().hex}",
                 occurred_at=occurred_at,
                 metadata_json=self._note_metadata(command.note),
             )
@@ -121,26 +121,36 @@ class WalletService:
         requested_at = self._normalize_timestamp(command.requested_at, field_name="Order requested_at")
         order_id = command.order_id or self._new_id("ord")
         client_order_id = command.client_order_id or order_id
-        with self._session_factory.begin() as session:
-            repository = WalletRepository(session)
-            self._require_paper_account(repository, command.account_id)
-            order = PaperOrderModel(
-                id=order_id,
-                account_id=command.account_id,
-                client_order_id=client_order_id,
-                instrument=self._require_non_empty(command.instrument, "Order instrument"),
-                market=self._require_non_empty(command.market, "Order market"),
-                side=command.side,
-                order_type=command.order_type,
-                quantity=quantity,
-                limit_price=limit_price,
-                currency=self._normalize_currency(command.currency),
-                status=PaperOrderStatus.OPEN,
-                requested_at=requested_at,
-            )
-            repository.add(order)
-            repository.flush()
-            return self._to_order_snapshot(order)
+        try:
+            with self._session_factory.begin() as session:
+                repository = WalletRepository(session)
+                self._require_paper_account(repository, command.account_id)
+                order = PaperOrderModel(
+                    id=order_id,
+                    account_id=command.account_id,
+                    client_order_id=client_order_id,
+                    instrument=self._require_non_empty(command.instrument, "Order instrument"),
+                    market=self._require_non_empty(command.market, "Order market"),
+                    side=command.side,
+                    order_type=command.order_type,
+                    quantity=quantity,
+                    limit_price=limit_price,
+                    currency=self._normalize_currency(command.currency),
+                    status=PaperOrderStatus.OPEN,
+                    requested_at=requested_at,
+                )
+                repository.add(order)
+                repository.flush()
+                return self._to_order_snapshot(order)
+        except IntegrityError:
+            with self._session_factory() as session:
+                repository = WalletRepository(session)
+                duplicate_order = repository.get_order_by_client_order_id(command.account_id, client_order_id)
+                if duplicate_order is not None:
+                    raise ValueError(f"Duplicate paper order client_order_id for account: {client_order_id}") from None
+                if repository.get_order(order_id) is not None:
+                    raise ValueError(f"Paper order already exists: {order_id}") from None
+                raise
 
     def ingest_paper_execution(self, command: RecordPaperExecutionCommand) -> ExecutionIngestionResult:
         quantity = self._require_positive_decimal(command.quantity, "Execution quantity")
@@ -305,19 +315,31 @@ class WalletService:
 
     def record_fx_rate_snapshot(self, command: RecordFxRateSnapshotCommand) -> FxRateSnapshotRecord:
         captured_at = self._normalize_timestamp(command.captured_at, field_name="FX captured_at")
-        with self._session_factory.begin() as session:
-            repository = WalletRepository(session)
-            snapshot = FxRateSnapshotModel(
-                id=command.snapshot_id or self._new_id("fx"),
-                from_currency=self._normalize_currency(command.from_currency),
-                to_currency=self._normalize_currency(command.to_currency),
-                rate=self._require_positive_decimal(command.rate, "FX rate"),
-                source=self._require_non_empty(command.source, "FX source"),
-                captured_at=captured_at,
-            )
-            repository.add(snapshot)
-            repository.flush()
-            return self._to_fx_snapshot(snapshot)
+        from_currency = self._normalize_currency(command.from_currency)
+        to_currency = self._normalize_currency(command.to_currency)
+        try:
+            with self._session_factory.begin() as session:
+                repository = WalletRepository(session)
+                snapshot = FxRateSnapshotModel(
+                    id=command.snapshot_id or self._new_id("fx"),
+                    from_currency=from_currency,
+                    to_currency=to_currency,
+                    rate=self._require_positive_decimal(command.rate, "FX rate"),
+                    source=self._require_non_empty(command.source, "FX source"),
+                    captured_at=captured_at,
+                )
+                repository.add(snapshot)
+                repository.flush()
+                return self._to_fx_snapshot(snapshot)
+        except IntegrityError:
+            with self._session_factory() as session:
+                repository = WalletRepository(session)
+                existing = repository.get_fx_rate_snapshot(from_currency, to_currency, captured_at)
+                if existing is not None:
+                    raise ValueError(
+                        f"FX snapshot already exists for {from_currency}/{to_currency} at {captured_at.isoformat()}"
+                    ) from None
+                raise
 
     def list_cash_balances(self, account_id: str) -> Sequence[CashBalanceSnapshot]:
         with self._session_factory() as session:

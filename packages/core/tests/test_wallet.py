@@ -24,7 +24,7 @@ from quantagent.core.wallet import (
 
 class WalletServiceTestCase(unittest.TestCase):
     def setUp(self) -> None:
-        self.engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+        self.engine = create_engine("sqlite+pysqlite:///:memory:")
         Base.metadata.create_all(self.engine)
         self.session_factory = sessionmaker(bind=self.engine, autoflush=False, expire_on_commit=False)
         self.service = WalletService(self.session_factory)
@@ -65,6 +65,28 @@ class WalletServiceTestCase(unittest.TestCase):
         self.assertEqual(ledger_entries[0].metadata["note"], "initial funding")
         self.assertEqual(facts.available_cash["USD"], Decimal("10000.00000000"))
         self.assertTrue(facts.paper_execution_allowed)
+        self.assertTrue(ledger_entries[0].source_ref.startswith("seed-capital"))
+
+    def test_manual_adjustment_fallback_source_ref_uses_entry_type_value(self) -> None:
+        account = self.service.create_trading_account(
+            CreateTradingAccountCommand(
+                account_id="acct_manual_ref",
+                name="Manual Ref",
+                base_currency="USD",
+            )
+        )
+
+        entry = self.service.record_cash_adjustment(
+            RecordCashAdjustmentCommand(
+                account_id=account.account_id,
+                currency="USD",
+                amount="100",
+                entry_type=WalletLedgerEntryType.DEPOSIT,
+                source_ref=None,
+            )
+        )
+
+        self.assertTrue(entry.source_ref.startswith("manual:deposit:"))
 
     def test_paper_execution_is_idempotent_and_updates_order_cash_position_and_ledger(self) -> None:
         account = self.service.create_trading_account(
@@ -409,6 +431,43 @@ class WalletServiceTestCase(unittest.TestCase):
                 )
             )
 
+    def test_duplicate_client_order_id_is_rejected_with_clear_error(self) -> None:
+        account = self.service.create_trading_account(
+            CreateTradingAccountCommand(
+                account_id="acct_duplicate_client_order",
+                name="Duplicate Client Order",
+                base_currency="USD",
+            )
+        )
+        self.service.record_paper_order(
+            RecordPaperOrderCommand(
+                account_id=account.account_id,
+                order_id="ord_dup_1",
+                client_order_id="client_dup_1",
+                instrument="AAPL",
+                market="NASDAQ",
+                side=OrderSide.BUY,
+                order_type=OrderType.MARKET,
+                quantity="1",
+                currency="USD",
+            )
+        )
+
+        with self.assertRaisesRegex(ValueError, "Duplicate paper order client_order_id for account: client_dup_1"):
+            self.service.record_paper_order(
+                RecordPaperOrderCommand(
+                    account_id=account.account_id,
+                    order_id="ord_dup_2",
+                    client_order_id="client_dup_1",
+                    instrument="AAPL",
+                    market="NASDAQ",
+                    side=OrderSide.BUY,
+                    order_type=OrderType.MARKET,
+                    quantity="1",
+                    currency="USD",
+                )
+            )
+
     def test_currency_is_normalized_to_uppercase(self) -> None:
         account = self.service.create_trading_account(
             CreateTradingAccountCommand(
@@ -516,6 +575,30 @@ class WalletServiceTestCase(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "limit must be greater than zero"):
             self.service.list_ledger_entries(account.account_id, limit=-1)
+
+    def test_duplicate_fx_snapshot_is_rejected_with_clear_error(self) -> None:
+        captured_at = datetime(2026, 5, 23, 12, 0, tzinfo=timezone.utc)
+
+        self.service.record_fx_rate_snapshot(
+            RecordFxRateSnapshotCommand(
+                from_currency="HKD",
+                to_currency="USD",
+                rate="0.12820513",
+                source="manual:test",
+                captured_at=captured_at,
+            )
+        )
+
+        with self.assertRaisesRegex(ValueError, "FX snapshot already exists for HKD/USD at 2026-05-23T12:00:00\\+00:00"):
+            self.service.record_fx_rate_snapshot(
+                RecordFxRateSnapshotCommand(
+                    from_currency="HKD",
+                    to_currency="USD",
+                    rate="0.12820513",
+                    source="manual:test",
+                    captured_at=captured_at,
+                )
+            )
 
     def test_naive_timestamp_is_rejected_with_clear_error(self) -> None:
         account = self.service.create_trading_account(

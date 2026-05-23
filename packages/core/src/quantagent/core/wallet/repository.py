@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from datetime import datetime
 from sqlalchemy import Select, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -122,11 +123,31 @@ class WalletRepository:
     def get_order(self, order_id: str) -> PaperOrderModel | None:
         return self._session.get(PaperOrderModel, order_id)
 
+    def get_order_by_client_order_id(self, account_id: str, client_order_id: str) -> PaperOrderModel | None:
+        statement = select(PaperOrderModel).where(
+            PaperOrderModel.account_id == account_id,
+            PaperOrderModel.client_order_id == client_order_id,
+        )
+        return self._session.scalar(statement)
+
     def get_execution_by_idempotency_key(self, account_id: str, idempotency_key: str) -> PaperExecutionModel | None:
         # 幂等查询限定在账户范围内, 避免不同 paper 账户之间的 source key 互相污染.
         statement = select(PaperExecutionModel).where(
             PaperExecutionModel.account_id == account_id,
             PaperExecutionModel.idempotency_key == idempotency_key,
+        )
+        return self._session.scalar(statement)
+
+    def get_fx_rate_snapshot(
+        self,
+        from_currency: str,
+        to_currency: str,
+        captured_at: datetime,
+    ) -> FxRateSnapshotModel | None:
+        statement = select(FxRateSnapshotModel).where(
+            FxRateSnapshotModel.from_currency == from_currency,
+            FxRateSnapshotModel.to_currency == to_currency,
+            FxRateSnapshotModel.captured_at == captured_at,
         )
         return self._session.scalar(statement)
 
