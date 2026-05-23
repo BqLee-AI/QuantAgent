@@ -15,6 +15,7 @@ from quantagent.core.wallet.domain import (
     ExecutionIngestionResult,
     FxRateSnapshotRecord,
     OrderSide,
+    OrderType,
     PaperExecutionSnapshot,
     PaperOrderSnapshot,
     PaperOrderStatus,
@@ -113,6 +114,10 @@ class WalletService:
         limit_price = None if command.limit_price is None else to_decimal(command.limit_price)
         if limit_price is not None and limit_price <= 0:
             raise ValueError("Order limit_price must be greater than zero.")
+        if command.order_type is OrderType.LIMIT and limit_price is None:
+            raise ValueError("LIMIT orders require a positive limit_price.")
+        if command.order_type is OrderType.MARKET and limit_price is not None:
+            raise ValueError("MARKET orders must not include limit_price.")
         requested_at = self._normalize_timestamp(command.requested_at, field_name="Order requested_at")
         order_id = command.order_id or self._new_id("ord")
         client_order_id = command.client_order_id or order_id

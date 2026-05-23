@@ -343,6 +343,42 @@ class WalletServiceTestCase(unittest.TestCase):
                 )
             )
 
+    def test_order_type_price_constraints_are_enforced(self) -> None:
+        account = self.service.create_trading_account(
+            CreateTradingAccountCommand(
+                account_id="acct_order_type_guard",
+                name="Order Type Guard",
+                base_currency="USD",
+            )
+        )
+
+        with self.assertRaisesRegex(ValueError, "LIMIT orders require a positive limit_price"):
+            self.service.record_paper_order(
+                RecordPaperOrderCommand(
+                    account_id=account.account_id,
+                    instrument="AAPL",
+                    market="NASDAQ",
+                    side=OrderSide.BUY,
+                    order_type=OrderType.LIMIT,
+                    quantity="1",
+                    currency="USD",
+                )
+            )
+
+        with self.assertRaisesRegex(ValueError, "MARKET orders must not include limit_price"):
+            self.service.record_paper_order(
+                RecordPaperOrderCommand(
+                    account_id=account.account_id,
+                    instrument="AAPL",
+                    market="NASDAQ",
+                    side=OrderSide.BUY,
+                    order_type=OrderType.MARKET,
+                    quantity="1",
+                    currency="USD",
+                    limit_price="123",
+                )
+            )
+
     def test_currency_is_normalized_to_uppercase(self) -> None:
         account = self.service.create_trading_account(
             CreateTradingAccountCommand(
