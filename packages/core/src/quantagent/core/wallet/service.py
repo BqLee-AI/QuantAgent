@@ -55,7 +55,7 @@ class WalletService:
         if not command.name.strip():
             raise ValueError("Trading account name must not be empty.")
 
-        account_id = command.account_id or self._new_id("acct")
+        account_id = self._normalize_optional_identifier(command.account_id) or self._new_id("acct")
         with self._session_factory.begin() as session:
             repository = WalletRepository(session)
             if repository.get_account(account_id) is not None:

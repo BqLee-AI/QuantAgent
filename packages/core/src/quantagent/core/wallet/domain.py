@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from types import MappingProxyType
 from typing import Mapping
@@ -18,7 +18,10 @@ def utcnow() -> datetime:
 def to_decimal(value: DecimalLike) -> Decimal:
     if isinstance(value, Decimal):
         return value
-    return Decimal(str(value))
+    try:
+        return Decimal(str(value))
+    except InvalidOperation as exc:
+        raise ValueError(f"Invalid decimal value: {value}") from exc
 
 
 class AccountMode(StrEnum):

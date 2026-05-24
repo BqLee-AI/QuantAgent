@@ -67,6 +67,17 @@ class WalletServiceTestCase(unittest.TestCase):
         self.assertTrue(facts.paper_execution_allowed)
         self.assertTrue(ledger_entries[0].source_ref.startswith("seed-capital"))
 
+    def test_blank_account_id_falls_back_to_generated_value(self) -> None:
+        account = self.service.create_trading_account(
+            CreateTradingAccountCommand(
+                account_id="   ",
+                name="Generated Account",
+                base_currency="USD",
+            )
+        )
+
+        self.assertTrue(account.account_id.startswith("acct_"))
+
     def test_manual_adjustment_fallback_source_ref_uses_entry_type_value(self) -> None:
         account = self.service.create_trading_account(
             CreateTradingAccountCommand(
@@ -326,6 +337,25 @@ class WalletServiceTestCase(unittest.TestCase):
                     currency="USD",
                     amount="10",
                     entry_type=WalletLedgerEntryType.WITHDRAWAL,
+                )
+            )
+
+    def test_invalid_decimal_string_is_rejected_with_clear_error(self) -> None:
+        account = self.service.create_trading_account(
+            CreateTradingAccountCommand(
+                account_id="acct_invalid_decimal",
+                name="Invalid Decimal",
+                base_currency="USD",
+            )
+        )
+
+        with self.assertRaisesRegex(ValueError, "Invalid decimal value: 1,000"):
+            self.service.record_cash_adjustment(
+                RecordCashAdjustmentCommand(
+                    account_id=account.account_id,
+                    currency="USD",
+                    amount="1,000",
+                    entry_type=WalletLedgerEntryType.DEPOSIT,
                 )
             )
 
