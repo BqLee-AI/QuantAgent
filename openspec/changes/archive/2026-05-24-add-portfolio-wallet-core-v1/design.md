@@ -4,6 +4,8 @@
 
 本设计采用 issue #120 中确认的推荐范围：V1 只支持虚盘账户闭环；首批 instrument / market 采用股票类 spot 抽象，不提前覆盖加密货币、期货、期权、保证金或复杂交易时段；多币种仅支持虚拟余额和展示折算，不做真实换汇；不实现 broker snapshot / reconciliation；不新增复杂账户级风控配置表；不在 OpenSpec 阶段单独手写 `packages/contracts` schema。
 
+本 change 归档前的已交付范围收窄为 `packages/core` 内可复用的 wallet core 能力：领域对象、ORM / repository、迁移、service、wallet facts 查询与核心测试。`apps/api` 薄封装、Policy Gate consumer 接入和跨模块集成验证继续由后续 issue 承接，不再作为本 change 的 must-have 交付项。
+
 ## 目标与非目标
 
 **目标：**
@@ -28,6 +30,7 @@
 - 不实现自动仓位管理、自动止损止盈、组合优化、保证金模型、期货逐日盯市或期权希腊值。
 - 不把 executor 插件硬编码进 core，不让插件直接持有数据库 session。
 - 不把 wallet 核心逻辑放入 `apps/api` route、controller 或 DTO 层。
+- 不要求在本 change 内完成 `apps/api` 的 route / DTO 薄封装、Policy Gate consumer 接入或跨模块集成验证。
 - 不将 “先 OpenSpec-only PR、后实现 PR” 误写成本 change 已实际执行的门禁事实；当前 PR 为 artifacts 与 `packages/core` 实现合并 review 的实现 PR，相关 gate 说明只保留为仓库推荐流程，不再表述为本次已先行完成的前置审批。
 
 ## 决策
@@ -35,6 +38,8 @@
 ### 1. Wallet core 落在 packages/core，API 保持薄
 
 V1 的领域模型、账本规则、幂等入库、余额和持仓计算、风控查询能力 SHOULD 落在 `packages/core`。API route 只负责鉴权、DTO、响应 envelope、HTTP 错误映射和调用 core service。
+
+本次归档只冻结 core 侧边界，不把 API route / DTO 本身纳入已交付能力。
 
 替代方案是把账户资产计算写入 `apps/api` route。该方案会让 worker、scheduler、executor、Policy Gate 或后续插件复用困难，并违反 API 层不承载核心领域逻辑的边界，因此不采用。
 
@@ -64,9 +69,11 @@ Paper simulator / paper executor SHOULD 负责根据输入请求产生虚拟订�
 
 替代方案是让 executor 插件内部私有保存余额和持仓。该方案会导致 Policy Gate、API 和审计无法查询统一事实层，因此不采用。
 
-### 6. Policy Gate 消费 facts，但不由 wallet 决策放行
+### 6. Wallet 暴露 facts 查询边界，但不负责外层消费接入或放行决策
 
 Wallet core SHOULD 提供账户模式、可用现金、锁定现金、未结算现金、持仓数量、可卖持仓、单标的敞口和 paper execution permission 等 facts。最终是否允许任何后续动作仍由 Decision / Policy Gate 根据权限、风险、审批和用户策略决定。
+
+本次归档要求 core 侧提供稳定 facts 查询接口；外层 Policy Gate / risk check consumer 的接线属于后续 issue。
 
 替代方案是在 wallet core 中持久化完整风控配置并自行判断交易是否放行。该方案会提前复杂化 Policy Gate / user policy / wallet 的边界，因此 V1 不采用。
 
@@ -127,10 +134,10 @@ V1 可以支持虚盘账户的初始入金、出金和人工调整，但这些�
   -> 缓解：design 明确这些对象属于后续 phase，并要求 live read-only sync 单独 change 收口。
 
 - [风险] API 资源草案可能被误解为已经可以下真实订单。  
-  -> 缓解：spec 明确所有 paper-orders 和 paper-executions 都是虚盘资源，V1 不暴露真实 broker action。
+  -> 缓解：本次归档 stable spec 不把 API 资源本身列为已交付 requirement，只保留 core / paper-only 边界与后续 API 非目标说明。
 
 - [风险] 只提供 facts 而不提供复杂风控配置，Policy Gate 初期能力有限。  
-  -> 缓解：V1 保持 wallet 事实层定位，账户级风控配置后续由 Policy Gate / user policy change 单独定义。
+  -> 缓解：V1 保持 wallet 事实层定位，账户级风控配置与 Policy Gate consumer 接入由后续 issue / change 单独定义。
 
 - [风险] 文档中历史 “dry-run executor” 表述可能和本 change 的 “虚盘账户事实层” 混淆。  
   -> 缓解：本 change 内统一使用 “only 虚盘，不操作实盘”，并在 tasks 中安排后续 docs/design 中 wallet / asset-state 相关表述收敛检查；不把 executor dry-run 作为系统阶段能力的通用表述误删。

@@ -1,4 +1,10 @@
-## ADDED Requirements
+# Portfolio Wallet Core V1 Specification
+
+## Purpose
+
+定义 `packages/core` 中 Portfolio Wallet Core V1 的稳定能力边界：只支持虚盘账户的资产事实层、账本与幂等入账规则、多币种虚拟余额与持仓分离、FX 折算快照、wallet facts 查询边界，以及明确排除实盘同步、真实执行和 API 薄封装等后续能力。
+
+## Requirements
 
 ### Requirement: Portfolio Wallet Core V1 只支持虚盘账户
 
@@ -16,7 +22,7 @@ QuantAgent SHALL define Portfolio Wallet Core V1 as a paper-account-only asset f
 - **AND** 它不执行真实下单、撤单、改单、换汇、资金划转或调仓
 
 #### Scenario: only 虚盘，不操作实盘
-- **WHEN** 文档、API 或后续实现描述 Portfolio Wallet Core V1
+- **WHEN** 文档或实现描述 Portfolio Wallet Core V1
 - **THEN** 它应被描述为 “only 虚盘，不操作实盘”
 - **AND** 不应把账户资产事实层简化描述为 only dry-run executor
 
@@ -37,12 +43,6 @@ Portfolio Wallet Core V1 SHALL use a stock-like spot instrument / market abstrac
 ### Requirement: Wallet core 位于共享领域边界
 
 QuantAgent SHALL keep wallet facts, ledger rules and portfolio calculations in shared core rather than API routes or executor-private state.
-
-#### Scenario: API route 调用 core wallet 能力
-- **WHEN** API 需要返回账户、余额、持仓、账本、虚拟订单或虚拟成交
-- **THEN** API route 调用 `packages/core` 提供的 wallet / portfolio 能力
-- **AND** API route 只负责鉴权、DTO、响应 envelope 和 HTTP 错误映射
-- **AND** API route 不实现核心资产计算
 
 #### Scenario: executor 不私有保存资产事实
 - **WHEN** paper simulator 或 paper executor 产生虚拟订单或虚拟成交
@@ -168,26 +168,6 @@ Portfolio Wallet Core V1 SHALL expose account facts needed by Decision / Policy 
 - **WHEN** 后续动作可能产生执行副作用
 - **THEN** wallet facts 只能作为 Policy Gate 输入
 - **AND** wallet core 不单独决定真实或高风险动作是否放行
-
-### Requirement: API 暴露 wallet 资源但不泄露敏感信息
-
-QuantAgent API SHALL expose wallet resources through DTOs and unified responses without leaking sensitive account or secret data.
-
-#### Scenario: 查询账户资产资源
-- **WHEN** 已认证调用方查询 wallet 资源
-- **THEN** API 可暴露 accounts、balances、positions、ledger、paper-orders 和 paper-executions 等资源
-- **AND** 响应使用 API DTO 和统一 envelope
-- **AND** 响应不直接返回 ORM model
-
-#### Scenario: 敏感信息脱敏
-- **WHEN** API、日志或错误响应涉及账户、交易权限、插件配置或后续 broker 信息
-- **THEN** 不返回真实 secret、完整账户号、真实交易密钥或私有策略参数
-- **AND** 只能返回 masked value、secret reference 或非敏感摘要
-
-#### Scenario: V1 API 不暴露真实 broker action
-- **WHEN** V1 API 暴露 paper-orders 或 paper-executions
-- **THEN** 这些资源只代表虚拟订单和虚拟成交
-- **AND** API 不暴露真实下单、撤单、改单、换汇、资金划转或 broker sync action
 
 ### Requirement: 实盘同步和对账属于后续 phase
 
