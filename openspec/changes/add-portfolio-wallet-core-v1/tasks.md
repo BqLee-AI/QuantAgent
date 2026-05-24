@@ -80,6 +80,7 @@ B2 领域契约冻结
 ## Parallel Work After B3 And B4 Interface Draft
 
 - [ ] P1. API DTO 与 route 薄封装
+  - 跟踪 issue：#134 `[BE/API] 为 Portfolio Wallet Core V1 暴露虚盘账户 API 薄封装`。
   - 输入：B2 领域契约、B3 repository 边界、B4 service 接口草案。
   - 输出：账户、余额、持仓、账本、paper orders、paper executions 的 API DTO 和 route；统一 envelope；错误映射。
   - 写入边界：`apps/api/src/quantagent/api/routers/**`、`apps/api/src/quantagent/api/schemas/**`、`apps/api/src/tests/**`。
@@ -88,6 +89,7 @@ B2 领域契约冻结
   - 验证：API 测试证明 route 调用 core service、返回 DTO、不直接返回 ORM model、不暴露 secret 或完整账户号。
 
 - [ ] P2. Policy Gate facts 消费接口对接
+  - 跟踪 issue：#135 `[BE/Core] 接入 Portfolio Wallet facts 供 Policy Gate / risk check 消费`。
   - 输入：B4 wallet facts 查询接口；现有 Decision / Policy Gate 边界。
   - 输出：Policy Gate 或 risk check 可查询虚盘账户 mode、available cash、locked cash、unsettled cash、position quantity、sellable position、single-instrument exposure 和 paper execution permission。
   - 写入边界：现有 Policy Gate / risk check 所在模块；如尚无实现，则只在 core 中暴露 facts port，不新增完整 Policy Gate。
@@ -96,6 +98,7 @@ B2 领域契约冻结
   - 验证：测试证明 Policy Gate 输入来自 wallet facts，wallet core 不自行放行真实或高风险动作。
 
 - [ ] P3. 实现阶段测试 fixture 与验收样例
+  - 跟踪方式：不单独拆 issue；由 #134 的 API 验证要求和 #135 的 facts consumer / integration 验证共同覆盖。
   - 输入：B2-B4 契约；spec 中 V1 场景。
   - 输出：最小 paper account fixture、多币种 cash fixture、重复 execution fixture、脱敏响应 fixture。
   - 写入边界：`packages/core/tests/**`、`apps/api/src/tests/**`。
@@ -106,6 +109,7 @@ B2 领域契约冻结
 ## Merge / Integration Nodes
 
 - [ ] M1. Core/API/Policy Gate 契约汇合
+  - 跟踪方式：不单独拆 issue；由 #134 与 #135 的实现 PR 汇合验收覆盖。
   - 输入：B4、P1、P2、P3。
   - 输出：一致的 service 接口、DTO 字段、错误结构、脱敏规则和测试断言；确认 API 资源只表示虚盘，不暗示真实 broker action。
   - 写入边界：`packages/core/**`、`apps/api/**` 的接口对齐小改；不得新增 unrelated refactor。
@@ -114,6 +118,7 @@ B2 领域契约冻结
   - 验证：core tests + API tests；人工检查 API DTO 不暴露 ORM、secret、完整账户号或真实 broker action。
 
 - [ ] M2. 后续 phase 边界复核
+  - 跟踪方式：不单独拆 issue；作为 #134 / #135 实现 PR 的 review checklist。
   - 输入：design/spec 的非目标和 deferred boundary。
   - 输出：确认实现未包含 `BrokerConnection`、`BrokerSnapshot`、`ReconciliationRecord`、live read-only sync、真实下单、真实换汇、复杂风控配置或 hand-written contracts schema。
   - 写入边界：无实现写入；如发现越界，只回退本 change 相关实现或开后续 issue/change。
@@ -129,6 +134,7 @@ B2 领域契约冻结
   - 失败处理：只更新 OpenSpec artifacts，重新验证并等待确认。
 
 - [ ] R2. 实现 PR 准备 gate
+  - 跟踪方式：不单独拆 issue；作为 #134 / #135 对应 PR 的准备门禁。
   - 条件：M1、M2、V1 完成。
   - 检查：PR 只绑定 `add-portfolio-wallet-core-v1`；说明依据、改动摘要、验证结果、未验证风险和后续 docs/design 表述收敛。
   - 失败处理：拆分越界实现或补后续 issue/change。
@@ -145,11 +151,13 @@ B2 领域契约冻结
   - 推荐命令：在实现阶段按 `packages/core` 现有测试入口运行最小相关 Python 测试。
 
 - [ ] V2. API boundary validation
+  - 跟踪 issue：#134。
   - 触发点：P1 与 M1 完成后。
   - 覆盖：API envelope、DTO、错误映射、ORM 不直出、敏感字段脱敏、paper-only endpoint 不暗示真实 broker action。
   - 推荐命令：在实现阶段按 `apps/api` 现有测试入口运行相关 API 测试。
 
 - [ ] V3. Integration validation
+  - 跟踪 issue：#135；API route 汇合部分在 #134 完成后收口。
   - 触发点：M1 完成后。
   - 覆盖：API route 调 core service；Policy Gate / risk check 消费 wallet facts；wallet core 不自行放行真实或高风险动作。
   - 推荐命令：core/API 相关测试组合，必要时补最小集成测试。
