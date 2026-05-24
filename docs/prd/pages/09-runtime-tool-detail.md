@@ -2,128 +2,47 @@
 
 ## 页面定位
 
-Tool Invocation 详情页用于查看单次工具调用的输入摘要、状态变化、耗时、重试和错误，帮助定位分析失败或工具效果不稳定的问题。
+Tool Invocation 详情用于查看一次受控工具调用的摘要、权限、风险、输入输出摘要、错误和 trace。它是排障页，不是自由脚本执行器。
 
-页面主对象是**Tool Invocation**。
+## 用户任务
 
-## 页面目标
+- 查看工具调用状态和耗时。
+- 理解工具来自 core 还是插件。
+- 查看风险等级和是否需要人工确认。
+- 查看脱敏输入输出摘要。
+- 排查失败、超时、blocked 或权限问题。
 
-- 解释工具调用发生了什么。
-- 提供定位失败和重试的上下文。
-- 帮助用户判断这次工具失败是否影响最终建议质量。
+## 必须展示
 
-## 入口与出口
+- invocation_id、event_id、agent_run_id。
+- tool_id、tool_name、provider_plugin_id。
+- risk_level。
+- requires_human_approval。
+- status。
+- input_summary。
+- output_summary。
+- timeout_ms、retry_count、duration。
+- error_code / error_message。
+- trace_id / request_id。
 
-### 入口
-
-- 从运行看板工具列表进入
-- 从 Agent Run 详情中的工具调用摘要进入
-
-### 出口
-
-- 返回 Agent Run 详情
-- 返回运行看板
-- 去关联事件详情
-
-## 页面布局
-
-建议采用：
-
-```text
-页面头
-  -> 调用概览卡
-  -> 输入摘要卡
-  -> 状态时间线
-  -> 错误与重试区
-  -> 关联入口区
-```
-
-## 页面模块
-
-| 模块 | 作用 | 推荐前端模块 |
-| --- | --- | --- |
-| 页面头 | 标识工具调用对象 | `features/runtime/components/ToolInvocationHeader` |
-| 调用概览卡 | 展示状态与耗时 | `features/runtime/components/ToolInvocationOverviewCard` |
-| 输入摘要卡 | 展示脱敏输入摘要 | `features/runtime/components/ToolInvocationInputCard` |
-| 状态时间线 | 展示状态变化 | `features/runtime/components/ToolInvocationTimeline` |
-| 错误与重试区 | 展示异常与重试 | `features/runtime/components/ToolInvocationErrorPanel` |
-| 关联入口区 | 跳往 Run / Event | `features/runtime/components/ToolInvocationLinks` |
-
-## 功能明细
-
-### 调用概览卡
-
-展示：
-
-- invocationId
-- toolName
-- 状态
-- 开始时间
-- 结束时间
-- 总耗时
-
-### 输入摘要卡
-
-要求：
-
-- 只展示脱敏后的关键输入摘要
-- 不展示 secrets、token、完整私有策略
-
-### 状态时间线
-
-节点建议：
-
-- queued
-- started
-- retrying
-- completed / failed
-
-### 错误与重试区
-
-展示：
-
-- 错误类型
-- 错误摘要
-- retryable
-- 重试次数
-
-### 关联入口区
-
-提供：
-
-- 查看 Agent Run
-- 查看事件详情
-
-## 页面状态设计
+## 状态与失败路径
 
 | 状态 | 页面行为 |
 | --- | --- |
-| completed | 展示成功摘要 |
-| failed | 高亮错误区 |
-| retrying | 展示重试中 |
-| 无数据 | 展示不可见或不存在 |
+| pending / running | 展示当前状态 |
+| succeeded | 展示输出摘要 |
+| failed | 展示错误摘要和 retry_count |
+| timed_out | 展示 timeout_ms |
+| blocked | 展示权限、风险或人工确认阻断原因 |
 
-## 示例
+## 安全边界
 
-```text
-Tool Invocation
-工具：NewsVerificationTool
-状态：failed
-重试次数：1
-错误：上游来源超时
-retryable：true
-```
-
-## 推荐前端模块拆分
-
-- `ToolInvocationHeader`
-- `ToolInvocationOverviewCard`
-- `ToolInvocationInputCard`
-- `ToolInvocationTimeline`
-- `ToolInvocationErrorPanel`
-- `ToolInvocationLinks`
+- 不展示 secrets、token、完整工具配置参数或包含敏感业务逻辑的私有配置。
+- 不展示完整请求体、响应体或完整网页快照。
+- 输入输出只展示脱敏摘要；典型敏感项包括 API keys、OAuth tokens、完整策略 JSON、账户信息和内部规则配置。
 
 ## 非目标
 
-- 不展示原始 secrets
-- 不做工具开发控制台
+- 不做 Tool 开发台。
+- 不做自由脚本执行器。
+- 不做参数 schema 编辑器。

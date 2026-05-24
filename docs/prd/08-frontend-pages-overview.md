@@ -1,204 +1,240 @@
-# 08. 前端页面规划总览
+# 08. 操盘者工作台 V1 页面与治理信息架构
 
 ## 文档状态
 
-**版本**：v1.0  
-**状态**：页面级 PRD 基线稿  
-**适用范围**：`apps/web` 管理台页面信息架构、页面职责、页面关系、模块映射与原型输入  
-**基于真源**：`docs/prd/01-07`、`docs/design/09-frontend-architecture-design.md`、当前 `apps/web` 路由骨架、GitHub issue `#127-#132`
+**版本**：v1.1
+**状态**：PRD 收口稿
+**关联 issue**：#127、#129、#130、#131、#132
+**适用范围**：V1 Web 工作台的信息架构、页面优先级、主链路、治理对象层级和后续页面 PRD 的阅读入口
+**依据**：`docs/prd/01-07`、`docs/design/02-core-architecture-and-runtime.md`、`docs/design/03-plugin-system-and-registry.md`、`docs/design/07-industry-package-design.md`、`docs/design/08-api-and-websocket-design.md`、`docs/design/09-frontend-architecture-design.md`
 
-## 为什么补这一层
+## 顶层结论
 
-当前 PRD 已经回答了产品是什么、为什么存在、有哪些模块边界，但还没有把“前端每个页面具体解决什么问题、页面里要放哪些模块、每个模块承担什么职责”系统地沉淀下来。
+V1 Web 工作台的第一目标是帮助操盘者从事件流中发现高价值事件，理解行业影响，处理需要人工确认的建议，并能回放建议变化过程。
 
-这一层文档的目的不是替代设计稿，而是把以下内容固定下来：
+因此页面信息架构必须按运行链路和治理对象分层，而不是把所有 Registry 资源都铺成同级导航。
 
-- 哪些页面是一阶段必须做的。
-- 每个页面的主对象是什么。
-- 每个页面最少要展示哪些信息和动作。
-- 页面之间如何跳转。
-- 推荐拆成哪些前端模块，避免页面开发时重新发明结构。
+## V1 主链路
 
-## 页面设计总原则
+```text
+Dashboard
+  -> Events
+  -> Event Detail / Decision
+  -> Approval Inbox / Approval Detail / Approval Link
+  -> Event Audit Timeline
+```
 
-- 前端首先是**事件驱动分析工作台**，其次才是运行时管理台。
-- V1 不做完整交易终端，不提供手工下单工作流。
-- 事件是主对象，分析、审批、审计围绕事件展开。
-- 高风险动作不在列表页直接执行，必须进入审批链路。
-- REST 快照是状态真源，实时消息只做刷新与提醒。
-- 前端展示结构化分析，不展示完整模型推理链。
-- 所有涉及建议、审批、密钥、执行边界的页面都必须考虑审计和脱敏。
+这条链路必须优先回答：
 
-## 页面地图
+- 今天最值得看的事件是什么。
+- 这条事件影响哪些行业、标的和风险方向。
+- 系统给出的最佳动作是什么，依据和反方观点是什么。
+- 这条建议是否需要人工确认，确认后进入什么受控链路。
+- 建议如何生成、如何变更、谁在什么时候做了什么动作。
 
-| 页面 | 路由 | 页面角色 | 阶段优先级 | 主对象 |
+## 页面优先级
+
+| 优先级 | 页面 | 路由 | 主对象 | 说明 |
 | --- | --- | --- | --- | --- |
-| Dashboard 首页 | `/` | 总控首页、重点事件与系统提醒入口 | P0 | 仪表盘 / 高价值事件 |
-| 登录页 | `/login` | 进入系统、建立会话 | P0 | 会话 |
-| 高价值事件首页 | `/events` | 发现重点事件、进入分析 | P0 | 事件 |
-| 事件详情 / 决策页 | `/events/:eventId` | 查看事件事实、行业影响、最佳动作 | P0 | 事件 |
-| 审批工作台 | `/approvals` | 集中处理待确认建议 | P0 | 审批请求 |
-| 事件级审计时间线 | `/events/:eventId/audit` | 回放建议变化与人工动作 | P1 | 事件 |
-| 审批详情页 | `/approvals/:approvalId` | 审批单独处理、查看完整证据 | P1 | 审批请求 |
-| 一次性授权页 | `/approval-link/:token` | 外部短链审批 | P1 | 审批请求 |
-| 运行看板 | `/runtime` | 看系统运行、Agent、工具和错误 | P1 | 运行态 |
-| Agent Run 详情 | `/runtime/agents/:runId` | 看分析过程摘要 | P1 | Agent Run |
-| Tool Invocation 详情 | `/runtime/tools/:invocationId` | 看工具调用过程 | P1 | Tool Invocation |
-| 插件管理页 | `/plugins` | 看插件状态、筛选和进入配置 | P1 | 插件 |
-| 插件详情页 | `/plugins/:pluginId` | 插件配置、依赖、错误、审计 | P1 | 插件 |
-| Skills 页 | `/skills` | 看 Skill Registry 摘要 | P2 | Skill |
-| Tools 页 | `/tools` | 看 Tool Registry 摘要 | P2 | Tool |
-| Industries 页 | `/industries` | 看行业包摘要和市场映射 | P2 | Industry Package |
-| 设置页 | `/settings` | 管理会话、通知、偏好、风险开关 | P2 | 系统设置 |
+| P0 | 登录页 | `/login` | Session | 建立会话后进入 Dashboard |
+| P0 | Dashboard | `/` | 高价值事件 / 待审批 / 关键健康提醒 | 登录后的操盘总控页 |
+| P0 | 高价值事件中心 | `/events` | Event | 承接事件浏览、筛选和重点事件扩展 |
+| P0 | 事件详情 / 决策页 | `/events/:eventId` | Event | 结构化展示事实、分析和最佳动作 |
+| P0 | 审批工作台 | `/approvals` | ApprovalRequest | 集中处理待确认建议 |
+| P0 | 审批详情页 | `/approvals/:approvalId` | ApprovalRequest | 高风险或不确定审批的完整上下文 |
+| P0 | 一次性授权页 | `/approval-link/:token` | ApprovalRequest | link_confirm 的受限确认入口 |
+| P0 | 事件级审计时间线 | `/events/:eventId/audit` | Event / AuditLog | 按事件回放建议、重分析和人工动作 |
+| P1 | Runtime | `/runtime` | AgentRun / ToolInvocation / RuntimeError | 解释系统过程和关键失败 |
+| P1 | Agent Run 详情 | `/runtime/agents/:runId` | AgentRun | 展示结构化运行过程，不展示完整推理链 |
+| P1 | Tool Invocation 详情 | `/runtime/tools/:invocationId` | ToolInvocation | 展示工具调用摘要、权限、错误和 trace |
+| P2 | Registry / Plugins | `/plugins` | PluginRecord | 插件治理统一入口，按类型分视图 |
+| P2 | Plugin Detail | `/plugins/:pluginId` | PluginRecord | 配置、依赖、能力、健康、审计 |
+| P2 | Settings | `/settings` | UserPreference / Session | 只承接会话和个人偏好，不承接核心风控规则 |
 
-## 页面关系图
+## 不作为顶层页面的对象
 
-```text
-登录
-  -> Dashboard 首页
-      -> 高价值事件首页
-      -> 事件详情 / 决策页
-          -> 审批工作台
-          -> 事件级审计时间线
-          -> 审批详情页
-          -> 运行看板 / Agent Run 详情
-          -> 插件页 / 行业包页（支撑查看）
-      -> 系统健康提醒
+| 对象 | V1 展示位置 | 不作为顶层页面的原因 |
+| --- | --- | --- |
+| Skill | Agent Run、Plugin Detail、Industry 插件能力 tab | Skill 是 Registry 子资源，来源可能是官方、行业包内置或 runtime/private，不是操盘主任务 |
+| Tool | Tool Invocation、Agent Run、Plugin Detail | Tool 是受控外部能力，治理重点是调用记录、权限、来源插件和 schema |
+| Industry Package | Plugins 的 `industry` 类型视图、Plugin Detail | 行业包本质是 `industry` 类型插件，不能和 Plugin 平铺成两个并列主对象 |
+| Source Binding | Industry 插件详情和事件路由解释 | Source Binding 是行业包与 source 插件之间的连接关系 |
+| Executor | Plugins 的 `executor` 类型视图、Approval / Policy 说明 | Executor 是高风险插件类型，初版只能 disabled / dry_run / mock |
 
-审批工作台
-  -> 审批详情页
-  -> 回跳事件详情 / 决策页
-  -> 事件级审计时间线
+技术上可以保留 `/skills`、`/tools`、`/industries` 等资源路由或后续 deep link，但 V1 产品导航不应把它们抬成与事件、审批、运行态同级的入口。
 
-运行看板
-  -> Agent Run 详情
-  -> Tool Invocation 详情
-
-插件管理页
-  -> 插件详情页
-```
-
-## 页面分层
-
-### P0：操盘主链路页面
-
-- Dashboard 首页
-- 登录页
-- 高价值事件首页
-- 事件详情 / 决策页
-- 审批工作台
-
-这组页面直接承接：
-
-`Dashboard -> 发现事件 -> 理解影响 -> 看到建议 -> 人工确认`
-
-### P1：解释性和治理型页面
-
-- 事件级审计时间线
-- 审批详情页
-- 一次性授权页
-- 运行看板
-- Agent Run 详情
-- Tool Invocation 详情
-- 插件管理页
-- 插件详情页
-
-这组页面的目标不是创造新建议，而是解释系统是怎么得到建议、系统当前是否健康、插件是否可用。
-
-### P2：索引与设置型页面
-
-- Skills 页
-- Tools 页
-- Industries 页
-- 设置页
-
-这组页面用于建立后台治理能力，不应该抢占首页或详情页的注意力。
-
-## 页面和前端模块映射原则
-
-### 路由层
-
-- `routes/` 只负责 URL、loader、页面入口和顶层布局组合。
-- 列表页的筛选条件应稳定进入 URL search params。
-- 详情页必须支持通过稳定 ID 直接打开。
-
-### Feature 层
-
-建议沿用 `features/<domain>/components` 进行模块拆分：
-
-| 页面 | 推荐 feature |
-| --- | --- |
-| `/events`、`/events/:eventId` | `features/events` |
-| `/approvals`、`/approvals/:approvalId`、`/approval-link/:token` | `features/approvals` |
-| `/runtime`、`/runtime/agents/:runId`、`/runtime/tools/:invocationId` | `features/runtime` |
-| `/plugins`、`/plugins/:pluginId` | `features/plugins` |
-| `/skills` | `features/skills` |
-| `/tools` | `features/tools` |
-| `/industries` | `features/industries` |
-| `/settings` | `features/settings` |
-
-### Shared 层
-
-建议把以下能力沉到底层共享模块：
-
-- `shared/api`：API client、错误对象、请求上下文。
-- `shared/realtime`：WebSocket 订阅与重连提醒。
-- `shared/forms`：常规表单与 schema-driven form 支撑。
-- `shared/ui`：页面头、统计卡、状态徽章、表格、时间线、空态、错误态。
-- `shared/auth`：会话、能力可见性、退出登录。
-
-## 一阶段建议输出顺序
-
-1. 先定 P0 页面结构。
-2. 再补审计、审批详情、运行看板、插件详情等解释型页面。
-3. 最后补 Skills / Tools / Industries / Settings 这些治理型页面。
-
-## 示例主链路
+## 治理对象层级
 
 ```text
-09:02 操盘者登录
-  -> Dashboard 看到今日重点事件区第 1 条：
-     “路透：OPEC+ 将临时减产讨论提前”
+Registry / Plugins
+  -> Plugin type
+      -> source
+      -> industry
+          -> SourceBinding
+          -> AgentDefinition
+          -> Skill
+          -> Tool
+          -> MarketMapping
+      -> strategy
+      -> notification
+      -> executor
+  -> Plugin Detail
+      -> Overview
+      -> Config
+      -> Dependencies
+      -> Provided Capabilities
+      -> Health
+      -> Audit
 
-09:03 用户打开事件详情
-  -> 左侧看到来源、时间、事件摘要
-  -> 右侧看到：
-     - 影响行业：原油、油服、航运
-     - 影响标的：Brent front-month, XLE
-     - 风险点：消息尚未有官方公告二次确认
-     - 最佳动作：观察性做多近月原油，可靠度 78/100
-
-09:04 用户决定需要审批
-  -> 进入审批工作台
-  -> 在审批页查看建议动作、风险和关键证据
-  -> 执行 approve 或 request_reanalysis
+Runtime
+  -> AgentRun
+      -> used Skills
+      -> ToolInvocations
+  -> ToolInvocation
+  -> RuntimeError
 ```
 
-## 对应详细页面文档
+这个层级的目的：
 
-- [页面文档索引](pages/README.md)
-- [Dashboard 首页](pages/00-dashboard.md)
-- [登录页](pages/01-login.md)
-- [高价值事件首页](pages/02-events-home.md)
-- [事件详情 / 决策页](pages/03-event-detail.md)
-- [审批工作台](pages/04-approvals-index.md)
-- [事件级审计时间线](pages/16-event-audit-timeline.md)
-- [审批详情页](pages/05-approval-detail.md)
-- [一次性授权页](pages/06-approval-link.md)
-- [运行看板](pages/07-runtime-dashboard.md)
-- [Agent Run 详情](pages/08-runtime-agent-run-detail.md)
-- [Tool Invocation 详情](pages/09-runtime-tool-detail.md)
-- [插件管理页](pages/10-plugins-index.md)
-- [插件详情页](pages/11-plugin-detail.md)
-- [Skills 页](pages/12-skills.md)
-- [Tools 页](pages/13-tools.md)
-- [Industries 页](pages/14-industries.md)
-- [设置页](pages/15-settings.md)
+- 避免把插件包和插件暴露出的子资源混为同级页面。
+- 避免用户在第一阶段被 Skill、Tool、Industry 等技术对象打散注意力。
+- 保留系统可观测能力，让技术用户仍可从运行过程和插件详情进入子资源。
 
-## HTML 原型
+## 页面职责边界
 
-可预览原型文件：
+### Dashboard
 
-- [前端页面原型 HTML](prototypes/frontend-pages-v1.html)
+必须做：
 
-该原型优先覆盖 P0 主链路和部分 P1 页面，用于快速看页面层级与信息密度，不替代正式前端实现。
+- 展示今日重点事件。
+- 展示待处理审批摘要。
+- 展示影响决策质量的关键健康提醒。
+- 引导进入事件、审批和运行态。
+
+不做：
+
+- 不替代完整事件列表。
+- 不做插件治理首页。
+- 不提供内联审批或执行动作。
+
+### Events
+
+必须做：
+
+- 展示重点事件区和完整事件列表。
+- 支持时间、行业、可信度、分析状态等筛选。
+- 支持最新和高价值混合排序。
+- 点击进入事件详情。
+
+不做：
+
+- 不做新闻全文阅读器。
+- 不做审批操作。
+- 不做运行态调试面板。
+
+### Event Detail / Decision
+
+必须做：
+
+- 区分事件事实、行业影响分析、最佳动作建议。
+- 展示支持观点、反方观点、风险和触发信息。
+- 明确建议是否已生成 ApprovalRequest。
+- 提供进入审批、运行摘要和审计时间线的入口。
+
+不做：
+
+- 不展示完整 chain-of-thought。
+- 不直接批准或执行。
+- 不做多候选动作比较工作台。
+
+### Approvals
+
+必须做：
+
+- 展示 ApprovalRequest 队列。
+- 展示 `expires_at`、`expiration_action`、风险方向和确认等级。
+- 支持 approve、reject、request_reanalysis、amend。
+- 支持逐条处理；批量处理需要受更强限制。
+
+不做：
+
+- 不做真实执行结果页。
+- 不绕过 Policy Gate。
+- 不把批准文案写成“已下单”或“已执行”。
+
+### Runtime
+
+必须做：
+
+- 展示 AgentRun、ToolInvocation、RuntimeError 的摘要。
+- 能按 event_id、trace_id、status、plugin_id 排查。
+- 从事件详情回溯系统如何得到结构化输出。
+
+不做：
+
+- 不替代 APM 或日志平台。
+- 不展示完整模型推理链。
+
+### Registry / Plugins
+
+必须做：
+
+- 统一展示插件记录，并按 source / industry / strategy / notification / executor 类型分视图。
+- 进入插件详情查看配置、依赖、能力、健康和审计。
+- 对 executor 类型明确展示 disabled / dry_run / mock，初版不支持实盘执行。
+
+不做：
+
+- 不把 Skill、Tool、Industry 分别做成顶层导航。
+- 不做插件市场。
+- 不允许插件注入自定义前端组件。
+
+### Settings
+
+必须做：
+
+- 展示当前会话、actor、环境和退出登录。
+- 管理个人展示偏好、通知提醒偏好和实时刷新偏好。
+
+不做：
+
+- 不承接插件配置、secret 管理、执行器权限和生产风控规则。
+- 不把高风险系统开关做成普通偏好项。
+
+## 必须对齐的系统约束
+
+- REST 是业务状态真源，WebSocket 只做状态提醒和 query invalidation。
+- 前端通过 generated client、types 和 Zod schema 消费 API，不在 PRD 中发明最终 contract。
+- 高风险动作必须经过 Decision / Policy Gate。
+- 初版 executor 只允许 disabled / dry_run / mock。
+- 插件配置采用 schema-driven form，敏感字段只展示 masked value 或 secret reference。
+- Agent run 和 tool invocation 只展示结构化摘要，不展示完整模型推理链。
+- 审批、插件生命周期、配置变更、高风险工具调用和运行时错误都必须可审计。
+
+## 文档拆分策略
+
+`pages/` 下文档只作为页面附录，不作为独立架构真源。页面附录应服务于以下问题：
+
+- 页面要解决哪个用户任务。
+- 依赖哪个主对象和状态。
+- 入口、出口和不可做事项是什么。
+- 空态、失败、权限不足、实时断连如何处理。
+- 验收标准是什么。
+
+组件名、字段草案和原型只能作为参考，不应替代 `packages/contracts`、OpenAPI、JSON Schema 或 OpenSpec。
+
+## 后续 OpenSpec 建议
+
+若本 PRD 评审通过，应创建统一 change：
+
+```text
+web-trader-workbench-v1
+```
+
+建议包含：
+
+- Dashboard / Events / Event Detail 行为 spec。
+- ApprovalRequest / ApprovalDecision / ApprovalLink 行为 spec。
+- EventAuditTimeline 节点和 diff 摘要 spec。
+- Scoring 展示语义 spec。
+- Registry / Plugin 治理入口的非顶层 Skill / Tool / Industry 约束。

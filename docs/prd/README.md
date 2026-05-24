@@ -21,7 +21,7 @@ QuantAgent 是一款面向专业交易者和研究员的事件驱动型量化智
 | 05 | UX 需求 | [05-ux-requirements.md](05-ux-requirements.md) | 运行时管理台、审批工作台、插件后台 |
 | 06 | 风控约束 | [06-risk-constraints.md](06-risk-constraints.md) | 验证、隐私、熔断、执行边界、审计 |
 | 07 | 验收与待确认 | [07-acceptance-open-questions.md](07-acceptance-open-questions.md) | 验收标准、测试重点、待确认问题 |
-| 08 | 前端页面规划 | [08-frontend-pages-overview.md](08-frontend-pages-overview.md) | 页面地图、页面职责、模块映射、页面级 PRD 索引 |
+| 08 | 操盘者工作台页面与治理信息架构 | [08-frontend-pages-overview.md](08-frontend-pages-overview.md) | 页面主链路、优先级、治理对象层级、页面附录入口 |
 | 09 | 评分体系与优先级 | [09-scoring-and-prioritization.md](09-scoring-and-prioritization.md) | 事件、分析、建议评分与高价值事件判定 |
 
 ## 模块依赖
@@ -53,4 +53,4 @@ QuantAgent 是一款面向专业交易者和研究员的事件驱动型量化智
 - 产品/业务评审：先读 [产品概览](01-overview.md)、[行业场景](02-industry-scenarios.md)。
 - 技术方案评审：先读 [功能模块](03-functional-modules.md)、[技术架构](04-technical-architecture.md)。
 - 交互评审：先读 [UX 需求](05-ux-requirements.md)、[风控约束](06-risk-constraints.md)。
-- 页面与原型评审：先读 [前端页面规划](08-frontend-pages-overview.md)，再进入 `pages/` 和 `prototypes/`。
+- 页面评审：先读 [操盘者工作台页面与治理信息架构](08-frontend-pages-overview.md)，再进入 `pages/` 页面附录。

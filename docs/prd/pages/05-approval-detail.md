@@ -2,266 +2,142 @@
 
 ## 页面定位
 
-审批详情页用于承接单条审批请求的完整查看与处理。相比审批工作台列表，它提供更充分的证据、分析上下文、审批历史和操作确认，适用于用户在列表层面无法直接拍板、需要更强上下文支持的场景。
+审批详情页用于处理单条 ApprovalRequest 的完整确认。相比审批工作台列表，它提供更完整的事件上下文、证据、风险、确认等级、到期策略和历史记录。
 
-页面主对象是**审批请求**。
+## 用户任务
 
-## 页面目标
+- 在批准、拒绝、重分析或修改前复核完整上下文。
+- 理解 ActionRequest 为什么产生，以及 Policy Gate 要求怎样的人类确认。
+- 查看支持证据、反方观点、风险方向和到期策略。
+- 完成强确认或进入事件详情、审计时间线继续复核。
 
-- 让用户在单条审批上下文内做更稳妥判断。
-- 展示建议动作、关键证据、风险方向、变更记录和审批结果。
-- 为高风险审批提供更清晰的二次确认空间。
-- 让用户从审批详情稳定回跳到事件详情和审计时间线。
+## 主对象和真源
 
-## 入口与出口
+主对象是 ApprovalRequest。
 
-### 入口
+| 信息 | 真源 |
+| --- | --- |
+| 审批核心信息 | ApprovalRequest |
+| 动作内容 | ActionRequest 摘要 |
+| 策略解释 | ResolvedApprovalPolicy / ApprovalEvaluation |
+| 事件上下文 | Event / ScoredAnalysis 摘要 |
+| 处理历史 | ApprovalInput / ApprovalDecision / audit logs |
+| 运行追踪 | trace_id / request_id |
 
-- 从审批工作台点击“查看详情”进入
-- 从事件详情中的审批入口进入
-- 从一次性授权页校验失败后转回完整后台审批页
-
-### 出口
-
-- 返回审批工作台
-- 进入关联事件详情
-- 进入事件级审计时间线
-- 执行审批动作后停留本页或返回列表
-
-## 页面布局
-
-建议采用上下双层结构：
+## 页面结构
 
 ```text
 页面头
-  -> 审批概览卡
-  -> 左右双栏
-     左：证据摘要 + 事件上下文
-     右：建议详情 + 审批操作
-  -> 底部：审批历史 / 关联入口
+  -> 审批概览
+  -> 左栏：事件上下文 + 证据 + 反方观点
+  -> 右栏：动作详情 + 策略解释 + 操作区
+  -> 底部：处理历史 + 关联入口
 ```
 
-这样做的原因：
+## 关键模块
 
-- 左侧更适合承载“为什么建议成立”
-- 右侧更适合承载“你现在要不要批准”
-- 审批历史放底部，避免抢首屏判断注意力
+### 审批概览
 
-## 页面模块
+必须展示：
 
-| 模块 | 作用 | 是否 P1 必须 | 推荐前端模块 |
-| --- | --- | --- | --- |
-| 页面头 | 标识审批对象、状态和来源 | 是 | `features/approvals/components/ApprovalDetailHeader` |
-| 审批概览卡 | 展示审批核心元信息 | 是 | `features/approvals/components/ApprovalOverviewCard` |
-| 事件上下文卡 | 补充审批对应的事件摘要 | 是 | `features/approvals/components/ApprovalEventContextCard` |
-| 证据摘要区 | 展示支持证据、反方观点、风险 | 是 | `features/approvals/components/ApprovalEvidencePanel` |
-| 建议详情区 | 展示建议动作完整说明 | 是 | `features/approvals/components/ApprovalActionDetail` |
-| 审批操作区 | 承载 approve / reject / reanalysis / amend | 是 | `features/approvals/components/ApprovalDecisionPanel` |
-| 审批历史区 | 展示已发生处理记录 | 是 | `features/approvals/components/ApprovalHistoryPanel` |
-| 关联入口区 | 跳往事件详情、审计时间线 | 建议 | `features/approvals/components/ApprovalRelatedLinks` |
+- Approval ID。
+- 状态。
+- risk_level。
+- risk_direction。
+- recommendation_score。
+- analysis_confidence。
+- required_confirmation_level。
+- `expires_at`。
+- `expiration_action`。
+- policy_source。
 
-## 模块详细要求
+### 事件上下文
 
-### 1. 页面头
+必须展示：
 
-展示：
+- 事件摘要。
+- 来源权威度。
+- 事件可信度。
+- 影响行业和标的。
+- 触发信息。
+- 事件详情入口。
 
-- 标题：`审批详情`
-- 审批状态：pending / approved / rejected / expired
-- 关联事件标题
-- 返回审批工作台入口
+### 证据和风险
 
-示例：
+必须展示：
 
-```text
-审批详情
-状态：pending
-关联事件：路透：美国考虑收紧对伊朗石油出口限制
-```
+- 支持证据摘要。
+- 反方观点摘要。
+- 不确定性和数据缺口。
+- 多信源验证状态。
+- 关键工具失败对本审批的影响，如果存在。
 
-### 2. 审批概览卡
+### 动作详情
 
-至少展示：
+必须展示：
 
-| 字段 | 说明 |
-| --- | --- |
-| 审批 ID | 唯一标识 |
-| recommendation score | 当前建议推荐度 |
-| 分析置信度 | 当前分析结论稳定度 |
-| 风险等级 | 低 / 中 / 高 |
-| 创建时间 | 审批产生时间 |
-| expires_at | 过期时间 |
-| expiration_action | 过期后默认行为 |
+- action_type。
+- action_side。
+- target_type / target_id。
+- instrument / market，如果适用。
+- proposed_payload 的脱敏摘要。
+- blocked_executors / allowed_executors 摘要，如果有。
 
-### 3. 事件上下文卡
+不得展示完整私有策略、secret、账户密钥或敏感参数。
 
-这个模块用于让审批页不脱离事件语境。
+### 操作区
 
-建议展示：
+支持：
 
-- 事件摘要
-- 来源名称
-- 来源权威度
-- 事件可信度
-- 影响行业
-
-用户应能在这里快速回忆“我为什么会收到这条审批”。
-
-### 4. 证据摘要区
-
-首版建议展示：
-
-- 支持证据 2 到 4 条
-- 反方观点 1 到 2 条
-- 风险摘要 1 到 3 条
-- 关键触发信息 1 条
-
-建议拆成：
-
-#### 4.1 支持证据卡
-
-- Reuters 首发报道
-- 行业分析认为供给预期将收缩
-
-#### 4.2 反方观点卡
-
-- 尚无官方二次确认
-- 市场可能已有部分预期
-
-#### 4.3 风险卡
-
-- 建议不适合误解为自动放行
-- 若消息被澄清，价格可能快速回吐
-
-### 5. 建议详情区
-
-建议展示：
-
-| 字段 | 说明 |
-| --- | --- |
-| 建议标题 | 一句话建议 |
-| 标的 | 建议指向对象 |
-| 逻辑理由 | 为什么建议这个动作 |
-| 建议推荐度 | 是否值得优先审批 |
-| 分析置信度 | 分析结论稳定程度 |
-| 风险等级 | 当前建议风险级别 |
-| 触发信息 | 明确由哪条信息触发 |
-| 推荐原因 | 为什么选这个动作而不是其他动作 |
-
-### 6. 审批操作区
-
-按钮：
-
-- `批准`
-- `拒绝`
-- `请求重分析`
-- `修改后提交`
+- approve。
+- reject。
+- request_reanalysis。
+- amend。
 
 交互要求：
 
-- 高风险动作前需二次确认
-- `请求重分析` 可选填原因
-- `修改后提交` 首版可以作为占位动作，不要求完整实现复杂编辑器
+- strong_confirm 需要明确结构化确认。
+- link_confirm 应提示也可通过一次性链接确认，但当前后台仍可处理。
+- manual_only 只保留强确认入口。
+- amend 必须展示修改前后摘要。
+- 操作后展示结果，并刷新审计历史。
 
-### 7. 审批历史区
-
-展示节点：
-
-- 创建审批
-- 已查看
-- 已批准 / 已拒绝
-- 请求重分析
-- 审批被更新
-
-### 8. 关联入口区
-
-必须允许用户：
-
-- 查看原事件详情
-- 查看事件级审计时间线
-
-## 页面状态设计
+## 状态与失败路径
 
 | 状态 | 页面行为 |
 | --- | --- |
-| 待处理 | 审批操作区可用 |
-| 已批准 | 操作区只读，展示结果 |
-| 已拒绝 | 操作区只读，展示拒绝原因 |
-| 已过期 | 显示过期说明和 expiration_action |
-| 加载失败 | 保留页头和重试入口 |
+| pending | 操作区可用 |
+| approved / rejected | 操作区只读，展示处理结果 |
+| expired | 禁用动作，展示 expiration_action |
+| blocked | 展示阻断原因和策略来源 |
+| 权限不足 | 操作禁用，展示 capability 缺失 |
+| 操作失败 | 保留当前上下文，展示 request_id / trace_id |
 
-## 示例
+## 风控边界
 
-```text
-审批详情
-状态：pending
-事件：路透：美国考虑收紧对伊朗石油出口限制
-建议：观察性做多近月原油
-建议推荐度：78/100
-分析置信度：74/100
-到期时间：14:30
+- 批准只表示人类确认，后续仍由 Policy Gate 和 executor mode 决定。
+- 不允许前端根据分数绕过 required_confirmation_level。
+- 不允许在详情页展示完整模型推理链。
+- 不允许明文展示 secret、token、交易账户敏感信息或完整私有策略。
 
-支持证据
-- Reuters 首发报道
-- 原油行业包已完成一级影响分析
+## 验收口径
 
-反方观点
-- 尚无官方二次确认
+必须成立：
 
-风险
-- 市场可能先反应后回吐
-- 不应将批准误解为真实执行已完成
-```
+- 用户能解释为什么这条审批需要人工确认。
+- 用户能看到风险方向、确认等级和到期策略。
+- 用户能看到支持和反方观点，而不是只看到建议动作。
+- 所有动作结果都能回写审计历史。
 
-## 推荐前端模块拆分
+失败信号：
 
-- `ApprovalDetailHeader`
-- `ApprovalOverviewCard`
-- `ApprovalEventContextCard`
-- `ApprovalEvidencePanel`
-- `ApprovalActionDetail`
-- `ApprovalDecisionPanel`
-- `ApprovalHistoryPanel`
-- `ApprovalRelatedLinks`
-
-## 对应数据建议
-
-```ts
-type ApprovalDetail = {
-  id: string
-  eventId: string
-  eventTitle: string
-  status: 'pending' | 'approved' | 'rejected' | 'expired'
-  recommendationScore: number
-  analysisConfidenceScore: number
-  riskLevel: 'low' | 'medium' | 'high'
-  createdAt: string
-  expiresAt?: string
-  expirationAction?: string
-  eventContext: {
-    summary: string
-    sourceName: string
-    sourceAuthorityLevel: 'A' | 'B' | 'C' | 'D'
-    eventReliabilityScore: number
-    industries: string[]
-  }
-  action: {
-    title: string
-    symbol: string
-    rationale: string
-    triggerSummary: string
-    recommendedBecause: string
-  }
-  evidence: {
-    supportPoints: string[]
-    counterPoints: string[]
-    risks: string[]
-  }
-}
-```
+- 页面只展示“批准 / 拒绝”按钮和一段建议。
+- 缺少 expiration_action 或 confirmation level。
+- 高风险动作可以通过弱确认入口处理。
 
 ## 非目标
 
-- 不做复杂审批流编排器
-- 不做全文 diff 审核器
-- 不做真实执行结果页
+- 不做多人审批流编排。
+- 不做真实执行结果页。
+- 不做策略规则编辑器。
+- 不做完整 payload diff 工具。

@@ -1,130 +1,158 @@
-# 10. 插件管理页
+# 10. Registry / Plugins
 
 ## 页面定位
 
-插件管理页用于集中查看已安装插件、类型、版本、状态和最近错误，并进入插件详情页进行配置或排障。它是系统治理页，不承担操盘主链路，但会直接影响事件采集和分析质量。
+Registry / Plugins 是 V1 的统一插件治理入口。它管理 `source`、`industry`、`strategy`、`notification`、`executor` 五类插件，不把 Skill、Tool、Industry Package 另外平铺成顶层页面。
 
-页面主对象是**插件**。
+## 用户任务
 
-## 页面目标
+- 查看系统当前安装、启用、失败或被阻塞的插件。
+- 按类型、状态、来源筛选插件。
+- 发现影响事件采集、分析、通知或虚盘执行的插件问题。
+- 进入插件详情配置、检查依赖、查看能力和审计。
 
-- 告诉用户系统当前有哪些 Source / Industry / Strategy / Notification / Executor 插件。
-- 让用户快速发现异常插件。
-- 提供进入配置、依赖查看和审计的入口。
-- 帮助用户判断系统问题是否来自插件异常。
+## 主对象和真源
 
-## 入口与出口
+主对象是 PluginRecord。
 
-### 入口
+| 信息 | 真源 |
+| --- | --- |
+| 插件列表 | plugin_records |
+| 插件版本 | plugin_versions |
+| 插件状态 | Registry / plugin_records |
+| 依赖状态 | plugin_dependency_records |
+| 配置状态 | plugin_configs 摘要 |
+| 错误和审计 | runtime_errors / audit_logs |
 
-- 顶部导航“插件”
-- Dashboard 或运行看板中的插件异常提醒
-
-### 出口
-
-- 插件详情页
-- 返回运行看板
-
-## 页面布局
-
-建议采用：
+## 页面结构
 
 ```text
 页面头
-  -> 插件概览条
-  -> 类型与状态筛选栏
+  -> Registry 概览
+  -> 类型视图 tabs
+  -> 筛选与排序
   -> 插件列表
-  -> 健康与错误摘要区
+  -> 关键阻塞和错误摘要
 ```
 
-## 页面模块
+## 类型视图
 
-| 模块 | 作用 | 推荐前端模块 |
-| --- | --- | --- |
-| 页面头 | 说明治理定位 | `features/plugins/components/PluginsPageHeader` |
-| 插件概览条 | 展示插件整体规模与状态 | `features/plugins/components/PluginSummaryBar` |
-| 筛选栏 | 按类型、状态、来源筛选 | `features/plugins/components/PluginFilterBar` |
-| 插件列表 | 展示插件核心字段 | `features/plugins/components/PluginList` |
-| 健康与错误摘要区 | 提醒系统关键插件问题 | `features/plugins/components/PluginAlertsPanel` |
+V1 使用一个统一页面，通过类型 tab 分视图：
 
-## 模块详细要求
+- All。
+- Sources。
+- Industries。
+- Strategies。
+- Notifications。
+- Executors。
 
-### 1. 页面头
+### Sources
 
-展示：
+关注：
 
-- 标题：`插件管理`
-- 副标题：解释该页是治理页，而非插件市场
+- 采集状态。
+- 最近抓取错误。
+- 噪音熔断。
+- 下游 industry 依赖。
 
-### 2. 插件概览条
+### Industries
 
-建议展示：
+关注：
 
-- 已安装插件数
-- 启用插件数
-- warning / error 插件数
-- 最近 24 小时异常数
+- SourceBinding。
+- AgentDefinition。
+- 提供的 Skill 和 Tool 摘要。
+- MarketMapping 摘要。
+- 最近命中事件和失败分析。
 
-### 3. 筛选栏
+Industry Package 是 `industry` 类型插件，不是独立顶层页面。
 
-建议条件：
+### Strategies
 
-- 类型：source / industry / strategy / notification / executor
-- 状态：enabled / disabled / warning / error
-- 来源：official / third-party / runtime
+关注：
 
-### 4. 插件列表
+- 策略建议生成状态。
+- 风险 flags。
+- 与 Decision 的边界。
 
-每条必须展示：
+### Notifications
 
-- 插件名
-- 类型
-- 版本
-- 来源
-- 状态
-- 最近错误
-- 详情入口
+关注：
 
-### 5. 健康与错误摘要区
+- 通知渠道状态。
+- 送达失败。
+- 配置和 secret reference。
 
-展示：
+### Executors
 
-- 最近失败最多的插件
-- 配置校验失败的插件
-- 依赖缺失的插件
+关注：
 
-## 页面状态设计
+- executor_runtime_mode：disabled / dry_run / mock。
+- 初版不支持真实执行。
+- 能力、权限和 Policy Gate 约束。
+- 最近 dry_run 记录和阻断原因。
+
+## 列表字段
+
+每条插件必须展示：
+
+- 插件名。
+- plugin_id。
+- type。
+- installed_version。
+- source。
+- status。
+- active config 状态。
+- 依赖状态摘要。
+- last_error。
+- 详情入口。
+
+## 操作边界
+
+列表页允许：
+
+- 查看详情。
+- 按类型和状态筛选。
+- 触发低风险 reload 的入口，是否直接执行由权限决定。
+
+列表页不建议直接做：
+
+- 高风险启用 executor。
+- 修改配置。
+- 卸载插件。
+- 管理 Skill 或 Tool 内容。
+
+高风险动作进入 Plugin Detail 并做二次确认。
+
+## 状态与失败路径
 
 | 状态 | 页面行为 |
 | --- | --- |
-| 正常 | 显示完整列表 |
-| 无插件 | 显示空态 |
-| 局部异常 | 对应行高亮 warning / error |
-| 加载失败 | 展示错误和重试入口 |
+| 无插件 | 展示 Registry 为空或扫描未完成 |
+| installed_but_blocked | 行内展示阻塞原因 |
+| failed | 行内展示 last_error 和详情入口 |
+| dependency_missing | 展示缺失依赖摘要 |
+| config_invalid | 展示配置无效摘要 |
+| executor enabled 风险 | 明确展示初版仅 dry_run / mock |
 
-## 示例
+## 验收口径
 
-```text
-插件管理
-已安装：12
-启用：9
-异常：2
+必须成立：
 
-- ReutersSource source v0.3 enabled healthy
-- OilIndustryPackage industry v0.2 enabled warning
-```
+- 用户能在一个入口理解插件总体状态。
+- 用户能按插件类型治理不同对象。
+- Industry、Skill、Tool 的关系不会被误解成平级导航。
+- Executor 的 disabled / dry_run / mock 边界清晰。
 
-## 推荐前端模块拆分
+失败信号：
 
-- `PluginsPageHeader`
-- `PluginSummaryBar`
-- `PluginFilterBar`
-- `PluginList`
-- `PluginListRow`
-- `PluginAlertsPanel`
+- 顶层导航同时出现 Plugins、Skills、Tools、Industries，且没有解释层级关系。
+- Industry Package 和 Plugin 被当成两个独立主对象。
+- Executor 被展示成可真实执行配置。
 
 ## 非目标
 
-- 不做插件市场
-- 不做第三方前端注入
-- 不做插件开发工作台
+- 不做插件市场。
+- 不做插件开发 IDE。
+- 不允许插件注入自定义前端组件。
+- 不做 Skill / Tool 顶层管理后台。

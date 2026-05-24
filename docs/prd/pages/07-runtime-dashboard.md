@@ -1,163 +1,126 @@
-# 07. 运行看板
+# 07. Runtime
 
 ## 页面定位
 
-运行看板用于查看系统当前运行健康度、Agent 运行、工具调用、调度状态和关键错误。它是解释系统是否正常工作的后台页，而不是操盘者的第一入口。
+Runtime 是解释和排障页，用于查看 AgentRun、ToolInvocation、scheduler run 和 runtime error。它服务于“系统为什么这样判断”和“当前系统是否影响判断质量”，不是操盘者第一入口。
 
-页面主对象是**运行态**。
+## 用户任务
 
-## 页面目标
+- 看到当前运行健康摘要。
+- 从事件详情回溯某次分析过程。
+- 查看失败 AgentRun、ToolInvocation 和 RuntimeError。
+- 按 event_id、trace_id、status、plugin_id 排查。
 
-- 给出系统整体健康感知。
-- 告诉用户哪些事件分析卡住了、哪些工具失败了。
-- 为事件详情页中的“我想看系统过程”需求提供承接。
-- 帮助用户判断当前建议是否可能受到运行异常影响。
+## 主对象和真源
 
-## 入口与出口
+| 信息 | 真源 |
+| --- | --- |
+| Agent run | `/agents/runs` 类资源 |
+| Tool invocation | `/tools/invocations` 类资源 |
+| Runtime error | `/runtime/errors` |
+| 健康摘要 | `/runtime/health` |
+| 实时变化 | WebSocket topic 触发刷新 |
 
-### 入口
-
-- Dashboard 的系统健康提醒区
-- 事件详情页中的运行摘要
-- 顶部导航“运行态”
-
-### 出口
-
-- Agent Run 详情
-- Tool Invocation 详情
-- 返回事件详情或 Dashboard
-
-## 页面布局
-
-建议采用上下分区布局：
+## 页面结构
 
 ```text
 页面头
-  -> 运行概览条
-  -> 中部双栏：Agent 运行 / 工具调用
-  -> 下方双栏：调度任务 / 错误告警
+  -> 运行健康摘要
+  -> 筛选与追踪输入
+  -> AgentRun 列表
+  -> ToolInvocation 列表
+  -> RuntimeError 列表
 ```
 
-## 页面模块
+## 关键模块
 
-| 模块 | 作用 | 推荐前端模块 |
-| --- | --- | --- |
-| 页面头 | 说明本页定位 | `features/runtime/components/RuntimePageHeader` |
-| 运行概览条 | 展示整体状态 | `features/runtime/components/RuntimeSummaryBar` |
-| Agent 运行列表 | 展示最近运行 | `features/runtime/components/AgentRunList` |
-| 工具调用列表 | 展示最近调用 | `features/runtime/components/ToolInvocationList` |
-| 调度任务区 | 展示 scheduler 状态 | `features/runtime/components/SchedulerPanel` |
-| 错误告警区 | 展示 runtime failed 等关键错误 | `features/runtime/components/RuntimeAlertsPanel` |
-
-## 模块详细要求
-
-### 1. 页面头
+### 运行健康摘要
 
 展示：
 
-- 标题：`运行看板`
-- 副标题：解释它是系统解释与排障页，不是操盘首页
+- 当前运行中 AgentRun 数。
+- 最近失败数。
+- 工具错误数。
+- runtime error 严重级别摘要。
+- 实时连接状态。
 
-### 2. 运行概览条
+### 筛选与追踪
 
-建议展示：
+支持：
 
-| 指标 | 说明 |
-| --- | --- |
-| 运行中 Agent 数 | 当前活跃分析任务 |
-| 最近失败数 | 最近失败运行规模 |
-| 工具错误数 | 最近工具失败规模 |
-| 调度延迟 | 当前 scheduler 是否积压 |
+- event_id。
+- trace_id。
+- plugin_id。
+- status。
+- 时间范围。
 
-### 3. Agent 运行列表
-
-每条必须展示：
-
-- eventId
-- runId
-- 状态
-- 耗时
-- 最近更新时间
-- 进入详情按钮
-
-### 4. 工具调用列表
-
-每条必须展示：
-
-- 工具名
-- invocationId
-- 状态
-- 耗时
-- 错误摘要
-
-### 5. 调度任务区
+### AgentRun 列表
 
 展示：
 
-- 排队任务数
-- 失败任务数
-- 最近一次调度时间
+- run_id。
+- event_id。
+- run_type。
+- status。
+- started_at / ended_at。
+- duration。
+- error summary。
+- 详情入口。
 
-### 6. 错误告警区
+### ToolInvocation 列表
 
-高亮：
+展示：
 
-- runtime.failed
-- 关键来源故障
-- 工具重试异常
-- WebSocket / realtime 退化状态
+- invocation_id。
+- tool_id。
+- 来源插件。
+- risk_level。
+- status。
+- duration。
+- retry_count。
+- error summary。
+- 详情入口。
 
-## 页面状态设计
+### RuntimeError 列表
+
+展示：
+
+- component。
+- severity。
+- status。
+- error_code。
+- error_message 摘要。
+- trace_id。
+- 关联事件或插件。
+
+## 状态与失败路径
 
 | 状态 | 页面行为 |
 | --- | --- |
-| 正常 | 展示完整概览 |
 | 无运行数据 | 展示空态 |
-| 局部失败 | 对应模块展示错误提示，不阻断整页 |
-| 严重异常 | 错误告警区置顶高亮 |
+| 局部资源失败 | 对应模块错误，不阻断整页 |
+| 严重错误 | RuntimeError 列表置顶 |
+| 实时断连 | 展示连接降级状态并允许手动刷新 |
 
-## 示例
+## 安全边界
 
-```text
-运行看板
-运行中 Agent：4
-最近失败：2
-工具错误：5
-调度延迟：12s
+- 不展示完整模型推理链。
+- 不展示完整 prompt。
+- Tool 输入输出默认展示脱敏摘要。
+- 展开更详细参数需要 capability，后端仍必须校验。
 
-最近 Agent Run
-- run_1023 事件 evt_77 analyzing 12s
-- run_1024 事件 evt_78 failed 4s
+## 验收口径
 
-错误告警
-- NewsVerificationTool 近 10 分钟失败 3 次
-- Realtime 已降级为 polling
-```
+必须成立：
 
-## 推荐前端模块拆分
-
-- `RuntimePageHeader`
-- `RuntimeSummaryBar`
-- `AgentRunList`
-- `AgentRunRow`
-- `ToolInvocationList`
-- `ToolInvocationRow`
-- `SchedulerPanel`
-- `RuntimeAlertsPanel`
-
-## 对应数据建议
-
-```ts
-type RuntimeSummary = {
-  activeAgentRuns: number
-  recentFailures: number
-  toolErrors: number
-  schedulerLagSeconds: number
-}
-```
+- 用户能从事件详情定位到相关运行过程。
+- 用户能用 trace_id 或 event_id 排查。
+- 工具失败和 Agent 失败不会被隐藏。
+- 页面不替代日志平台，也不展示敏感原始载荷。
 
 ## 非目标
 
-- 不做深度 APM 工具替代品
-- 不做完整日志平台
-- 不做实时终端监控墙
+- 不做完整 APM。
+- 不做日志搜索平台。
+- 不做实时监控墙。
+- 不做模型调试器。

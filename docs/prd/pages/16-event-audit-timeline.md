@@ -2,99 +2,118 @@
 
 ## 页面定位
 
-事件级审计时间线用于按事件回放建议生成、建议变更、重分析和人工动作。它回答的不是“现在建议是什么”，而是：
+事件级审计时间线按 Event 回放建议生成、建议变更、重分析、审批动作和关键状态变化。它回答的问题是：这条建议为什么变成现在这样，谁在什么时候做过什么。
 
-`这条建议是怎么变化到现在这个样子的？`
+## 用户任务
 
-## 页面目标
+- 回放事件从捕获到当前状态的关键过程。
+- 查看建议生成和变更前后摘要。
+- 查看 request_reanalysis 的原因和结果。
+- 查看人工 approve / reject / amend。
+- 追踪 trace_id、request_id 和关联运行过程。
 
-- 以事件为主线展示历史。
-- 展示建议变更前后对比。
-- 展示 reanalysis 次数与原因。
-- 展示人工审批动作与时间。
+## 主对象和真源
 
-## 入口与出口
+主对象是 Event，审计信息来自多个 append-only 记录。
 
-- 从事件详情进入
-- 从审批详情进入
-- 从未来的审计入口进入
+| 信息 | 真源 |
+| --- | --- |
+| 事件状态变化 | event_state_transitions |
+| 审计动作 | audit_logs |
+| 建议变化 | DecisionResult / Approval audit 摘要 |
+| 重分析 | AgentRun / ApprovalInput / audit_logs |
+| 人工动作 | ApprovalInput / ApprovalDecision / audit_logs |
 
-## 页面模块
-
-| 模块 | 作用 | 推荐前端模块 |
-| --- | --- | --- |
-| 页面头 | 标识当前事件和最新状态 | `features/events/components/EventAuditHeader` |
-| 时间线主体 | 展示系统和人工节点 | `features/events/components/EventAuditTimeline` |
-| 建议变更节点 | 展示前后差异 | `features/events/components/SuggestionDiffNode` |
-| 重分析节点 | 展示发起与结果 | `features/events/components/ReanalysisNode` |
-| 人工动作节点 | 展示 approve / reject / amend | `features/events/components/HumanActionNode` |
-
-## 功能明细
-
-### 页面头
-
-展示：
-
-- 事件标题
-- 当前状态
-- 当前最新建议
-
-### 时间线主体
-
-建议节点类型：
-
-- 建议生成
-- 建议更新
-- 请求重分析
-- 分析完成
-- 审批通过
-- 审批拒绝
-
-### 建议变更节点
-
-必须包含：
-
-- 变更前摘要
-- 变更后摘要
-- 变更原因
-
-### 重分析节点
-
-展示：
-
-- 谁发起
-- 为什么发起
-- 重分析是否改变建议
-
-### 人工动作节点
-
-展示：
-
-- 操作者
-- 动作类型
-- 时间
-- 备注
-
-## 示例
+## 页面结构
 
 ```text
-09:15 建议生成
-观察性做多近月原油，可靠度 72 / 100
-
-09:18 建议更新
-变更前：72 / 100
-变更后：78 / 100
-原因：新增航运风险作为支持证据
-
-09:22 请求重分析
-操作者：trader_admin
-原因：需要补充官方确认
-
-09:27 审批通过
-操作者：trader_admin
+页面头
+  -> 当前事件摘要
+  -> 时间线筛选
+  -> 时间线节点
+  -> 关联运行与审批入口
 ```
+
+## 节点类型
+
+V1 至少支持：
+
+- event.state_changed。
+- industry.analysis.completed。
+- analysis.scored。
+- decision.created。
+- approval.requested。
+- approval.resolved。
+- reanalysis.requested。
+- runtime.error_recorded。
+
+## 节点展示规则
+
+每个节点必须展示：
+
+- 时间。
+- actor_type / actor_id 或系统组件。
+- action。
+- outcome。
+- 摘要。
+- trace_id 或 request_id，若可用。
+
+建议变更节点必须展示：
+
+- 变更前摘要。
+- 变更后摘要。
+- 变更原因。
+- 分数变化摘要。
+
+重分析节点必须展示：
+
+- 发起者。
+- 发起原因。
+- 是否改变建议。
+- 关联 AgentRun。
+
+人工动作节点必须展示：
+
+- 操作者。
+- 动作类型。
+- 备注或原因。
+- 修改前后摘要，若是 amend。
+
+## 状态与失败路径
+
+| 状态 | 页面行为 |
+| --- | --- |
+| 无审计记录 | 展示事件存在但暂无审计记录 |
+| 只有系统节点 | 可按系统节点回放 |
+| 只有人工节点 | 可按人工动作回放 |
+| 部分节点缺 trace | 展示可用摘要，不阻断时间线 |
+| 读取失败 | 展示错误摘要和重试 |
+
+## 安全边界
+
+- 不展示完整 chain-of-thought。
+- 不展示 secret、token、完整私有策略、完整敏感 payload。
+- before_state / after_state 只展示脱敏摘要。
+- 审计记录只读，不允许在本页编辑历史。
+
+## 验收口径
+
+必须成立：
+
+- 用户能按事件回放建议如何生成和变化。
+- 用户能看到重分析是否改变建议。
+- 用户能看到谁批准、拒绝或修改了建议。
+- 用户能从时间线跳转到相关审批或运行详情。
+
+失败信号：
+
+- 审计页退化成无主线日志列表。
+- 只能看到当前建议，看不到历史变化。
+- 建议变化没有前后对比。
 
 ## 非目标
 
-- 不做全局审计报表
-- 不做数据库日志浏览器
+- 不做全局审计报表。
+- 不做数据库日志浏览器。
+- 不做不可篡改审计存证设计。
+- 不做完整 payload diff 工具。
