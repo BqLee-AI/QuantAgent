@@ -677,6 +677,20 @@ class WalletServiceTestCase(unittest.TestCase):
                 )
             )
 
+    def test_blank_fx_snapshot_id_falls_back_to_generated_value(self) -> None:
+        snapshot = self.service.record_fx_rate_snapshot(
+            RecordFxRateSnapshotCommand(
+                snapshot_id="   ",
+                from_currency="HKD",
+                to_currency="USD",
+                rate="0.12820513",
+                source="manual:test",
+                captured_at=datetime(2026, 5, 23, 13, 0, tzinfo=timezone.utc),
+            )
+        )
+
+        self.assertTrue(snapshot.snapshot_id.startswith("fx_"))
+
     def test_naive_timestamp_is_rejected_with_clear_error(self) -> None:
         account = self.service.create_trading_account(
             CreateTradingAccountCommand(

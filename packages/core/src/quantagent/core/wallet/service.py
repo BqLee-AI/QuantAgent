@@ -322,7 +322,7 @@ class WalletService:
             with self._session_factory.begin() as session:
                 repository = WalletRepository(session)
                 snapshot = FxRateSnapshotModel(
-                    id=command.snapshot_id or self._new_id("fx"),
+                    id=self._normalize_optional_identifier(command.snapshot_id) or self._new_id("fx"),
                     from_currency=from_currency,
                     to_currency=to_currency,
                     rate=self._require_positive_decimal(command.rate, "FX rate"),
