@@ -16,6 +16,12 @@ QuantAgent SHALL 通过两个官方插件实现第一版 Discord 实验性收发
 - **AND** 接收能力不能通过 `notification` 插件顺带承担
 - **AND** 核心代码不能通过硬编码 class、import 列表或 if/else 注册 Discord 插件
 
+#### Scenario: 官方 Discord 插件提供最小目录结构样板
+- **WHEN** 开发者查看第一版 Discord 官方实验插件目录
+- **THEN** 每个插件目录至少包含 `plugin.yaml`、`config.schema.json`、`README.md` 和最小实现/测试文件
+- **AND** 发送插件落在 `plugins/notifications/` 下
+- **AND** 接收插件落在 `plugins/sources/` 下
+
 ### Requirement: Discord 发送插件提供最小可测发送路径
 
 Discord 发送插件 SHALL 提供最小可独立测试的消息发送能力，并限制在低风险通知边界内。

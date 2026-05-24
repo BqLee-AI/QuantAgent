@@ -14,3 +14,9 @@ Plugin Registry V1 SHALL 允许第一版官方 Discord 实验插件通过既有 
 - **WHEN** 开发者参考第一版 Discord 官方实验插件实现新的官方或私有插件
 - **THEN** 他们复用现有 Registry V1 协议入口
 - **AND** 不会因为 Discord 插件而引入第二套 manifest、第二套 schema 或绕过 Registry 的发现方式
+
+#### Scenario: 非法 Discord 插件只影响局部记录
+- **WHEN** 某个 Discord 官方实验插件的 manifest 或 config schema 非法
+- **THEN** Registry 只把对应插件标记为 `invalid` 并返回 `last_error`
+- **AND** 其他合法插件仍然可以被扫描和返回
+- **AND** Registry 不会因为单个 Discord 插件非法而整体失败
