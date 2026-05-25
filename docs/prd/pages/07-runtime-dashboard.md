@@ -62,6 +62,9 @@ Runtime 是解释和排障页，用于查看 AgentRun、ToolInvocation、schedul
 - event_id。
 - run_type。
 - status。
+- provider_policy。
+- model_used。
+- token_usage / cost_estimate 摘要。
 - started_at / ended_at。
 - duration。
 - error summary。
@@ -90,6 +93,7 @@ Runtime 是解释和排障页，用于查看 AgentRun、ToolInvocation、schedul
 - status。
 - error_code。
 - error_message 摘要。
+- provider / provider_policy，如果错误来自模型供应商。
 - trace_id。
 - 关联事件或插件。
 
@@ -106,6 +110,7 @@ Runtime 是解释和排障页，用于查看 AgentRun、ToolInvocation、schedul
 
 - 不展示完整模型推理链。
 - 不展示完整 prompt。
+- 模型、token 和成本只展示结构化摘要。
 - Tool 输入输出默认展示脱敏摘要。
 - 展开更详细参数需要 capability，后端仍必须校验。
 

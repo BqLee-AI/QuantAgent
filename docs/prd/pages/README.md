@@ -31,6 +31,7 @@
 
 - [10 Registry / Plugins](10-plugins-index.md)
 - [11 Plugin Detail](11-plugin-detail.md)
+- [12 Model Providers / LLM Policies](12-models.md)
 - [15 Settings](15-settings.md)
 
 ## 不是 V1 顶层页面的对象

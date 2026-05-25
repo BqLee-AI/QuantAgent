@@ -6,7 +6,7 @@
 **状态**：PRD 收口稿
 **关联 issue**：#127、#129、#130、#131、#132
 **适用范围**：V1 Web 工作台的信息架构、页面优先级、主链路、治理对象层级和后续页面 PRD 的阅读入口
-**依据**：`docs/prd/01-07`、`docs/design/02-core-architecture-and-runtime.md`、`docs/design/03-plugin-system-and-registry.md`、`docs/design/07-industry-package-design.md`、`docs/design/08-api-and-websocket-design.md`、`docs/design/09-frontend-architecture-design.md`
+**依据**：`docs/prd/01-07`、`docs/design/02-core-architecture-and-runtime.md`、`docs/design/03-plugin-system-and-registry.md`、`docs/design/05-agent-workflow-design.md`、`docs/design/07-industry-package-design.md`、`docs/design/08-api-and-websocket-design.md`、`docs/design/09-frontend-architecture-design.md`
 
 ## 顶层结论
 
@@ -49,6 +49,7 @@ Dashboard
 | P1 | Tool Invocation 详情 | `/runtime/tools/:invocationId` | ToolInvocation | 展示工具调用摘要、权限、错误和 trace |
 | P2 | Registry / Plugins | `/plugins` | PluginRecord | 插件治理统一入口，按类型分视图 |
 | P2 | Plugin Detail | `/plugins/:pluginId` | PluginRecord | 配置、依赖、能力、健康、审计 |
+| P2 | Model Providers / LLM Policies | `/models` | ProviderManager / ProviderPolicy | 管理模型供应商、策略、fallback、预算和用量 |
 | P2 | Settings | `/settings` | UserPreference / Session | 只承接会话和个人偏好，不承接核心风控规则 |
 
 ## 不作为顶层页面的对象
@@ -90,8 +91,19 @@ Runtime
   -> AgentRun
       -> used Skills
       -> ToolInvocations
+      -> provider_policy / model_used
   -> ToolInvocation
   -> RuntimeError
+
+Model Providers / LLM Policies
+  -> Providers
+  -> Policies
+      -> fast
+      -> balanced
+      -> reasoning
+      -> local
+  -> Usage & Cost
+  -> Failures
 ```
 
 这个层级的目的：
@@ -189,6 +201,22 @@ Runtime
 - 不做插件市场。
 - 不允许插件注入自定义前端组件。
 
+### Model Providers / LLM Policies
+
+必须做：
+
+- 展示模型供应商状态、secret reference、限流和最近失败。
+- 管理 `fast`、`balanced`、`reasoning`、`local` 等 ProviderPolicy。
+- 展示默认模型、fallback 模型、超时、token、temperature、预算和允许供应商。
+- 从 AgentRun 回溯 `provider_policy`、`model_used`、token usage 和 cost estimate。
+
+不做：
+
+- 不承接 prompt 编辑。
+- 不做生产级模型评估平台。
+- 不展示 API key 原文。
+- 不让 AgentDefinition 直接绑定具体 secret 或绕过 provider policy。
+
 ### Settings
 
 必须做：
@@ -198,7 +226,7 @@ Runtime
 
 不做：
 
-- 不承接插件配置、secret 管理、执行器权限和生产风控规则。
+- 不承接插件配置、secret 管理、LLM provider key、模型策略、执行器权限和生产风控规则。
 - 不把高风险系统开关做成普通偏好项。
 
 ## 必须对齐的系统约束
@@ -208,6 +236,7 @@ Runtime
 - 高风险动作必须经过 Decision / Policy Gate。
 - 初版 executor 只允许 disabled / dry_run / mock。
 - 插件配置采用 schema-driven form，敏感字段只展示 masked value 或 secret reference。
+- 模型供应商配置通过 ProviderManager / ProviderPolicy 治理，AgentDefinition 只引用 provider policy，不直接绑定 API key。
 - Agent run 和 tool invocation 只展示结构化摘要，不展示完整模型推理链。
 - 审批、插件生命周期、配置变更、高风险工具调用和运行时错误都必须可审计。
 
@@ -238,3 +267,4 @@ web-trader-workbench-v1
 - EventAuditTimeline 节点和 diff 摘要 spec。
 - Scoring 展示语义 spec。
 - Registry / Plugin 治理入口的非顶层 Skill / Tool / Industry 约束。
+- Model Providers / LLM Policies 治理入口、ProviderPolicy 字段和敏感信息边界。
