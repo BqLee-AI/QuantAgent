@@ -20,6 +20,7 @@
 | 08 | [API 与实时通道](design/08-api-and-websocket-design.md) | FastAPI、REST、WebSocket、插件配置与审批接口 |
 | 09 | [前端架构](design/09-frontend-architecture-design.md) | React + Vite、路由、状态、审批和运行时面板 |
 | 10 | [部署与 Runtime](design/10-deployment-and-runtime-design.md) | Docker、runtime 目录、迁移、健康检查、Redis 演进 |
+| 11 | [Crawler Source Plugin 边界](design/11-crawler-source-plugin-boundary.md) | crawler 类 Source Plugin 的配置、运行时和 reader fallback 职责边界 |
 
 ## PRD 索引
 
