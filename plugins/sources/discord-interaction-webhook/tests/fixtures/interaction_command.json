@@ -1,0 +1,23 @@
+{
+  "id": "1234567890",
+  "application_id": "app-1",
+  "type": 2,
+  "token": "test-token",
+  "guild_id": "guild-1",
+  "channel_id": "channel-1",
+  "member": {
+    "user": {
+      "id": "user-1"
+    }
+  },
+  "data": {
+    "name": "notify",
+    "options": [
+      {
+        "name": "text",
+        "type": 3,
+        "value": "hello from discord"
+      }
+    ]
+  }
+}

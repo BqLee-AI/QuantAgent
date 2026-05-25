@@ -1,0 +1,9 @@
+id: quantagent.official.source.discord_interaction_webhook
+name: Discord Interaction Webhook Source
+type: source
+version: 0.1.0
+entrypoint: discord_interaction_webhook_plugin:plugin
+description: Experimental official Discord interaction webhook source plugin.
+capabilities:
+  - source.receive
+config_schema: config.schema.json

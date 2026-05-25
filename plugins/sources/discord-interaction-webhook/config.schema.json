@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Discord Interaction Webhook Source Plugin Config",
+  "type": "object",
+  "properties": {
+    "signing_secret_ref": {
+      "type": "string",
+      "title": "Signing Secret Reference",
+      "description": "Secret reference used by the experimental HMAC verification path.",
+      "minLength": 1,
+      "x-quantagent-secret-ref": true
+    },
+    "timestamp_tolerance_seconds": {
+      "type": "integer",
+      "title": "Timestamp Tolerance Seconds",
+      "description": "Allowed skew between request timestamp and verifier clock.",
+      "minimum": 0,
+      "default": 300
+    },
+    "guild_allowlist": {
+      "type": "array",
+      "title": "Guild Allowlist",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "default": []
+    },
+    "channel_allowlist": {
+      "type": "array",
+      "title": "Channel Allowlist",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true,
+      "default": []
+    }
+  },
+  "required": [
+    "signing_secret_ref"
+  ],
+  "additionalProperties": false
+}
