@@ -97,7 +97,7 @@ B0 OpenSpec 审核门禁
   - 检查：维护者是否明确认可 change artifacts；若未认可，不进入实现。
   - 失败处理：只更新 OpenSpec artifacts，重新运行 V1。
 
-- [ ] R2. 实现 PR 收口 gate
+- [x] R2. 实现 PR 收口 gate
   - 条件：M1、V2 完成。
   - 检查：PR 范围只服务 issue #134 / `add-portfolio-wallet-api-v1`；说明依据、改动摘要、验证结果、未验证风险和明确非目标。
   - 失败处理：拆出越界能力或补充新 issue / OpenSpec change。
