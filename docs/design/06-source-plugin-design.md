@@ -13,6 +13,7 @@
 - Source Plugin 产出的事件必须先进入 Event Bus，再由 Router Agent 和 Industry Plugin 处理。
 - Source Plugin 可以暴露查询类工具，但工具必须注册到 ToolRegistry，并接受权限、限流和审计管理。
 - 不同 source 的输出必须归一到统一 RawEvent / Event 输入结构。
+- 插件开发者只声明插件能力和配置 schema；配置校验、保存、启停、调度和审计由平台负责。
 - 配置支持“插件默认配置 + 行业包引用覆盖”，方便不同行业包复用同一个 source 插件。
 - Pull 类 Source Plugin 不允许自己随意启动轮询循环，必须由统一 Scheduler 管理调度。
 - 需要读取链接原文时，初版只通过 Readability Link Reader 和 Jina Link Reader 两类插件/工具实现。
@@ -31,6 +32,15 @@ Source Plugin
 ### 产出事件
 
 Source Plugin 通过拉取、接收或订阅外部信息，产出 `RawEvent`，再由核心系统标准化为 `Event`。
+
+插件只负责产出标准 DTO 或 `RawEventDraft` 兼容结构，不负责：
+
+- `RawEvent` 入库
+- 去重
+- `SourceBinding`
+- Event Bus 发布
+- 权限控制
+- 生命周期托管
 
 ### 暴露工具
 
@@ -147,6 +157,19 @@ source default config
   = effective source config
 ```
 
+插件开发者只声明自己需要的配置字段，例如：
+
+- `url`
+- `frequency`
+- `headers`
+- `filters`
+- `keywords`
+- `symbols`
+- `accounts`
+- `time_window`
+
+用户通过控制台或 API 填写配置；平台负责 schema 校验、保存和绑定，并将校验后的 DTO / `effective_config` 传给插件。
+
 ### Source 默认配置
 
 由 Source Plugin 提供，描述插件的默认行为，例如默认超时、默认请求头、默认抓取间隔上限。
@@ -167,6 +190,7 @@ source default config
 - 行业包可以覆盖关键词、账号、频率、过滤规则。
 - 支持同一个 Source Plugin 被多个行业包复用。
 - 统一 Scheduler 可以按 SourceBinding 的 effective config 执行调度。
+- 平台统一负责配置真相、调度和运行时编排，避免插件自行扩展为小型 runtime。
 
 ## 去重策略
 
@@ -246,6 +270,8 @@ quantagent.official.source.jina.read_url
 - rate limit。
 - risk level。
 - 是否允许外部请求。
+
+对于新闻、财报、搜索等 crawler 类插件，默认考虑 `Readability` 和 `Jina Reader` 两类读取路径作为兜底或降级方案；是否以内置策略还是复用官方 reader 插件，应在具体 issue / change 中明确。
 
 ## Runtime Policy
 
