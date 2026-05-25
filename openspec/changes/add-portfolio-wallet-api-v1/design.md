@@ -4,7 +4,7 @@ issue #134 承接已归档的 `add-portfolio-wallet-core-v1` 后续切片。当�
 
 `apps/api` 的本地约束要求 route 保持薄层：API 只处理 HTTP 参数、DTO、状态码、响应 envelope、异常映射和依赖注入，核心余额、持仓、账本、入账和风险计算必须留在 `packages/core`。现有 API v1 route 通过 `STANDARD_API_V1_ROUTER_REGISTRATIONS` 统一声明 public/protected 边界；业务 route 默认 protected。
 
-本 change 只定义 API 文档和后续实现口径。OpenSpec-only PR 通过前，不修改 runtime 代码、不新增依赖、不混入实现。
+本 change 先定义 API 文档与实现口径，再在 OpenSpec 审核通过后落地 `apps/api` runtime、测试和 README。当前分支包含这两阶段内容；review 时应同时检查文档契约与对应实现是否一致。
 
 ## Goals / Non-Goals
 
@@ -128,4 +128,4 @@ Wallet API SHALL 明确表达它查询的是 Portfolio Wallet Core V1 的 paper 
 - [Risk] 未实现分页会让 ledger/order/execution 列表在长期数据下变大。 -> Mitigation: 本轮只允许最小 `limit`；完整分页、游标和排序作为后续 API 扩展。
 - [Risk] account_id 可能包含完整账户号语义。 -> Mitigation: V1 core 账户是 paper account id；API 测试和 DTO 审查必须证明不返回真实 broker account、secret 或 runtime path。若后续引入真实账户，需新 change 定义脱敏 ID。
 - [Risk] API fields 与 core snapshot fields 可能漂移。 -> Mitigation: DTO 映射测试以 `WalletService` snapshot 语义为输入，OpenAPI contract tests 固定公开字段。
-- [Risk] 文档被误读为可以继续实现代码。 -> Mitigation: tasks 将 OpenSpec-only PR 审核列为硬阻塞；审核通过前不修改 runtime 代码。
+- [Risk] reviewer 可能把当前分支误读为仍是 OpenSpec-only。 -> Mitigation: proposal、tasks 和 PR 描述显式说明本分支已包含通过 OpenSpec 审核后的 API 实现与验证。

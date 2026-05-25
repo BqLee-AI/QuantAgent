@@ -22,12 +22,12 @@ B0 OpenSpec 审核门禁
 
 ## Blocking Serial Path
 
-- [x] B0. OpenSpec-only 审核门禁
+- [x] B0. OpenSpec 审核门禁
   - 输入：issue #134、`proposal.md`、`design.md`、`specs/portfolio-wallet-api-v1/spec.md`、本 `tasks.md`。
-  - 输出：OpenSpec-only PR，范围只包含 `openspec/changes/add-portfolio-wallet-api-v1/**`；PR 说明写清本轮只定义 API 只读薄封装，不修改 runtime 代码。
+  - 输出：OpenSpec 审核结论与可实现的 change artifacts；当前分支已在审核通过后追加 `apps/api` 实现与测试。
   - 写入边界：`openspec/changes/add-portfolio-wallet-api-v1/**`。
   - 依赖：无。
-  - 并行性：否。审核通过前不得实现代码。
+  - 并行性：否。审核通过前不得实现代码；通过后方可追加 runtime 改动。
   - 验证：`openspec validate add-portfolio-wallet-api-v1 --type change --strict --json`。
 
 - [x] B1. 冻结 WalletService 注入与错误映射边界
@@ -94,7 +94,7 @@ B0 OpenSpec 审核门禁
 
 - [x] R1. OpenSpec review gate
   - 条件：B0 完成。
-  - 检查：维护者是否明确认可 OpenSpec-only PR；若未认可，不进入实现。
+  - 检查：维护者是否明确认可 change artifacts；若未认可，不进入实现。
   - 失败处理：只更新 OpenSpec artifacts，重新运行 V1。
 
 - [ ] R2. 实现 PR 收口 gate
