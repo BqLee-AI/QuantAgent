@@ -1,7 +1,7 @@
 ## Status
 
-- 当前阶段：实现已完成，待 PR 收口。
-- 实现状态：B1-B3、P1-P3、M1、V2 已完成；`openspec` CLI 当前环境不可用，V1 未执行。
+- 当前阶段：实现与校验已完成，待 PR 收口。
+- 实现状态：B1-B3、P1-P3、M1、V1、V2 已完成；`openspec` 校验需在仓库根目录执行本机 `openspec` CLI。
 - 当前 change：`add-portfolio-wallet-api-v1`。
 - 关联 issue：#134。
 
@@ -104,7 +104,7 @@ B0 OpenSpec 审核门禁
 
 ## Validation Nodes
 
-- [ ] V1. OpenSpec validation
+- [x] V1. OpenSpec validation
   - 触发点：OpenSpec artifacts 创建或修改后。
   - 命令：`openspec validate add-portfolio-wallet-api-v1 --type change --strict --json`。
 
