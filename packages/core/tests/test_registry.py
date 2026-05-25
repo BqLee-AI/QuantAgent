@@ -259,6 +259,31 @@ class PluginRegistryScannerTestCase(unittest.TestCase):
         with self.assertRaises(TypeError):
             manifest.dependencies["new"] = "value"  # type: ignore[index]
 
+    def test_scans_official_discord_experimental_plugins_from_repo(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        registry = PluginRegistry(
+            RegistryScanner(
+                official_root=repo_root / "plugins",
+                runtime_root=repo_root / "runtime" / "plugins",
+            )
+        )
+
+        records = registry.list_plugins()
+        by_id = {record.id: record for record in records}
+
+        self.assertIn("quantagent.official.notification.discord_webhook", by_id)
+        self.assertIn("quantagent.official.source.discord_interaction_webhook", by_id)
+        self.assertEqual(by_id["quantagent.official.notification.discord_webhook"].status, PluginStatus.VALID)
+        self.assertEqual(by_id["quantagent.official.source.discord_interaction_webhook"].status, PluginStatus.VALID)
+        self.assertEqual(
+            by_id["quantagent.official.notification.discord_webhook"].config_schema_path.name,
+            "config.schema.json",
+        )
+        self.assertEqual(
+            by_id["quantagent.official.source.discord_interaction_webhook"].config_schema_path.name,
+            "config.schema.json",
+        )
+
     def _write_plugin(
         self,
         plugin_dir: Path,
