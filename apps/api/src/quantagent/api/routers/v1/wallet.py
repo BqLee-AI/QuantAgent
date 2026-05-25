@@ -30,13 +30,21 @@ _PAPER_ONLY_ERROR_MESSAGE = "Portfolio Wallet Core V1 only supports paper accoun
 _T = TypeVar("_T")
 
 
-@router.get("/accounts/{account_id}", response_model=ApiResponse[WalletAccountResponse])
+@router.get(
+    "/accounts/{account_id}",
+    response_model=ApiResponse[WalletAccountResponse],
+    tags=["wallet"],
+)
 def get_wallet_account(account_id: str, request: Request) -> ApiResponse[WalletAccountResponse]:
     account = _require_wallet_account(_get_wallet_service(request), account_id)
     return ApiResponse.success(WalletAccountResponse.from_snapshot(account))
 
 
-@router.get("/accounts/{account_id}/cash-balances", response_model=ApiResponse[list[WalletCashBalanceResponse]])
+@router.get(
+    "/accounts/{account_id}/cash-balances",
+    response_model=ApiResponse[list[WalletCashBalanceResponse]],
+    tags=["wallet"],
+)
 def list_wallet_cash_balances(account_id: str, request: Request) -> ApiResponse[list[WalletCashBalanceResponse]]:
     service = _get_wallet_service(request)
     _require_wallet_account(service, account_id)
@@ -44,7 +52,11 @@ def list_wallet_cash_balances(account_id: str, request: Request) -> ApiResponse[
     return ApiResponse.success([WalletCashBalanceResponse.from_snapshot(item) for item in balances])
 
 
-@router.get("/accounts/{account_id}/positions", response_model=ApiResponse[list[WalletPositionResponse]])
+@router.get(
+    "/accounts/{account_id}/positions",
+    response_model=ApiResponse[list[WalletPositionResponse]],
+    tags=["wallet"],
+)
 def list_wallet_positions(account_id: str, request: Request) -> ApiResponse[list[WalletPositionResponse]]:
     service = _get_wallet_service(request)
     _require_wallet_account(service, account_id)
@@ -52,7 +64,11 @@ def list_wallet_positions(account_id: str, request: Request) -> ApiResponse[list
     return ApiResponse.success([WalletPositionResponse.from_snapshot(item) for item in positions])
 
 
-@router.get("/accounts/{account_id}/ledger-entries", response_model=ApiResponse[list[WalletLedgerEntryResponse]])
+@router.get(
+    "/accounts/{account_id}/ledger-entries",
+    response_model=ApiResponse[list[WalletLedgerEntryResponse]],
+    tags=["wallet"],
+)
 def list_wallet_ledger_entries(
     account_id: str,
     request: Request,
@@ -64,7 +80,11 @@ def list_wallet_ledger_entries(
     return ApiResponse.success([WalletLedgerEntryResponse.from_snapshot(item) for item in entries])
 
 
-@router.get("/accounts/{account_id}/paper-orders", response_model=ApiResponse[list[WalletPaperOrderResponse]])
+@router.get(
+    "/accounts/{account_id}/paper-orders",
+    response_model=ApiResponse[list[WalletPaperOrderResponse]],
+    tags=["wallet"],
+)
 def list_wallet_paper_orders(account_id: str, request: Request) -> ApiResponse[list[WalletPaperOrderResponse]]:
     service = _get_wallet_service(request)
     _require_wallet_account(service, account_id)
@@ -75,6 +95,7 @@ def list_wallet_paper_orders(account_id: str, request: Request) -> ApiResponse[l
 @router.get(
     "/accounts/{account_id}/paper-executions",
     response_model=ApiResponse[list[WalletPaperExecutionResponse]],
+    tags=["wallet"],
 )
 def list_wallet_paper_executions(account_id: str, request: Request) -> ApiResponse[list[WalletPaperExecutionResponse]]:
     service = _get_wallet_service(request)
