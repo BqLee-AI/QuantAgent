@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Discord Webhook Notification Plugin Config",
+  "type": "object",
+  "properties": {
+    "webhook_secret_ref": {
+      "type": "string",
+      "title": "Webhook Secret Reference",
+      "description": "Secret reference pointing to the full Discord webhook URL.",
+      "minLength": 1,
+      "x-quantagent-secret-ref": true
+    },
+    "timeout_seconds": {
+      "type": "number",
+      "title": "Request Timeout Seconds",
+      "description": "Optional HTTP timeout used by standalone tests and runtime callers.",
+      "minimum": 0.1,
+      "default": 5
+    }
+  },
+  "required": [
+    "webhook_secret_ref"
+  ],
+  "additionalProperties": false
+}
