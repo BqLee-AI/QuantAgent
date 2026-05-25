@@ -4,14 +4,17 @@ import unittest
 from datetime import datetime, timezone
 from importlib import util
 from pathlib import Path
+from unittest.mock import patch
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.engine import Engine
 
 from quantagent.core.config.settings import Settings
 from quantagent.core.db.base import Base
 from quantagent.core.db.models.sources import RawEvent, SourceFetchRun, SourceFetchRunStatus
 from quantagent.core.db.repositories.raw_events import RawEventRepository
+from quantagent.core.events.dedupe import build_dedupe_identity
 from quantagent.core.db.session import create_session_factory, create_sync_engine, require_database_url
 from quantagent.core.events.dto import RawEventDraft
 from quantagent.core.plugins.manifest import discover_plugin_manifests, load_plugin_manifest
@@ -86,6 +89,34 @@ class SourceRuntimeTestCase(unittest.TestCase):
             self.assertTrue(second.is_duplicate)
             self.assertEqual(session.scalar(select(RawEvent).where(RawEvent.external_id == "rss-item-1")).title, "Oil supply update")
 
+    def test_raw_event_repository_does_not_swallow_non_duplicate_integrity_error(self) -> None:
+        with self.session_factory() as session:
+            repository = RawEventRepository(session)
+            draft = RawEventDraft(
+                source_plugin_id="quantagent.official.source.rss",
+                source_type="rss",
+                title="Integrity conflict probe",
+            )
+
+            with patch.object(session, "flush", side_effect=IntegrityError("stmt", "params", Exception("boom"))):
+                with self.assertRaises(IntegrityError):
+                    repository.store_if_new(draft)
+
+    def test_dedupe_identity_uses_plugin_namespace_and_hashed_url(self) -> None:
+        draft = RawEventDraft(
+            source_plugin_id="quantagent.official.source.rss",
+            source_type="rss",
+            title="Oil supply update",
+            url="https://example.test/path?q=very-long",
+            content="Inventory dropped again.",
+        )
+
+        identity = build_dedupe_identity(draft)
+
+        self.assertTrue(identity.key.startswith("quantagent.official.source.rss:url_content:"))
+        self.assertNotIn("https://example.test/path", identity.key)
+        self.assertEqual(identity.reason, "source_plugin_id+canonical_url+content_hash")
+
     def test_source_fetch_service_records_success_and_duplicates(self) -> None:
         with self.session_factory() as session:
             plugin = FakeSourcePlugin(
@@ -136,10 +167,76 @@ class SourceRuntimeTestCase(unittest.TestCase):
             result = SourceFetchService(session).trigger_fetch(plugin=plugin, binding=binding)
 
             self.assertEqual(result.status, SourceFetchRunStatus.failed.value)
-            self.assertIn("RuntimeError", result.error_summary)
+            self.assertEqual(result.error_summary, "RuntimeError: fetch failed")
             run = session.scalar(select(SourceFetchRun).where(SourceFetchRun.source_binding_id == "binding-2"))
             self.assertEqual(run.status, SourceFetchRunStatus.failed)
-            self.assertIn("fetch failed", run.error_summary)
+            self.assertEqual(run.error_summary, "RuntimeError: fetch failed")
+
+    def test_source_fetch_service_rejects_plugin_binding_id_mismatch(self) -> None:
+        with self.session_factory() as session:
+            plugin = FakeSourcePlugin([])
+            plugin.id = "quantagent.official.source.other"
+            binding = SourceBindingConfig(
+                id="binding-3",
+                source_plugin_id="quantagent.official.source.rss",
+                owner_type="industry",
+                owner_id="oil",
+                effective_config={"feeds": ["https://example.test/rss.xml"]},
+            )
+
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                SourceFetchService(session).trigger_fetch(plugin=plugin, binding=binding)
+
+    def test_source_fetch_service_persists_fetched_count_on_partial_failure(self) -> None:
+        with self.session_factory() as session:
+            plugin = PartialFailingSourcePlugin([])
+            binding = SourceBindingConfig(
+                id="binding-4",
+                source_plugin_id="quantagent.official.source.rss",
+                owner_type="industry",
+                owner_id="oil",
+                effective_config={"feeds": ["https://example.test/rss.xml"]},
+            )
+
+            result = SourceFetchService(session).trigger_fetch(plugin=plugin, binding=binding)
+
+            self.assertEqual(result.status, SourceFetchRunStatus.failed.value)
+            self.assertEqual(result.fetched_count, 1)
+            self.assertEqual(result.stored_count, 1)
+            self.assertEqual(result.duplicate_count, 0)
+            run = session.scalar(select(SourceFetchRun).where(SourceFetchRun.source_binding_id == "binding-4"))
+            self.assertEqual(run.fetched_count, 1)
+            self.assertEqual(run.stored_count, 1)
+
+    def test_source_fetch_service_stops_plugin_when_start_fails(self) -> None:
+        with self.session_factory() as session:
+            plugin = StartFailingSourcePlugin([])
+            binding = SourceBindingConfig(
+                id="binding-5",
+                source_plugin_id="quantagent.official.source.rss",
+                owner_type="industry",
+                owner_id="oil",
+                effective_config={"feeds": ["https://example.test/rss.xml"]},
+            )
+
+            result = SourceFetchService(session).trigger_fetch(plugin=plugin, binding=binding)
+
+            self.assertEqual(result.status, SourceFetchRunStatus.failed.value)
+            self.assertFalse(plugin.started)
+            self.assertTrue(plugin.stop_called)
+
+    def test_placeholder_plugin_manifest_and_minimum_files_are_present(self) -> None:
+        root = Path(__file__).resolve().parents[3]
+        plugin_root = root / "plugins" / "sources" / "placeholder-source"
+
+        manifest = load_plugin_manifest(plugin_root)
+
+        self.assertEqual(manifest.id, "quantagent.official.source.placeholder")
+        self.assertEqual(manifest.type, "source")
+        self.assertEqual(manifest.config_schema, "config.schema.json")
+        self.assertTrue((plugin_root / "README.md").is_file())
+        self.assertTrue((plugin_root / "src" / "placeholder_source.py").is_file())
+        self.assertTrue((plugin_root / "config.schema.json").is_file())
 
     def test_rss_plugin_manifest_is_discoverable(self) -> None:
         root = Path(__file__).resolve().parents[3]
@@ -152,9 +249,32 @@ class SourceRuntimeTestCase(unittest.TestCase):
 
         source_manifests = discover_plugin_manifests(root / "plugins" / "sources", plugin_type="source")
         self.assertIn("quantagent.official.source.rss", {item.id for item in source_manifests})
+        self.assertIn("quantagent.official.source.placeholder", {item.id for item in source_manifests})
+
+    def test_rss_plugin_minimum_files_are_present(self) -> None:
+        root = Path(__file__).resolve().parents[3]
+        plugin_root = root / "plugins" / "sources" / "rss-source"
+
+        self.assertTrue((plugin_root / "README.md").is_file())
+        self.assertTrue((plugin_root / "src" / "rss_source.py").is_file())
+        self.assertTrue((plugin_root / "config.schema.json").is_file())
+
+    def test_placeholder_plugin_supports_minimum_source_protocol(self) -> None:
+        module = _load_plugin_module("placeholder_source", "placeholder-source", "placeholder_source.py")
+        plugin = module.PlaceholderSourcePlugin()
+        context = RuntimeContext(plugin_id=plugin.id)
+
+        plugin.load(context)
+        plugin.start()
+
+        self.assertEqual(plugin.fetch(cursor=None, config={}), [])
+        self.assertTrue(plugin.health_check()["started"])
+
+        plugin.stop()
+        self.assertFalse(plugin.health_check()["started"])
 
     def test_rss_plugin_parses_rss_items_to_raw_events(self) -> None:
-        module = _load_rss_plugin_module()
+        module = _load_plugin_module("rss_source", "rss-source", "rss_source.py")
         body = b"""<?xml version="1.0"?>
 <rss version="2.0">
   <channel>
@@ -215,12 +335,51 @@ class FailingSourcePlugin(FakeSourcePlugin):
         raise RuntimeError("fetch failed")
 
 
-def _load_rss_plugin_module():
+class PartialFailingSourcePlugin(FakeSourcePlugin):
+    def fetch(self, cursor: str | None, config: dict[str, object]):
+        del cursor, config
+        return OneThenFailDrafts(
+            RawEventDraft(
+                source_plugin_id="quantagent.official.source.rss",
+                source_type="rss",
+                external_id="rss-item-2",
+                title="Stored before failure",
+            )
+        )
+
+
+class StartFailingSourcePlugin(FakeSourcePlugin):
+    def __init__(self, events: list[RawEventDraft]) -> None:
+        super().__init__(events)
+        self.stop_called = False
+
+    def start(self) -> None:
+        self.started = True
+        raise RuntimeError("start failed")
+
+    def stop(self) -> None:
+        self.stop_called = True
+        super().stop()
+
+
+class OneThenFailDrafts:
+    def __init__(self, draft: RawEventDraft) -> None:
+        self._draft = draft
+
+    def __len__(self) -> int:
+        return 1
+
+    def __iter__(self):
+        yield self._draft
+        raise RuntimeError("iteration failed")
+
+
+def _load_plugin_module(module_name: str, plugin_dir: str, module_file: str):
     root = Path(__file__).resolve().parents[3]
-    module_path = root / "plugins" / "sources" / "rss-source" / "src" / "rss_source.py"
-    spec = util.spec_from_file_location("rss_source", module_path)
+    module_path = root / "plugins" / "sources" / plugin_dir / "src" / module_file
+    spec = util.spec_from_file_location(module_name, module_path)
     if spec is None or spec.loader is None:
-        raise RuntimeError("Could not load RSS source plugin module.")
+        raise RuntimeError(f"Could not load plugin module: {module_name}.")
     module = util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
