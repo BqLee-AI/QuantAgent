@@ -111,6 +111,22 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 - Cookie Session 写操作通过 `X-CSRF-Token` header 做 CSRF 校验；login 豁免，refresh/logout 和受保护写操作不豁免。
 - `quantagent.api.routers.v1.register` 中的 `STANDARD_API_V1_ROUTER_REGISTRATIONS` 与 registration helper 是 public/protected 真源；README、OpenAPI 或 route-level ad hoc dependency 只用于说明与补充，不替代该边界。
 
+### Portfolio Wallet API V1
+
+- `GET /api/v1/wallet/accounts/{account_id}`
+- `GET /api/v1/wallet/accounts/{account_id}/cash-balances`
+- `GET /api/v1/wallet/accounts/{account_id}/positions`
+- `GET /api/v1/wallet/accounts/{account_id}/ledger-entries?limit=<positive-int>`
+- `GET /api/v1/wallet/accounts/{account_id}/paper-orders`
+- `GET /api/v1/wallet/accounts/{account_id}/paper-executions`
+
+以上 route 都是 `protected`、`read-only`、`paper-only` 的 API 薄封装。
+
+- 只负责鉴权、DTO 映射、统一 envelope、错误映射和调用 `WalletService`
+- 不支持账户创建、现金调整、paper order 写入、paper execution 写入
+- 不暴露 `WalletFacts` 前端查询 endpoint
+- 不暗示 live broker sync、真实下单、撤单、改单、换汇或资金划转能力
+
 ### Auth 环境变量
 
 - `AUTH_ENABLED`：是否启用鉴权，默认 `true`。

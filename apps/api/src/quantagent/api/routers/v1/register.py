@@ -13,6 +13,7 @@ from quantagent.api.routers.v1.auth import public_router as auth_public_router
 from quantagent.api.routers.v1.health import router as health_router
 from quantagent.api.routers.v1.plugins import router as plugins_router
 from quantagent.api.routers.v1.version import router as version_router
+from quantagent.api.routers.v1.wallet import router as wallet_router
 
 
 ApiV1RouteAccess = Literal["public", "protected"]
@@ -31,6 +32,7 @@ STANDARD_API_V1_ROUTER_REGISTRATIONS = (
     ApiV1RouterRegistration(router=auth_public_router, access="public"),
     ApiV1RouterRegistration(router=auth_protected_router, access="protected"),
     ApiV1RouterRegistration(router=plugins_router, access="protected"),
+    ApiV1RouterRegistration(router=wallet_router, access="protected"),
 )
 
 

@@ -1,7 +1,7 @@
 ## Status
 
-- 当前阶段：OpenSpec 文档审核与加固。
-- 实现状态：未开始；OpenSpec-only PR 获得维护者明确认可前，不允许修改 API/runtime 代码。
+- 当前阶段：实现已完成，待 PR 收口。
+- 实现状态：B1-B3、P1-P3、M1、V2 已完成；`openspec` CLI 当前环境不可用，V1 未执行。
 - 当前 change：`add-portfolio-wallet-api-v1`。
 - 关联 issue：#134。
 
@@ -22,7 +22,7 @@ B0 OpenSpec 审核门禁
 
 ## Blocking Serial Path
 
-- [ ] B0. OpenSpec-only 审核门禁
+- [x] B0. OpenSpec-only 审核门禁
   - 输入：issue #134、`proposal.md`、`design.md`、`specs/portfolio-wallet-api-v1/spec.md`、本 `tasks.md`。
   - 输出：OpenSpec-only PR，范围只包含 `openspec/changes/add-portfolio-wallet-api-v1/**`；PR 说明写清本轮只定义 API 只读薄封装，不修改 runtime 代码。
   - 写入边界：`openspec/changes/add-portfolio-wallet-api-v1/**`。
@@ -30,7 +30,7 @@ B0 OpenSpec 审核门禁
   - 并行性：否。审核通过前不得实现代码。
   - 验证：`openspec validate add-portfolio-wallet-api-v1 --type change --strict --json`。
 
-- [ ] B1. 冻结 WalletService 注入与错误映射边界
+- [x] B1. 冻结 WalletService 注入与错误映射边界
   - 输入：B0 审核结论、`design.md` 的 session factory 和错误映射规则、现有 `quantagent.api.db`、`quantagent.api.http.errors`、`WalletService` 构造签名。
   - 输出：API 私有 wallet service provider / helper；unknown account、非法 `limit`、paper-only 错误映射为现有 envelope；数据库未配置返回 `ServiceUnavailableError`。
   - 写入边界：`apps/api/src/quantagent/api/**` 中 wallet provider/helper 或 router 私有 helper；不得修改 `packages/core` 领域语义。
@@ -38,7 +38,7 @@ B0 OpenSpec 审核门禁
   - 并行性：否。后续 DTO/router/tests 都依赖这一注入与错误口径。
   - 验证：最小单元或 route 测试能触发 service unavailable、unknown account 和非法 `limit`。
 
-- [ ] B2. 冻结 wallet API DTO 与 snapshot 映射
+- [x] B2. 冻结 wallet API DTO 与 snapshot 映射
   - 输入：B1 provider 口径、`design.md` DTO 字段表、`WalletService` snapshot dataclass。
   - 输出：`quantagent.api.schemas.wallet` 中的 `WalletAccountResponse`、`WalletCashBalanceResponse`、`WalletPositionResponse`、`WalletLedgerEntryResponse`、`WalletPaperOrderResponse`、`WalletPaperExecutionResponse`；snapshot-to-DTO 映射函数。
   - 写入边界：`apps/api/src/quantagent/api/schemas/**`，必要时 router 私有 mapper；不返回 ORM model 或 core dataclass 作为 response model。
@@ -46,7 +46,7 @@ B0 OpenSpec 审核门禁
   - 并行性：否。公开 response model 是 router 和 OpenAPI 测试的基础。
   - 验证：DTO/mapping 测试覆盖 Decimal、datetime、enum、可选字段和 metadata。
 
-- [ ] B3. 实现 protected wallet router 和固定 endpoint
+- [x] B3. 实现 protected wallet router 和固定 endpoint
   - 输入：B1 错误映射、B2 DTO/mapping、`STANDARD_API_V1_ROUTER_REGISTRATIONS` protected boundary。
   - 输出：`/api/v1/wallet/accounts/{account_id}` 及其 `cash-balances`、`positions`、`ledger-entries`、`paper-orders`、`paper-executions` 只读 routes；所有 list route 先 `get_trading_account(account_id)`，未知账户不返回空成功列表。
   - 写入边界：`apps/api/src/quantagent/api/routers/v1/**`、必要的 `__init__` / register 更新；不得在 `main.py` 零散 include。
@@ -56,7 +56,7 @@ B0 OpenSpec 审核门禁
 
 ## Parallel Work After B3
 
-- [ ] P1. 补 runtime behavior tests
+- [x] P1. 补 runtime behavior tests
   - 输入：B3 endpoints、B1 错误映射、B2 DTO。
   - 输出：匿名访问 401、有效 actor 可访问、unknown account、非法 `limit`、service unavailable、unknown account list 不返回空列表的测试。
   - 写入边界：`apps/api/src/tests/**`。
@@ -64,7 +64,7 @@ B0 OpenSpec 审核门禁
   - 并行性：可与 P2/P3 并行；写入同一测试文件时由集成 owner 合并，避免重复 fixture。
   - 验证：相关 unittest 子集或全量 API unittest。
 
-- [ ] P2. 补 OpenAPI 与 DTO contract tests
+- [x] P2. 补 OpenAPI 与 DTO contract tests
   - 输入：B2 DTO、B3 response_model。
   - 输出：OpenAPI 包含且只包含本 capability 定义的 wallet read routes；每个 route 有 wallet tags 和 `ApiResponse[T]` envelope；无 wallet 写操作或 `WalletFacts` endpoint；Decimal/datetime/enum schema 和 JSON 序列化被固定。
   - 写入边界：`apps/api/src/tests/**`。
@@ -72,7 +72,7 @@ B0 OpenSpec 审核门禁
   - 并行性：可与 P1/P3 并行；不改变 runtime。
   - 验证：OpenAPI 相关 unittest。
 
-- [ ] P3. 更新 API README
+- [x] P3. 更新 API README
   - 输入：B3 route 列表、Non-Goals、验证命令。
   - 输出：`apps/api/README.md` 记录 wallet API 是 protected、read-only、paper-only；列出只读 routes 和最小验证命令；明确不支持写操作、`WalletFacts` frontend endpoint 或 live trading。
   - 写入边界：`apps/api/README.md`。
@@ -82,7 +82,7 @@ B0 OpenSpec 审核门禁
 
 ## Merge / Integration Nodes
 
-- [ ] M1. 契约集成复核
+- [x] M1. 契约集成复核
   - 输入：B1-B3、P1-P3。
   - 输出：确认 proposal/design/spec/tasks、README、OpenAPI、route 行为和 tests 一致；确认没有新增写操作、facts endpoint、live broker 语义或 core 领域改动。
   - 写入边界：必要时只修正 `apps/api` wallet 相关实现、tests、README 或本 change artifacts。
@@ -92,7 +92,7 @@ B0 OpenSpec 审核门禁
 
 ## Review Checkpoints
 
-- [ ] R1. OpenSpec review gate
+- [x] R1. OpenSpec review gate
   - 条件：B0 完成。
   - 检查：维护者是否明确认可 OpenSpec-only PR；若未认可，不进入实现。
   - 失败处理：只更新 OpenSpec artifacts，重新运行 V1。
@@ -108,7 +108,7 @@ B0 OpenSpec 审核门禁
   - 触发点：OpenSpec artifacts 创建或修改后。
   - 命令：`openspec validate add-portfolio-wallet-api-v1 --type change --strict --json`。
 
-- [ ] V2. API unittest validation
+- [x] V2. API unittest validation
   - 触发点：M1 完成后。
   - 命令：`cd apps/api && uv run python -m unittest discover -s src/tests`。
   - 覆盖：protected boundary、DTO/envelope、错误映射、Decimal/datetime、OpenAPI、敏感信息不泄露。

@@ -4,7 +4,9 @@ import os
 import tempfile
 import unittest
 from datetime import UTC, datetime
+from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.routing import APIRoute
@@ -34,6 +36,21 @@ from quantagent.api.routers.v1.register import (
     register_api_v1_protected_router,
 )
 from quantagent.core.registry import PluginRegistry, RegistryScanner
+from quantagent.core.wallet import (
+    AccountMode,
+    CashBalanceSnapshot,
+    OrderSide,
+    OrderType,
+    PaperExecutionSnapshot,
+    PaperOrderSnapshot,
+    PaperOrderStatus,
+    PositionSide,
+    PositionSnapshot,
+    TradingAccountSnapshot,
+    WalletLedgerEntrySnapshot,
+    WalletLedgerEntryType,
+    WalletLedgerSourceType,
+)
 
 
 class FakeSession:
@@ -73,6 +90,67 @@ class FailingSessionFactory:
         raise self.error
 
 
+class FakeWalletService:
+    """用于 wallet route 测试的轻量 service 替身。"""
+
+    def __init__(
+        self,
+        *,
+        account: TradingAccountSnapshot | None = None,
+        cash_balances: list[CashBalanceSnapshot] | None = None,
+        positions: list[PositionSnapshot] | None = None,
+        ledger_entries: list[WalletLedgerEntrySnapshot] | None = None,
+        paper_orders: list[PaperOrderSnapshot] | None = None,
+        paper_executions: list[PaperExecutionSnapshot] | None = None,
+        errors: dict[str, Exception] | None = None,
+    ) -> None:
+        self.account = account
+        self.cash_balances = cash_balances or []
+        self.positions = positions or []
+        self.ledger_entries = ledger_entries or []
+        self.paper_orders = paper_orders or []
+        self.paper_executions = paper_executions or []
+        self.errors = errors or {}
+        self.calls: list[tuple[object, ...]] = []
+
+    def get_trading_account(self, account_id: str) -> TradingAccountSnapshot | None:
+        self.calls.append(("get_trading_account", account_id))
+        self._maybe_raise("get_trading_account")
+        if self.account is None or self.account.account_id != account_id:
+            return None
+        return self.account
+
+    def list_cash_balances(self, account_id: str) -> list[CashBalanceSnapshot]:
+        self.calls.append(("list_cash_balances", account_id))
+        self._maybe_raise("list_cash_balances")
+        return list(self.cash_balances)
+
+    def list_positions(self, account_id: str) -> list[PositionSnapshot]:
+        self.calls.append(("list_positions", account_id))
+        self._maybe_raise("list_positions")
+        return list(self.positions)
+
+    def list_ledger_entries(self, account_id: str, *, limit: int | None = None) -> list[WalletLedgerEntrySnapshot]:
+        self.calls.append(("list_ledger_entries", account_id, limit))
+        self._maybe_raise("list_ledger_entries")
+        return list(self.ledger_entries)
+
+    def list_paper_orders(self, account_id: str) -> list[PaperOrderSnapshot]:
+        self.calls.append(("list_paper_orders", account_id))
+        self._maybe_raise("list_paper_orders")
+        return list(self.paper_orders)
+
+    def list_paper_executions(self, account_id: str) -> list[PaperExecutionSnapshot]:
+        self.calls.append(("list_paper_executions", account_id))
+        self._maybe_raise("list_paper_executions")
+        return list(self.paper_executions)
+
+    def _maybe_raise(self, method_name: str) -> None:
+        error = self.errors.get(method_name)
+        if error is not None:
+            raise error
+
+
 class ApiAppTestCase(unittest.TestCase):
     """覆盖应用装配、错误响应和数据库依赖行为的集成测试。"""
 
@@ -102,6 +180,256 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(body["data"]["service"], "quantagent-api")
         self.assertEqual(body["data"]["api_version"], "v1")
         self.assertTrue(body["data"]["version"])
+
+    def test_wallet_routes_require_authenticated_session(self) -> None:
+        response = self.client.get("/api/v1/wallet/accounts/acct-paper-001")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+        self.assertEqual(response.headers["X-Request-ID"], body["error"]["request_id"])
+
+    def test_wallet_routes_return_envelope_and_serialized_snapshots(self) -> None:
+        self._login()
+        now = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+        wallet_service = FakeWalletService(
+            account=TradingAccountSnapshot(
+                account_id="acct-paper-001",
+                name="Primary Paper Wallet",
+                mode=AccountMode.PAPER,
+                base_currency="USD",
+                created_at=now,
+            ),
+            cash_balances=[
+                CashBalanceSnapshot(
+                    account_id="acct-paper-001",
+                    currency="USD",
+                    total=Decimal("1200.50"),
+                    available=Decimal("1180.25"),
+                    locked=Decimal("20.00"),
+                    unsettled=Decimal("0"),
+                    updated_at=now,
+                )
+            ],
+            positions=[
+                PositionSnapshot(
+                    account_id="acct-paper-001",
+                    instrument="AAPL",
+                    market="NASDAQ",
+                    side=PositionSide.LONG,
+                    quantity=Decimal("10"),
+                    sellable_quantity=Decimal("8"),
+                    average_cost=Decimal("180.12"),
+                    market_value=Decimal("1900.10"),
+                    unrealized_pnl=Decimal("98.90"),
+                    currency="USD",
+                    updated_at=now,
+                )
+            ],
+            ledger_entries=[
+                WalletLedgerEntrySnapshot(
+                    entry_id="led-001",
+                    account_id="acct-paper-001",
+                    entry_type=WalletLedgerEntryType.TRADE,
+                    currency="USD",
+                    amount=Decimal("-1801.20"),
+                    source_type=WalletLedgerSourceType.PAPER_EXECUTION,
+                    source_ref="idem-001",
+                    occurred_at=now,
+                    order_id="ord-001",
+                    execution_id="exe-001",
+                    metadata={"note": "paper-fill"},
+                    created_at=now,
+                )
+            ],
+            paper_orders=[
+                PaperOrderSnapshot(
+                    order_id="ord-001",
+                    account_id="acct-paper-001",
+                    client_order_id="client-001",
+                    instrument="AAPL",
+                    market="NASDAQ",
+                    side=OrderSide.BUY,
+                    order_type=OrderType.LIMIT,
+                    quantity=Decimal("10"),
+                    limit_price=Decimal("180.12"),
+                    currency="USD",
+                    status=PaperOrderStatus.FILLED,
+                    requested_at=now,
+                    completed_at=now,
+                )
+            ],
+            paper_executions=[
+                PaperExecutionSnapshot(
+                    execution_id="exe-001",
+                    account_id="acct-paper-001",
+                    order_id="ord-001",
+                    idempotency_key="idem-001",
+                    instrument="AAPL",
+                    market="NASDAQ",
+                    side=OrderSide.BUY,
+                    quantity=Decimal("10"),
+                    price=Decimal("180.12"),
+                    gross_amount=Decimal("1801.20"),
+                    currency="USD",
+                    fee_amount=Decimal("1.23"),
+                    fee_currency="USD",
+                    executed_at=now,
+                    created_at=now,
+                )
+            ],
+        )
+        self.client.app.state.wallet_service = wallet_service
+
+        account_response = self.client.get("/api/v1/wallet/accounts/acct-paper-001")
+        cash_response = self.client.get("/api/v1/wallet/accounts/acct-paper-001/cash-balances")
+        positions_response = self.client.get("/api/v1/wallet/accounts/acct-paper-001/positions")
+        ledger_response = self.client.get("/api/v1/wallet/accounts/acct-paper-001/ledger-entries", params={"limit": 5})
+        orders_response = self.client.get("/api/v1/wallet/accounts/acct-paper-001/paper-orders")
+        executions_response = self.client.get("/api/v1/wallet/accounts/acct-paper-001/paper-executions")
+
+        self.assertEqual(account_response.status_code, 200)
+        self.assertEqual(account_response.json()["data"]["mode"], "paper")
+        self.assertEqual(account_response.json()["data"]["created_at"], "2026-01-02T03:04:05Z")
+
+        self.assertEqual(cash_response.status_code, 200)
+        self.assertEqual(cash_response.json()["data"][0]["total"], "1200.50")
+        self.assertEqual(cash_response.json()["data"][0]["updated_at"], "2026-01-02T03:04:05Z")
+
+        self.assertEqual(positions_response.status_code, 200)
+        self.assertEqual(positions_response.json()["data"][0]["side"], "long")
+        self.assertEqual(positions_response.json()["data"][0]["average_cost"], "180.12")
+
+        self.assertEqual(ledger_response.status_code, 200)
+        self.assertEqual(ledger_response.json()["data"][0]["entry_type"], "trade")
+        self.assertEqual(ledger_response.json()["data"][0]["metadata"], {"note": "paper-fill"})
+        self.assertNotIn("cookie", str(ledger_response.json()).lower())
+        self.assertNotIn("postgresql+psycopg://", str(ledger_response.json()))
+
+        self.assertEqual(orders_response.status_code, 200)
+        self.assertEqual(orders_response.json()["data"][0]["status"], "filled")
+        self.assertEqual(orders_response.json()["data"][0]["order_type"], "limit")
+
+        self.assertEqual(executions_response.status_code, 200)
+        self.assertEqual(executions_response.json()["data"][0]["gross_amount"], "1801.20")
+        self.assertEqual(executions_response.json()["data"][0]["executed_at"], "2026-01-02T03:04:05Z")
+
+        self.assertEqual(
+            wallet_service.calls,
+            [
+                ("get_trading_account", "acct-paper-001"),
+                ("get_trading_account", "acct-paper-001"),
+                ("list_cash_balances", "acct-paper-001"),
+                ("get_trading_account", "acct-paper-001"),
+                ("list_positions", "acct-paper-001"),
+                ("get_trading_account", "acct-paper-001"),
+                ("list_ledger_entries", "acct-paper-001", 5),
+                ("get_trading_account", "acct-paper-001"),
+                ("list_paper_orders", "acct-paper-001"),
+                ("get_trading_account", "acct-paper-001"),
+                ("list_paper_executions", "acct-paper-001"),
+            ],
+        )
+
+    def test_wallet_unknown_account_returns_not_found_instead_of_empty_list(self) -> None:
+        self._login()
+        self.client.app.state.wallet_service = FakeWalletService()
+
+        response = self.client.get("/api/v1/wallet/accounts/acct-paper-missing/positions")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(body["msg"], "Wallet account not found")
+        self.assertEqual(body["error"]["details"], {"account_id": "acct-paper-missing"})
+
+    def test_wallet_returns_service_unavailable_when_database_not_configured(self) -> None:
+        self._login()
+        response = self.client.get("/api/v1/wallet/accounts/acct-paper-001")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(body["msg"], "Database not configured")
+        self.assertEqual(body["error"]["code"], "SERVICE_UNAVAILABLE")
+        self.assertNotIn("DATABASE_URL", str(body))
+
+    def test_wallet_query_database_failure_maps_to_service_unavailable(self) -> None:
+        self._login()
+        self.client.app.state.wallet_service = FakeWalletService(
+            errors={"get_trading_account": SQLAlchemyError("db down password=hunter2")}
+        )
+
+        response = self.client.get("/api/v1/wallet/accounts/acct-paper-001")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(body["msg"], "Database not ready")
+        self.assertEqual(body["error"]["code"], "SERVICE_UNAVAILABLE")
+        self.assertNotIn("hunter2", str(body))
+
+    def test_wallet_unknown_account_value_error_maps_to_not_found(self) -> None:
+        self._login()
+        self.client.app.state.wallet_service = FakeWalletService(
+            errors={"get_trading_account": ValueError("Unknown trading account: acct-paper-missing")}
+        )
+
+        response = self.client.get("/api/v1/wallet/accounts/acct-paper-missing")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(body["msg"], "Wallet account not found")
+        self.assertEqual(body["error"]["details"], {"account_id": "acct-paper-missing"})
+
+    def test_wallet_paper_only_error_maps_to_bad_request(self) -> None:
+        self._login()
+        self.client.app.state.wallet_service = FakeWalletService(
+            errors={"get_trading_account": ValueError("Portfolio Wallet Core V1 only supports paper accounts.")}
+        )
+
+        response = self.client.get("/api/v1/wallet/accounts/acct-live-001")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(body["msg"], "Wallet API only supports paper accounts")
+        self.assertEqual(body["error"]["code"], "BAD_REQUEST")
+
+    def test_wallet_invalid_ledger_limit_uses_validation_envelope(self) -> None:
+        self._login()
+        self.client.app.state.wallet_service = FakeWalletService(
+            account=TradingAccountSnapshot(
+                account_id="acct-paper-001",
+                name="Primary Paper Wallet",
+                mode=AccountMode.PAPER,
+                base_currency="USD",
+                created_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+            )
+        )
+
+        response = self.client.get("/api/v1/wallet/accounts/acct-paper-001/ledger-entries", params={"limit": 0})
+        body = response.json()
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(body["error"]["code"], "VALIDATION_ERROR")
+        self.assertEqual(body["msg"], "Validation Error")
+
+    def test_wallet_route_builds_service_from_app_session_factory(self) -> None:
+        self._login()
+        account = TradingAccountSnapshot(
+            account_id="acct-paper-001",
+            name="Primary Paper Wallet",
+            mode=AccountMode.PAPER,
+            base_currency="USD",
+            created_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC),
+        )
+        session_factory = object()
+        self.client.app.state.db_session_factory = session_factory
+
+        with patch("quantagent.api.routers.v1.wallet.WalletService") as wallet_service_cls:
+            wallet_service_cls.return_value.get_trading_account.return_value = account
+            response = self.client.get("/api/v1/wallet/accounts/acct-paper-001")
+
+        self.assertEqual(response.status_code, 200)
+        wallet_service_cls.assert_called_once_with(session_factory)
+        wallet_service_cls.return_value.get_trading_account.assert_called_once_with("acct-paper-001")
 
     def test_health_stays_live_when_database_session_factory_is_broken(self) -> None:
         failing_factory = FailingSessionFactory(SQLAlchemyError("password=secret connect failed"))
@@ -874,6 +1202,25 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertIn("plugins", schema["paths"]["/api/v1/plugins/{plugin_id}"]["get"]["tags"])
         self.assertIn("plugins", schema["paths"]["/api/v1/plugins/{plugin_id}/config-schema"]["get"]["tags"])
         self.assertIn("plugins", schema["paths"]["/api/v1/plugins/actions/rescan"]["post"]["tags"])
+        self.assertEqual(
+            {
+                path
+                for path in schema["paths"]
+                if path.startswith("/api/v1/wallet")
+            },
+            {
+                "/api/v1/wallet/accounts/{account_id}",
+                "/api/v1/wallet/accounts/{account_id}/cash-balances",
+                "/api/v1/wallet/accounts/{account_id}/positions",
+                "/api/v1/wallet/accounts/{account_id}/ledger-entries",
+                "/api/v1/wallet/accounts/{account_id}/paper-orders",
+                "/api/v1/wallet/accounts/{account_id}/paper-executions",
+            },
+        )
+        self.assertIn("wallet", schema["paths"]["/api/v1/wallet/accounts/{account_id}"]["get"]["tags"])
+        self.assertIn("wallet", schema["paths"]["/api/v1/wallet/accounts/{account_id}/cash-balances"]["get"]["tags"])
+        self.assertNotIn("/api/v1/wallet/accounts", schema["paths"])
+        self.assertNotIn("/api/v1/wallet/accounts/{account_id}/wallet-facts", schema["paths"])
         self.assertNotIn("/api/v1/auth/test-actions/runtime-inspect", schema["paths"])
 
         login_schema = self._resolve_response_schema(schema, "/api/v1/auth/login", method="post")
@@ -897,6 +1244,30 @@ class ApiAppTestCase(unittest.TestCase):
         plugins_schema = self._resolve_response_schema(schema, "/api/v1/plugins")
         self.assertTrue({"code", "data", "msg", "error"}.issubset(plugins_schema["properties"].keys()))
 
+        wallet_account_schema = self._resolve_response_schema(schema, "/api/v1/wallet/accounts/{account_id}")
+        wallet_account_data_schema = self._resolve_schema_ref(schema, wallet_account_schema["properties"]["data"])
+        self.assertEqual(
+            set(wallet_account_data_schema["properties"].keys()),
+            {"account_id", "name", "mode", "base_currency", "created_at"},
+        )
+        self.assertEqual(wallet_account_data_schema["properties"]["mode"]["const"], "paper")
+
+        wallet_cash_schema = self._resolve_response_schema(schema, "/api/v1/wallet/accounts/{account_id}/cash-balances")
+        wallet_cash_data_variants = wallet_cash_schema["properties"]["data"]["anyOf"]
+        wallet_cash_array_schema = next(variant for variant in wallet_cash_data_variants if variant.get("type") == "array")
+        wallet_cash_items_schema = self._resolve_schema_ref(schema, wallet_cash_array_schema["items"])
+        self.assertTrue(
+            {
+                "account_id",
+                "currency",
+                "total",
+                "available",
+                "locked",
+                "unsettled",
+                "updated_at",
+            }.issubset(wallet_cash_items_schema["properties"])
+        )
+
     def test_production_openapi_excludes_debug_routes(self) -> None:
         production_app = create_app(self._settings(APP_ENV="production"))
         with TestClient(production_app) as client:
@@ -907,6 +1278,7 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertIn("/api/v1/version", schema["paths"])
         self.assertIn("/api/v1/health", schema["paths"])
         self.assertIn("/api/v1/ready", schema["paths"])
+        self.assertIn("/api/v1/wallet/accounts/{account_id}", schema["paths"])
         self.assertNotIn("/api/v1/debug/error", schema["paths"])
         self.assertNotIn("/api/v1/debug/success", schema["paths"])
         self.assertNotIn("/api/v1/auth/test-actions/runtime-inspect", schema["paths"])
@@ -1018,6 +1390,10 @@ class ApiAppTestCase(unittest.TestCase):
 
         register_api_v1_protected_router(app, self.settings, router)
         return app
+
+    def _login(self) -> None:
+        response = self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+        self.assertEqual(response.status_code, 200)
 
     def _resolve_response_schema(self, openapi_schema: dict, path: str, *, method: str = "get") -> dict:
         response_schema = openapi_schema["paths"][path][method]["responses"]["200"]["content"]["application/json"]["schema"]
