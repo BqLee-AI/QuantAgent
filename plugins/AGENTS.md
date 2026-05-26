@@ -4,7 +4,7 @@
 
 - `plugins` 存放随代码分发的官方插件，不存放第三方、社区、私有或运行时安装插件。
 - 运行时安装插件应放在 `runtime/plugins`，并通过 Registry 进入系统。
-- 本目录的规则来自 `docs/design/03-plugin-system-and-registry.md`、`06-source-plugin-design.md` 和 `07-industry-package-design.md`。
+- 本目录的规则来自 `docs/design/03-plugin-system-and-registry.md`、`06-source-plugin-design.md`、`07-industry-package-design.md` 和 `11-crawler-source-plugin-boundary.md`。
 
 ## 行为约束
 
@@ -13,7 +13,7 @@
 - 插件配置 schema 不得包含真实 secret；敏感字段使用 secret reference。
 - 插件开发者只声明插件能力和 `config.schema.json` 配置契约；配置校验、保存、启停、调度、审计和生命周期由平台负责。
 - Source Plugin 只负责采集、接收和标准化原始信息，不能直接调用行业包。
-- Source Plugin 只消费平台传入的 DTO / `effective_config` 并返回标准 DTO，不负责 `RawEvent` 入库、去重、`SourceBinding`、`Event Bus`、权限或生命周期托管。
+- Source Plugin 只消费平台传入的 DTO / `effective_config` 并返回平台约定的 source 输出结构，不负责 `RawEvent` 入库、去重、`SourceBinding`、`Event Bus`、权限或生命周期托管。
 - Industry Plugin 可以提供 AgentDefinition、Skill、工具、market mapping 和 scoring hints，但不能绕过 AgentRuntime、ToolRegistry、Skill Registry 或 Decision。
 - Executor Plugin 初版必须默认禁用真实执行，只允许 disabled、dry-run 或 mock 路径。
 - 插件安装、升级、降级、启停、reload、配置变更和执行错误需要可审计。

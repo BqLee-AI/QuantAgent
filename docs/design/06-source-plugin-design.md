@@ -33,7 +33,7 @@ Source Plugin
 
 Source Plugin 通过拉取、接收或订阅外部信息，产出 `RawEvent`，再由核心系统标准化为 `Event`。
 
-插件只负责产出标准 DTO 或 `RawEventDraft` 兼容结构，不负责：
+插件只负责产出平台约定的 source 输出结构；进入核心系统后的 `RawEvent` 入库与事件链路由平台负责。插件不负责：
 
 - `RawEvent` 入库
 - 去重

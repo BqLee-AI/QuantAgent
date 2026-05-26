@@ -11,7 +11,7 @@
 - 插件开发者只负责 Source Plugin 包本身能力与配置契约，不负责系统接入。
 - 插件配置由插件通过 `config.schema.json` 声明，由平台负责校验、保存、启停、调度和审计。
 - 运行时平台将校验后的配置作为 DTO / `effective_config` 传给插件；插件只根据该配置执行抓取、解析和标准化。
-- 插件输出必须回到标准 DTO 边界，由核心系统负责 `RawEvent` 入库、去重、`SourceBinding`、`Event Bus`、权限和生命周期。
+- 插件输出必须回到平台约定的 source 输出结构，由核心系统负责 `RawEvent` 入库、去重、`SourceBinding`、`Event Bus`、权限和生命周期。
 - 对网页或新闻类抓取，初版默认准备 `Jina Reader` 与 `Readability` 两类读取路径，用于兜底和降级。
 - 可以复用 GitHub 或其他来源的开源能力，例如 `Fincept Terminal`，但必须包在插件边界后面，不能让核心系统直接耦合第三方项目。
 
@@ -35,7 +35,7 @@
 - 定义 `config.schema.json`
 - 声明插件所需配置字段
 - 实现插件自己的抓取、解析和标准化能力
-- 返回平台可消费的标准 DTO
+- 返回平台约定的 source 输出结构
 - 提供 README 和最小测试
 
 插件开发者不负责：
@@ -102,7 +102,7 @@
 validated config
   -> effective_config DTO
   -> plugin fetch / search / read
-  -> standardized DTO
+  -> platform source output
   -> core runtime handles persistence and routing
 ```
 
@@ -110,7 +110,7 @@ validated config
 
 - 根据配置抓取或查询内容
 - 在插件内处理供应商差异
-- 将结果转换为标准 DTO
+- 将结果转换为平台约定的 source 输出结构
 - 在失败时返回清晰错误
 
 不应在插件内自行扩展为：
@@ -164,4 +164,4 @@ validated config
 ## 待确认问题
 
 - `Readability` 和 `Jina Reader` 更适合作为插件内部策略，还是沉淀为可复用的官方 Source / Tool 插件
-- 不同 source 类型的标准 DTO 是否全部统一到单一 `RawEventDraft` 形态，还是允许在进入核心系统前保留轻量 source-specific DTO
+- 不同 source 类型的输出是否全部统一为单一 source 输出契约，还是允许在进入核心系统前保留轻量 source-specific DTO
