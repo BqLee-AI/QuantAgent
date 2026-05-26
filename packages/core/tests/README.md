@@ -34,3 +34,51 @@
 ```bash
 uv run --package quantagent-core python -m unittest discover -s packages/core/tests -p 'test_wallet_broker_simulator_harness.py'
 ```
+
+## Alpaca paper adapter spike
+
+`alpaca_paper_adapter_spike.py` 把 Alpaca paper 接入限制在测试 / spike 边界，只复用 #157 已冻结的 contract 资产：
+
+- `BrokerSimulatorHarness`
+- `BrokerSimulatorFixture`
+- `BrokerSimulatorOrderInput`
+- `BrokerSimulatorExecutionInput.source_key`
+- `BrokerSimulatorErrorInput`
+- `WalletService.ingest_paper_execution()`
+
+配置约定：
+
+- `ALPACA_PAPER_BASE_URL` 默认且唯一允许值：`https://paper-api.alpaca.markets`
+- `APCA_API_KEY_ID` / `APCA_API_SECRET_KEY`：只从环境变量读取
+- `QUANTAGENT_ALPACA_PAPER_SMOKE=1`：启用只读外部 smoke
+- `QUANTAGENT_ALPACA_PAPER_ORDER_SMOKE=1`：在只读 smoke 基础上额外启用下单 smoke
+- 默认超时：`10s`
+- 默认下单白名单：`AAPL`、`MSFT`、`SPY`
+- 下单上限：`notional <= 5 USD` 或 `quantity <= 1`
+
+当前映射结论：
+
+- Alpaca `cash` 映射为 broker-shaped cash context，可作为 harness 初始资金输入
+- Alpaca `buying_power` 只记录为 broker account context，不作为 wallet cash ledger 真源
+- Alpaca `positions` 映射到 `BrokerSimulatorPositionContext`
+- Alpaca `orders` 映射到 `BrokerSimulatorOrderInput`，仅表达 broker order state，不替代 execution fact
+- Alpaca `account activities / FILL` 映射到 `BrokerSimulatorExecutionInput`
+- execution `source_key` 使用账户范围稳定键：`<account_id>:alpaca:activity:<activity_id>`
+- 重放同一 `activity_id` 仍经由 wallet core 幂等路径，不直接写 wallet 表
+
+验证方式：
+
+```bash
+uv run --package quantagent-core python -m unittest discover -s packages/core/tests -p 'test_alpaca_paper_adapter_*.py'
+```
+
+只读外部 smoke 默认 skip，不需要网络、credentials 或 `.env`。显式启用后，它只读取 account、positions 和 orders，不写入 wallet state。
+
+```bash
+QUANTAGENT_ALPACA_PAPER_SMOKE=1 \
+APCA_API_KEY_ID=redacted \
+APCA_API_SECRET_KEY=redacted \
+uv run --package quantagent-core python -m unittest discover -s packages/core/tests -p 'test_alpaca_paper_adapter_smoke.py'
+```
+
+可选下单 smoke 只有在额外开启 `QUANTAGENT_ALPACA_PAPER_ORDER_SMOKE=1` 时才会提交一笔受上限约束的 paper order。它只断言提交与查询状态，不要求真实成交。
