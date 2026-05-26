@@ -61,6 +61,7 @@ class PluginRuntimeService:
 
         start_error = await self.start_plugin(plugin)
         if start_error is not None:
+            await self.stop_plugin(plugin, plugin_id=record.id)
             return PluginRuntimeInvocation(error=start_error)
 
         try:

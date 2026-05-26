@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import sys
 import tempfile
 import types
@@ -165,6 +166,99 @@ class PluginRuntimeServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(invocation.result.output["configured"])
         with self.assertRaises(TypeError):
             captured["config"]["enabled"] = False
+
+    async def test_async_lifecycle_methods_are_awaited_in_order(self) -> None:
+        events = []
+
+        class AsyncLifecyclePlugin(BasePlugin):
+            async def load(self, context):
+                await asyncio.sleep(0)
+                await super().load(context)
+                events.append(("load", context.request_id))
+
+            async def start(self):
+                await asyncio.sleep(0)
+                events.append(("start", self.context.request_id))
+
+            async def invoke(self, request):
+                await asyncio.sleep(0)
+                events.append(("invoke", request.request_id))
+                return PluginInvokeResult(output={"request_id": request.request_id})
+
+            async def stop(self):
+                await asyncio.sleep(0)
+                events.append(("stop", self.context.request_id))
+
+        self._install_module("test_runtime_async_lifecycle", AsyncLifecyclePlugin)
+        record = self._record(entrypoint="test_runtime_async_lifecycle:plugin")
+
+        invocation = await PluginRuntimeService().invoke(record, capability="source.fetch", request_id="req-async")
+
+        self.assertTrue(invocation.ok)
+        self.assertEqual(
+            events,
+            [
+                ("load", "req-async"),
+                ("start", "req-async"),
+                ("invoke", "req-async"),
+                ("stop", "req-async"),
+            ],
+        )
+
+    async def test_concurrent_class_entrypoint_invocations_keep_context_isolated(self) -> None:
+        class ConcurrentPlugin(BasePlugin):
+            async def invoke(self, request):
+                before_sleep = self.context.request_id
+                await asyncio.sleep(0.01)
+                return PluginInvokeResult(
+                    output={
+                        "request_id": request.request_id,
+                        "context_request_id": self.context.request_id,
+                        "before_sleep": before_sleep,
+                    }
+                )
+
+        self._install_module("test_runtime_concurrent", ConcurrentPlugin)
+        record = self._record(entrypoint="test_runtime_concurrent:plugin")
+        runtime = PluginRuntimeService()
+
+        first, second = await asyncio.gather(
+            runtime.invoke(record, capability="source.fetch", request_id="req-a"),
+            runtime.invoke(record, capability="source.fetch", request_id="req-b"),
+        )
+
+        self.assertTrue(first.ok)
+        self.assertTrue(second.ok)
+        self.assertEqual(first.result.output["request_id"], "req-a")
+        self.assertEqual(first.result.output["context_request_id"], "req-a")
+        self.assertEqual(first.result.output["before_sleep"], "req-a")
+        self.assertEqual(second.result.output["request_id"], "req-b")
+        self.assertEqual(second.result.output["context_request_id"], "req-b")
+        self.assertEqual(second.result.output["before_sleep"], "req-b")
+
+    async def test_start_failure_still_stops_loaded_plugin(self) -> None:
+        stopped = {"value": False}
+
+        class StartFailingPlugin(BasePlugin):
+            async def start(self):
+                raise PluginRuntimeError(
+                    code="PLUGIN_START_FAILED_BY_TEST",
+                    message="Plugin start failed by test.",
+                    stage="start",
+                )
+
+            async def stop(self):
+                stopped["value"] = True
+
+        self._install_module("test_runtime_start_failure", StartFailingPlugin)
+        record = self._record(entrypoint="test_runtime_start_failure:plugin")
+
+        invocation = await PluginRuntimeService().invoke(record, capability="source.fetch", request_id="req-start")
+
+        self.assertFalse(invocation.ok)
+        self.assertEqual(invocation.error.code, "PLUGIN_START_FAILED_BY_TEST")
+        self.assertEqual(invocation.error.stage, "start")
+        self.assertTrue(stopped["value"])
 
     def _install_module(self, module_name: str, plugin) -> None:
         module = types.ModuleType(module_name)
