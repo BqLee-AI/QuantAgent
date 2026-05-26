@@ -10,6 +10,9 @@
 
 - 不依赖 FastAPI、React、具体 app 入口或具体插件实现。
 - 不在 core 中写 API 响应结构、HTTP 状态码或前端展示逻辑。
+- core runtime 只能基于 Registry record 和 manifest entrypoint 加载插件，不能维护第二套插件发现或硬编码注册入口。
+- 插件 RuntimeContext 是受控上下文，不作为服务定位器；默认不得暴露 DB session、ORM model、scheduler、Event Bus publisher、内部 service 或 secret resolver。
+- API router 不承载插件 entrypoint 加载、生命周期托管或 invoke 编排；这些能力应留在 core runtime 或后续明确的 runtime service 边界。
 - 配置默认值应支持最小启动，不用无关配置阻塞只需要部分能力的场景。
 - `DATABASE_URL` 允许为空；只有创建数据库 engine 或执行迁移时才要求存在。
 - Alembic 配置和迁移历史不能随意删除、重排或改写。
