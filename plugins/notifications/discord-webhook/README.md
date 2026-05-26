@@ -41,6 +41,37 @@
 uv run python -m unittest discover -s plugins/notifications/discord-webhook/tests -p 'test_*.py'
 ```
 
+## 真实 Discord Smoke Test
+
+如果本地具备真实 Discord webhook，可额外执行一次补充联调验证。
+
+优先把本地私有配置写到仓库根目录 `.env`（该文件已被 `.gitignore` 忽略）：
+
+```bash
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+DISCORD_WEBHOOK_MESSAGE=QuantAgent Discord webhook smoke test
+DISCORD_WEBHOOK_TIMEOUT_SECONDS=5
+```
+
+再执行：
+
+```bash
+uv run python plugins/notifications/discord-webhook/smoke_send.py
+```
+
+脚本会先读取仓库根目录 `.env`，也支持用当前 shell 环境变量覆盖同名值。
+
+预期：
+
+- Discord 目标频道能收到一条纯文本消息。
+- 命令输出中 `ok` 为 `True`，`code` 为 `SENT`。
+
+注意：
+
+- 这是补充验证，不是默认阻塞验收项。
+- 不要把真实 webhook URL 提交到仓库、README、测试样例或 `.env.example`。
+- 该脚本会产生真实对外 HTTP 请求和真实 Discord 消息。
+
 ## 非目标
 
 - 不支持富消息、附件、Bot API、guild/channel 管理。
