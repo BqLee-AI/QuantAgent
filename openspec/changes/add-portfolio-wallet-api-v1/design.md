@@ -4,7 +4,14 @@ issue #134 承接已归档的 `add-portfolio-wallet-core-v1` 后续切片。当�
 
 `apps/api` 的本地约束要求 route 保持薄层：API 只处理 HTTP 参数、DTO、状态码、响应 envelope、异常映射和依赖注入，核心余额、持仓、账本、入账和风险计算必须留在 `packages/core`。现有 API v1 route 通过 `STANDARD_API_V1_ROUTER_REGISTRATIONS` 统一声明 public/protected 边界；业务 route 默认 protected。
 
-本 change 先定义 API 文档与实现口径，再在 OpenSpec 审核通过后落地 `apps/api` runtime、测试和 README。当前分支包含这两阶段内容；review 时应同时检查文档契约与对应实现是否一致。
+本 change 先定义 API 文档与实现口径，再在 OpenSpec 审核通过后落地 `apps/api` runtime、测试和 README。当前 PR 不是 OpenSpec-only PR；它已经同时包含：
+
+- `openspec/changes/add-portfolio-wallet-api-v1/**` 的 proposal/design/spec/tasks
+- `apps/api/src/quantagent/api/**` 的 wallet runtime 实现
+- `apps/api/src/tests/**` 的 route / OpenAPI / error mapping tests
+- `apps/api/README.md` 的交付说明
+
+review 时应同时检查文档契约与对应实现是否一致，而不是把实现误判为越过 review gate 的额外范围。
 
 ## Goals / Non-Goals
 

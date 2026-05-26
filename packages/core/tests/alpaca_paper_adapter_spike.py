@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -133,7 +134,7 @@ class AlpacaOrderSmokeRequest:
 
 
 def load_alpaca_paper_config(env: Mapping[str, str] | None = None) -> AlpacaPaperConfig:
-    source = env or {}
+    source = env if env is not None else os.environ
     return AlpacaPaperConfig(
         base_url=(source.get(ALPACA_PAPER_BASE_URL_ENV) or ALPACA_PAPER_BASE_URL).strip(),
         api_key_id=_clean_optional(source.get(APCA_API_KEY_ID_ENV)),
@@ -508,10 +509,14 @@ def _build_order_request_payload(
         "client_order_id": generate_client_order_id(),
     }
     if request.notional_usd is not None:
+        if request.notional_usd <= 0:
+            raise ValueError("Order smoke notional must be greater than 0.")
         if request.notional_usd > config.max_notional_usd:
             raise ValueError(f"Order smoke notional exceeds {config.max_notional_usd} USD.")
         payload["notional"] = _format_decimal(request.notional_usd)
     if request.quantity is not None:
+        if request.quantity <= 0:
+            raise ValueError("Order smoke quantity must be greater than 0.")
         if request.quantity > config.max_quantity:
             raise ValueError(f"Order smoke quantity exceeds {config.max_quantity}.")
         payload["qty"] = _format_decimal(request.quantity)

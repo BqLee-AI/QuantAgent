@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 import unittest
 from datetime import datetime, timezone
 from decimal import Decimal
+from unittest.mock import patch
 
 from quantagent.core.wallet import OrderSide, OrderType
 
@@ -76,6 +78,24 @@ class AlpacaPaperAdapterSpikeTestCase(unittest.TestCase):
         self.assertEqual(config.redacted()["max_notional_usd"], "5")
         self.assertEqual(config.redacted()["max_quantity"], "1")
 
+    def test_load_config_reads_process_environment_when_env_is_none(self) -> None:
+        with patch.dict(
+            os.environ,
+            {
+                APCA_API_KEY_ID_ENV: "paper-key-from-env",
+                APCA_API_SECRET_KEY_ENV: "paper-secret-from-env",
+                QUANTAGENT_ALPACA_PAPER_SMOKE_ENV: "1",
+                QUANTAGENT_ALPACA_PAPER_ORDER_SMOKE_ENV: "1",
+            },
+            clear=False,
+        ):
+            config = load_alpaca_paper_config()
+
+        self.assertEqual(config.api_key_id, "paper-key-from-env")
+        self.assertEqual(config.api_secret_key, "paper-secret-from-env")
+        self.assertTrue(config.smoke_enabled)
+        self.assertTrue(config.order_smoke_enabled)
+
     def test_validate_paper_base_url_rejects_non_paper_targets(self) -> None:
         self.assertEqual(validate_paper_base_url(ALPACA_PAPER_BASE_URL), ALPACA_PAPER_BASE_URL)
 
@@ -142,6 +162,22 @@ class AlpacaPaperAdapterSpikeTestCase(unittest.TestCase):
             get_order_smoke_skip_reason(
                 enabled,
                 build_order_smoke_request(symbol="SPY", notional_usd=None, quantity=Decimal("2")),
+            )
+            or "",
+        )
+        self.assertIn(
+            "greater than 0",
+            get_order_smoke_skip_reason(
+                enabled,
+                build_order_smoke_request(symbol="SPY", notional_usd=Decimal("0")),
+            )
+            or "",
+        )
+        self.assertIn(
+            "greater than 0",
+            get_order_smoke_skip_reason(
+                enabled,
+                build_order_smoke_request(symbol="SPY", notional_usd=None, quantity=Decimal("-1")),
             )
             or "",
         )

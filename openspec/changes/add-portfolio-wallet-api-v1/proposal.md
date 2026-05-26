@@ -2,7 +2,7 @@
 
 issue #120 已经把 Portfolio Wallet Core V1 的 `packages/core` 领域契约、持久化、入账服务、查询服务和 wallet facts 边界归档为 stable spec，但 issue #134 需要的 FastAPI 只读资源边界仍未落地。继续让前端、调试或集成验证绕过正式 route 直接依赖 core service，会让 DTO、错误映射、脱敏规则和 “only 虚盘，不操作实盘” 语义在 API 层漂移。
 
-本 change 为 issue #134 新建 active OpenSpec，用来定义并交付 `apps/api` 对 Portfolio Wallet Core V1 的受保护、只读、paper-only HTTP 薄封装。本轮分支已经在 OpenSpec 审核通过后，追加了对应的 API runtime、测试与 README 更新。
+本 change 为 issue #134 新建 active OpenSpec，用来定义并交付 `apps/api` 对 Portfolio Wallet Core V1 的受保护、只读、paper-only HTTP 薄封装。当前 PR 不是 OpenSpec-only 评审；它包含该 change artifacts，以及在审核通过后并入的 API runtime、测试与 README 更新。
 
 ## What Changes
 
