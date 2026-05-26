@@ -34,8 +34,18 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
 app = create_app()
 
 
+def _should_enable_reload(current_settings: Settings) -> bool:
+    """本地开发入口默认启用热更新，非本地环境保持单进程启动。"""
+    return current_settings.APP_ENV.lower() in {"development", "local"}
+
+
 def run() -> None:
     """使用配置中的主机和端口启动开发服务器。"""
     import uvicorn
 
-    uvicorn.run("quantagent.api.main:app", host=settings.API_HOST, port=settings.API_PORT)
+    uvicorn.run(
+        "quantagent.api.main:app",
+        host=settings.API_HOST,
+        port=settings.API_PORT,
+        reload=_should_enable_reload(settings),
+    )
