@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
-import sys
 import tempfile
 import unittest
 from datetime import UTC, datetime
@@ -23,16 +21,8 @@ from quantagent.core.wallet import (
     WalletLedgerEntryType,
     WalletService,
 )
-
-
-REPO_ROOT = Path(__file__).resolve().parents[4]
-CORE_TESTS_DIR = REPO_ROOT / "packages" / "core" / "tests"
-if str(CORE_TESTS_DIR) not in sys.path:
-    sys.path.insert(0, str(CORE_TESTS_DIR))
-
-from alpaca_paper_adapter_spike import (  # noqa: E402
+from .alpaca_wallet_api_e2e_support import (
     AlpacaPaperClient,
-    ALPACA_PAPER_BASE_URL,
     AlpacaPaperConfig,
     AlpacaReadOnlySnapshot,
     fetch_read_only_snapshot,
