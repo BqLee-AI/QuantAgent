@@ -1,7 +1,7 @@
 ## 1. Plugin Contract Gate
 
 - [ ] 1.1 固定 `Readability Link Reader` 的插件包边界：只做 `source/read`，不做 `tool.read_url`。
-- [ ] 1.2 固定插件输出直接贴齐 `RawEventDraft` 兼容 DTO，不新增 reader 专用 DTO。
+- [ ] 1.2 固定插件输出贴齐平台约定的 Source Plugin 输出结构 / source runtime 可消费输出 DTO，不新增 reader 专用 DTO。
 - [ ] 1.3 固定插件不负责 `RawEvent` 入库、去重、`SourceBinding`、Event Bus、权限和生命周期。
 
 ## 2. Config And Dependency Gate

@@ -14,7 +14,7 @@
 **Goals:**
 
 - 定义官方 `Readability Link Reader` Source Plugin 的最小插件包契约。
-- 明确插件输出直接贴齐现有 `RawEventDraft` 兼容 DTO。
+- 明确插件输出贴齐平台约定的 Source Plugin 输出结构 / source runtime 可消费输出 DTO。
 - 明确插件消费最小配置字段集合，并由平台传入 `effective_config`。
 - 明确插件内部可以封装成熟 Python 开源正文抽取库。
 - 定义最小插件级验证方式，优先使用静态 HTML fixture 或受控输入。
@@ -39,14 +39,14 @@
 - 同时引入 tool 形态会扩展到 ToolRegistry input/output schema、风险级别和更广的运行时契约。
 - 后续如果确认有 Agent / UI 直接调用需要，再为 `tool.read_url` 开独立 issue 或 change。
 
-### Decision 2: 插件输出直接使用 `RawEventDraft` 兼容 DTO
+### Decision 2: 插件输出对齐平台约定的 Source Plugin 输出结构
 
-插件输出不引入新的轻量 reader DTO，而是直接返回现有 source 运行时可消费的 `RawEventDraft` 兼容形态。
+插件输出不引入新的轻量 reader DTO，而是对齐平台约定的 Source Plugin 输出结构 / source runtime 可消费输出 DTO。
 
 原因：
 
-- 现有 source 运行时和测试入口已经围绕 `RawEventDraft` 建立最小契约。
-- issue `#139` 明确本轮要给后续 crawler / search 插件提供可复用基础件，直接贴齐现有 DTO 能减少后续适配层。
+- `docs/design/06-source-plugin-design.md` 和 `docs/design/11-crawler-source-plugin-boundary.md` 已经定义了“插件返回标准 DTO，由平台接管事件链路”的边界，reader 插件应贴齐这一条统一契约。
+- issue `#139` 明确本轮要给后续 crawler / search 插件提供可复用基础件，直接贴齐平台约定输出结构能减少后续适配层。
 - 这也符合当前文档已明确的“插件返回标准 DTO，由平台写入事件链路”的边界。
 
 ### Decision 3: 允许插件内部封装成熟 Python 开源正文抽取库
@@ -76,7 +76,7 @@
 ## Risks / Trade-offs
 
 - 本轮不锁死具体正文抽取库名 -> 实现阶段仍需为许可证、维护性和平台兼容性做一次最终确认。
-- 直接输出 `RawEventDraft` 能减少适配层，但也要求 reader 插件较早理解 source runtime 的 DTO 字段约束。
+- 输出结构名称先保持在 Source Plugin 统一契约层，能避免 reader change 先行钉死后续还会统一的 DTO 名称；代价是实现阶段仍需把字段集合进一步落到具体运行时契约。
 - 不同时暴露 `tool.read_url` 会让后续 Agent / UI 直接调用场景延后，但可以保持本轮边界清晰。
 - 静态 HTML fixture 适合最小验证，但不能完全代表真实网页结构差异；真实站点兼容性仍要在后续插件增强中逐步验证。
 

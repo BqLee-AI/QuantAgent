@@ -10,6 +10,8 @@
 - **WHEN** 实现者按本 change 落地插件包
 - **THEN** 插件包 MUST 包含 `plugin.yaml`、`config.schema.json`、README、入口实现和最小测试
 - **AND** 插件 MUST 通过 `plugin.yaml` 注册为 `source` 类型官方插件
+- **AND** 插件 `id` MUST 为 `quantagent.official.source.readability`
+- **AND** 插件 `capabilities` MUST 至少声明 `source.fetch`
 
 ### Requirement: Reader Plugin Consumes Platform-Validated Config
 
@@ -24,15 +26,15 @@
 - **AND** 插件 MAY 读取可选 `headers` 与 `timeout_seconds`
 - **AND** 插件 MUST NOT 自行承担配置保存、启停、调度、审计或生命周期管理
 
-### Requirement: Reader Plugin Returns RawEventDraft-Compatible Output
+### Requirement: Reader Plugin Returns Source-Contract-Compatible Output
 
-`Readability Link Reader` 插件 MUST 返回现有 source 运行时可消费的 `RawEventDraft` 兼容 DTO，而不是引入新的 reader 专用 DTO。
+`Readability Link Reader` 插件 MUST 返回符合平台约定的 Source Plugin 输出结构 / source runtime 可消费输出 DTO 的标准结果，而不是引入新的 reader 专用 DTO。
 
 #### Scenario: Plugin extracts article content from a readable page
 
 - **GIVEN** 插件收到了一个可读取的网页 URL
 - **WHEN** 插件完成正文抽取
-- **THEN** 插件 MUST 返回 `RawEventDraft` 兼容结构
+- **THEN** 插件 MUST 返回符合平台约定的 Source Plugin 输出结构 / source runtime 可消费输出 DTO 的标准结果
 - **AND** 返回结果 SHOULD 至少包含 URL、正文文本相关字段和必要 metadata
 - **AND** 平台随后负责将该结果写入事件链路、持久化并通过 Event Bus 发布
 
