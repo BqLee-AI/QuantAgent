@@ -63,6 +63,15 @@ class DiscordInteractionWebhookPluginTestCase(unittest.TestCase):
         self.assertEqual(result.dto.text, "hello from discord")
         self.assertEqual(result.dto.guild_id, "guild-1")
         self.assertEqual(result.dto.channel_id, "channel-1")
+        self.assertEqual(result.dto.author_id, "user-1")
+        self.assertEqual(
+            result.dto.payload_summary,
+            {
+                "type": 2,
+                "command_name": "notify",
+                "option_names": ["text"],
+            },
+        )
 
     def test_receive_request_rejects_invalid_signature(self) -> None:
         result = self.plugin.receive_request(
@@ -87,6 +96,57 @@ class DiscordInteractionWebhookPluginTestCase(unittest.TestCase):
 
         self.assertFalse(result.ok)
         self.assertEqual(result.code, "MISSING_CONFIG")
+
+    def test_receive_request_rejects_unresolved_signing_secret(self) -> None:
+        result = self.plugin.receive_request(
+            self.config,
+            self.headers,
+            self.body,
+            secrets={},
+            now=self.timestamp,
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "SECRET_NOT_RESOLVED")
+
+    def test_receive_request_rejects_missing_signature_headers(self) -> None:
+        result = self.plugin.receive_request(
+            self.config,
+            {},
+            self.body,
+            secrets=self.secrets,
+            now=self.timestamp,
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "SIGNATURE_MISSING")
+
+    def test_receive_request_rejects_invalid_timestamp_header(self) -> None:
+        result = self.plugin.receive_request(
+            self.config,
+            {
+                "X-Signature-Timestamp": "not-an-int",
+                "X-QuantAgent-Signature": self.headers["X-QuantAgent-Signature"],
+            },
+            self.body,
+            secrets=self.secrets,
+            now=self.timestamp,
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "TIMESTAMP_INVALID")
+
+    def test_receive_request_rejects_stale_signature_timestamp(self) -> None:
+        result = self.plugin.receive_request(
+            self.config,
+            self.headers,
+            self.body,
+            secrets=self.secrets,
+            now=self.timestamp + 301,
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "SIGNATURE_STALE")
 
     def test_receive_request_rejects_invalid_json_payload(self) -> None:
         invalid_body = b"{"
@@ -157,6 +217,54 @@ class DiscordInteractionWebhookPluginTestCase(unittest.TestCase):
 
         self.assertFalse(result.ok)
         self.assertEqual(result.code, "GUILD_NOT_ALLOWED")
+
+    def test_receive_request_rejects_channel_allowlist_mismatch(self) -> None:
+        payload = json.loads(self.body.decode("utf-8"))
+        payload["channel_id"] = "channel-2"
+        custom_body = json.dumps(payload).encode("utf-8")
+        headers = {
+            "X-Signature-Timestamp": str(self.timestamp),
+            "X-QuantAgent-Signature": MODULE.sign_request_body(
+                custom_body,
+                self.timestamp,
+                self.secrets["discord.interactions.signing"],
+            ),
+        }
+
+        result = self.plugin.receive_request(
+            self.config,
+            headers,
+            custom_body,
+            secrets=self.secrets,
+            now=self.timestamp,
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "CHANNEL_NOT_ALLOWED")
+
+    def test_receive_request_rejects_payload_without_supported_text_option(self) -> None:
+        payload = json.loads(self.body.decode("utf-8"))
+        payload["data"]["options"] = [{"name": "ignored", "value": "hello from discord"}]
+        custom_body = json.dumps(payload).encode("utf-8")
+        headers = {
+            "X-Signature-Timestamp": str(self.timestamp),
+            "X-QuantAgent-Signature": MODULE.sign_request_body(
+                custom_body,
+                self.timestamp,
+                self.secrets["discord.interactions.signing"],
+            ),
+        }
+
+        result = self.plugin.receive_request(
+            self.config,
+            headers,
+            custom_body,
+            secrets=self.secrets,
+            now=self.timestamp,
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "PAYLOAD_UNSUPPORTED")
 
 
 if __name__ == "__main__":

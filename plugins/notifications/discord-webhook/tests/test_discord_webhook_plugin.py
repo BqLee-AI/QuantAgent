@@ -43,7 +43,7 @@ class DiscordWebhookPluginTestCase(unittest.TestCase):
 
         result = self.plugin.send_text(
             self.config,
-            "hello discord",
+            "  hello discord  ",
             secrets=self.secrets,
             transport=fake_transport,
         )
@@ -54,11 +54,41 @@ class DiscordWebhookPluginTestCase(unittest.TestCase):
         self.assertEqual(json.loads(captured_request["body"]), {"content": "hello discord"})
         self.assertEqual(captured_request["timeout"], 5.0)
 
+    def test_send_text_returns_secret_not_resolved_when_secret_value_is_missing(self) -> None:
+        result = self.plugin.send_text(
+            self.config,
+            "hello discord",
+            secrets={},
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "SECRET_NOT_RESOLVED")
+        self.assertEqual(result.webhook_secret_ref, "discord.webhooks.primary")
+
     def test_send_text_returns_missing_config_for_absent_secret_reference(self) -> None:
         result = self.plugin.send_text({}, "hello discord", secrets=self.secrets)
 
         self.assertFalse(result.ok)
         self.assertEqual(result.code, "MISSING_CONFIG")
+
+    def test_send_text_rejects_blank_message_without_transport_call(self) -> None:
+        transport_called = False
+
+        def fake_transport(_request):
+            nonlocal transport_called
+            transport_called = True
+            return MODULE.DiscordWebhookResponse(status_code=204)
+
+        result = self.plugin.send_text(
+            self.config,
+            "   ",
+            secrets=self.secrets,
+            transport=fake_transport,
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "INVALID_MESSAGE")
+        self.assertFalse(transport_called)
 
     def test_send_text_returns_upstream_error_without_leaking_webhook(self) -> None:
         def fake_transport(_request):
@@ -106,6 +136,24 @@ class DiscordWebhookPluginTestCase(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertEqual(result.code, "NETWORK_ERROR")
         self.assertTrue(result.retryable)
+
+    def test_send_text_clamps_timeout_override_to_minimum_value(self) -> None:
+        captured_request = {}
+
+        def fake_transport(request):
+            captured_request["timeout"] = request.timeout_seconds
+            return MODULE.DiscordWebhookResponse(status_code=204)
+
+        result = self.plugin.send_text(
+            self.config,
+            "hello discord",
+            secrets=self.secrets,
+            transport=fake_transport,
+            timeout_seconds=0,
+        )
+
+        self.assertTrue(result.ok)
+        self.assertEqual(captured_request["timeout"], 0.1)
 
 
 if __name__ == "__main__":
