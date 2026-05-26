@@ -91,7 +91,7 @@ events 1 ── 0..n decision_results
 | --- | --- |
 | `notify_only` | 只通知，不请求人工确认或执行 |
 | `request_human_approval` | 请求人工确认 |
-| `dry_run_executor` | 允许进入虚盘 executor；协议值保留 `dry_run_executor` |
+| `dry_run_broker` | 允许进入虚盘 broker；协议值保留 `dry_run_broker` |
 | `reject` | 拒绝后续动作 |
 
 初版不支持 `execute_trade`。
@@ -406,8 +406,8 @@ events 1 ── 0..n decision_results
 | `reason` | `text` | nullable | 决策原因摘要 |
 | `confidence_score` | `numeric(5, 4)` | nullable | Decision 使用或输出的置信度 |
 | `required_approval` | `boolean` | not null, default `false` | 是否需要人工确认 |
-| `allowed_executors` | `jsonb` | not null, default `[]` | 被允许的 executor 列表；初版只允许虚盘或 mock 语义，虚盘对应协议值 `dry_run` |
-| `blocked_executors` | `jsonb` | not null, default `[]` | 被阻止的 executor 列表及原因摘要 |
+| `allowed_brokers` | `jsonb` | not null, default `[]` | 被允许的 broker 列表；初版只允许虚盘或 mock 语义，虚盘对应协议值 `dry_run` |
+| `blocked_brokers` | `jsonb` | not null, default `[]` | 被阻止的 broker 列表及原因摘要 |
 | `risk_flags` | `jsonb` | not null, default `[]` | Decision 采纳的风险标记 |
 | `recommended_actions` | `jsonb` | not null, default `[]` | Decision 后续建议动作，例如通知、复核、虚盘；虚盘对应协议值 `dry_run` |
 | `policy_snapshot` | `jsonb` | not null, default `{}` | 决策时使用的策略摘要，不保存私有策略全文或 secret |
@@ -429,8 +429,8 @@ events 1 ── 0..n decision_results
 ### 写入规则
 
 - Decision 独立于行业包，行业包不能直接决定是否执行。
-- 初版动作只允许 `notify_only`、`request_human_approval`、`dry_run_executor`、`reject`。
-- 实盘交易执行不进入初版 schema；即使 executor 插件存在，也必须受配置、权限、风险和人工确认共同放行。
+- 初版动作只允许 `notify_only`、`request_human_approval`、`dry_run_broker`、`reject`。
+- 实盘交易执行不进入初版 schema；即使 broker 插件存在，也必须受配置、权限、风险和人工确认共同放行。
 - Decision 生成后应在同一业务事务内更新事件状态，并追加事件状态流转记录。
 
 ## 验证建议

@@ -11,7 +11,7 @@
 - 以用户确认的技术栈为准，PRD 仅作为背景参考。
 - 项目以 Python 为主，TypeScript 主要承担前端和类型消费。
 - 从 0 到 1 阶段保持单体可运行，但目录边界要支持未来多容器和微服务拆分。
-- 行业包、数据源、策略适配器、通知器、交易执行器都按插件体系规划。
+- 行业包、数据源、策略适配器、通知器、交易通道都按插件体系规划。
 - 官方内置插件、第三方社区插件、私有插件和运行时安装插件需要分层管理。
 - 敏感配置、私有策略、数据源关键词、交易密钥不进入 Git。
 
@@ -65,7 +65,7 @@ QuantAgent/
     industries/
     strategies/
     notifications/
-    executors/
+    brokers/
 
   runtime/
     plugins/
@@ -295,11 +295,11 @@ quantagent/plugin_sdk/
 | 行业包插件 | `plugins/industries/` | Oil、Semiconductor、Memory |
 | 策略插件 | `plugins/strategies/` | 趋势策略、事件冲击策略、期权策略 |
 | 通知插件 | `plugins/notifications/` | Discord、Telegram、Email |
-| 执行器插件 | `plugins/executors/` | 美股券商、NYSE 相关接口、Binance、OKX |
+| 交易通道插件 | `plugins/brokers/` | 美股券商、NYSE 相关接口、Binance、OKX |
 
 ### 行业包也是插件
 
-行业包应统一纳入插件体系。一个行业包可以声明依赖多个前置数据源插件，也可以声明自己的 Agent、评分规则、市场映射和执行器偏好。
+行业包应统一纳入插件体系。一个行业包可以声明依赖多个前置数据源插件，也可以声明自己的 Agent、评分规则、市场映射和 broker 偏好。
 
 例如石油行业包可以声明：
 
@@ -317,10 +317,10 @@ Oil Industry Plugin
     - us_equity
     - futures
     - crypto_proxy
-  executors:
-    - executor:us_broker
-    - executor:binance
-    - executor:okx
+  brokers:
+    - broker:us_broker
+    - broker:binance
+    - broker:okx
 ```
 
 ### 官方插件与运行时插件
@@ -331,7 +331,7 @@ plugins/
   industries/
   strategies/
   notifications/
-  executors/
+  brokers/
 
 runtime/
   plugins/
@@ -407,7 +407,7 @@ capabilities:
 - `Registry`：负责发现、注册、查询、启停插件。
 - `Factory`：根据插件 manifest、配置和上下文创建具体实例。
 - `Adapter / Port`：定义核心系统调用外部能力的稳定接口。
-- `Event Bus`：让数据源、行业包、Agent、通知器、执行器通过事件解耦。
+- `Event Bus`：让数据源、行业包、Agent、通知器、交易通道通过事件解耦。
 
 核心流程：
 
@@ -459,7 +459,7 @@ packages/contracts/
 - 事件 JSON Schema。
 - 插件 manifest schema。
 - 插件配置 schema。
-- 市场、执行器、行业包等枚举定义。
+- 市场、交易通道、行业包等枚举定义。
 - 生成给前端使用的 TypeScript 类型和 API client。
 
 ### Zod 与 Python 的边界
@@ -510,7 +510,7 @@ web container
 postgres container
 ```
 
-早期可以共用同一 Python 镜像，通过不同 command 启动 API、worker、scheduler。后续如果需要微服务化，再把 worker、scheduler、source worker、agent runtime、executor gateway 拆成独立镜像。
+早期可以共用同一 Python 镜像，通过不同 command 启动 API、worker、scheduler。后续如果需要微服务化，再把 worker、scheduler、source worker、agent runtime、broker gateway 拆成独立镜像。
 
 ## 初版落地建议
 
@@ -530,7 +530,7 @@ postgres container
 暂缓实现：
 
 - 独立 `apps/scheduler` 的复杂调度能力。
-- 多执行器真实交易插件。
+- 多交易通道真实交易插件。
 - 社区插件市场。
 - 微服务拆分。
 

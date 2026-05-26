@@ -13,7 +13,7 @@
 - 插件配置 schema 不得包含真实 secret；敏感字段使用 secret reference。
 - Source Plugin 只负责采集、接收和标准化原始信息，不能直接调用行业包。
 - Industry Plugin 可以提供 AgentDefinition、Skill、工具、market mapping 和 scoring hints，但不能绕过 AgentRuntime、ToolRegistry、Skill Registry 或 Decision。
-- Executor Plugin 初版必须默认禁用真实执行，只允许 disabled、dry-run 或 mock 路径。
+- Broker Plugin 初版必须默认禁用真实执行，只允许 disabled、dry-run 或 mock 路径。
 - 插件安装、升级、降级、启停、reload、配置变更和执行错误需要可审计。
 
 ## 局部规则

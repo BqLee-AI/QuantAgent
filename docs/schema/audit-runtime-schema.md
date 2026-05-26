@@ -100,7 +100,7 @@ runtime_errors 0..1 ── 0..n audit_logs
 | `decision` | Decision / Policy Gate |
 | `notification` | 通知模块或通知插件 |
 | `approval` | Human Approval 流程 |
-| `executor` | executor 或虚盘流程；虚盘对应协议值 `dry_run` |
+| `broker` | broker 或虚盘流程；虚盘对应协议值 `dry_run` |
 | `database` | 数据库连接、session 或 migration |
 
 ## `audit_logs`

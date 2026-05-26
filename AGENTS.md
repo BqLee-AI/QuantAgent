@@ -97,7 +97,7 @@
 - 插件只能通过 `plugin.yaml` 和 Registry 进入系统，不在核心代码里写死插件 class、import 列表或 if/else 注册。
 - Source Plugin 只负责采集、接收和标准化原始信息，不能直接调用行业包或绕过 Event Bus。
 - Agent、行业包和工具都不能绕过 AgentRuntime、ToolRegistry、Skill Registry、Decision 或 Policy Gate。
-- 真实交易执行默认不是初版能力；executor 必须先支持 disabled、dry-run 或 mock，并由配置、权限、风险和人工确认共同放行。
+- 真实交易执行默认不是初版能力；broker 必须先支持 disabled、dry-run 或 mock，并由配置、权限、风险和人工确认共同放行。
 - ORM model 只负责数据库映射，不能直接作为 API DTO、Event DTO 或 Plugin DTO 返回。
 - 关键状态变化、插件生命周期、工具调用、高风险动作和人工确认必须可审计。
 - 实时通道只做状态变化提醒，不作为业务状态真源；业务状态以 REST、数据库和审计记录恢复。

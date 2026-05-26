@@ -8,7 +8,7 @@
 
 QuantAgent 是一款面向专业交易者和研究员的事件驱动型量化智能系统。系统以事件流为主线，通过 Source Plugin 采集外部信息，经 Router Agent 路由到行业包，再由 AgentRuntime、Scoring / Debate 和 Decision / Policy Gate 形成可审计的通知、人工确认、dry-run 或受控执行结果。
 
-系统采用插件化架构：Source、Industry、Strategy、Notification、Executor 都以 `plugin.yaml` 注册，Registry、ToolRegistry、Skill Registry 和 runtime 目录共同承担运行时治理。
+系统采用插件化架构：Source、Industry、Strategy、Notification、Broker 都以 `plugin.yaml` 注册，Registry、ToolRegistry、Skill Registry 和 runtime 目录共同承担运行时治理。
 
 ## 模块化文档
 
@@ -34,7 +34,7 @@ QuantAgent 是一款面向专业交易者和研究员的事件驱动型量化智
   -> Industry Plugin / AgentRuntime / ToolRegistry / Skill Registry
   -> Scoring / Debate
   -> Decision / Policy Gate
-  -> Notification / Human Approval / Executor
+  -> Notification / Human Approval / Broker
   -> Persistence / Audit / WebSocket 更新
   -> React 前端管理台
 ```

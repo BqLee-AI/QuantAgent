@@ -15,7 +15,7 @@ QuantAgent 是一款面向专业交易者和研究员的事件驱动型量化智
 
 ## 核心愿景
 
-系统采用插件化设计。Source、Industry、Strategy、Notification、Executor 都按插件体系规划，官方插件、第三方插件、私有插件和运行时安装插件通过 Registry 分层管理。
+系统采用插件化设计。Source、Industry、Strategy、Notification、Broker 都按插件体系规划，官方插件、第三方插件、私有插件和运行时安装插件通过 Registry 分层管理。
 
 目标不是构建通用聊天机器人，而是构建一个围绕事件监控、路由、行业分析、评分、审批和受控执行的量化 Agent 系统。
 

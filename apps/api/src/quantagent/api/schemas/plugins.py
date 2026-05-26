@@ -5,7 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
-PluginTypeValue = Literal["source", "industry", "strategy", "notification", "trade_executor"]
+PluginTypeValue = Literal["source", "industry", "strategy", "notification", "broker"]
 PluginStatusValue = Literal["discovered", "valid", "invalid", "enabled", "disabled", "failed"]
 PluginSourceValue = Literal["official", "runtime"]
 

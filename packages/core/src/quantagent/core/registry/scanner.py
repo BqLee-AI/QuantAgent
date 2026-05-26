@@ -41,7 +41,8 @@ REQUIRED_STRING_MANIFEST_FIELDS = frozenset(
 )
 
 PLUGIN_TYPE_ALIASES = {
-    "executor": PluginType.TRADE_EXECUTOR,
+    "executor": PluginType.BROKER,
+    "trade_executor": PluginType.BROKER,
 }
 
 

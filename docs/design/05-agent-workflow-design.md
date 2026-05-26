@@ -191,7 +191,7 @@ Tool Registry 是 Agent 工具的统一注册中心。
 - Source Plugin 暴露的查询工具。
 - Industry Plugin 暴露的领域工具。
 - Strategy Plugin 暴露的策略工具。
-- Notification / Executor 插件暴露的受控工具。
+- Notification / broker 插件暴露的受控工具。
 
 ## Tool-first Agent 行动模型
 
@@ -209,7 +209,7 @@ RouterAgent
   -> tool: generate_trade_plan
   -> tool: notify_user
   -> tool: request_monitoring
-  -> tool: request_executor_action
+  -> tool: request_broker_action
 ```
 
 这样做的原因：
@@ -230,7 +230,7 @@ RouterAgent
 | strategy tool | `generate_trade_plan`、`validate_trade_plan` | 生成或校验交易计划 |
 | notification tool | `notify_user` | 通知用户或请求人工确认 |
 | monitoring tool | `request_monitoring` | 请求后续盯盘或特征监控 |
-| executor tool | `request_executor_action` | 请求交易执行；初版只做虚盘，不操作实盘 |
+| broker tool | `request_broker_action` | 请求交易通道动作；初版只做虚盘，不操作实盘 |
 
 ### 高风险工具
 
@@ -242,7 +242,7 @@ RouterAgent
 - 用户授权。
 - confidence score。
 - risk flags。
-- market / executor policy。
+- market / broker policy。
 - 是否需要 human approval。
 - 是否允许自动交易。
 
@@ -281,14 +281,14 @@ ToolDefinition
 | --- | --- | --- |
 | low | 读取公开 RSS、读取缓存事件 | 默认允许 |
 | medium | 调用外部 API、抓取网页 | 需要限流和日志 |
-| high | 写配置、触发通知、虚盘 executor | 需要审计，可要求确认 |
+| high | 写配置、触发通知、虚盘 broker | 需要审计，可要求确认 |
 | critical | 真实交易执行 | 初版禁用 |
 
 ## 插件自定义工具
 
 插件可以声明自定义工具，但不能直接绕过 ToolRegistry。
 
-工具本身按插件式能力治理。Source、Industry、Strategy、Notification、Executor 插件都可以暴露工具，但工具是否能被 Agent 使用，由 ToolRegistry、AgentRuntime 和权限策略共同决定。
+工具本身按插件式能力治理。Source、Industry、Strategy、Notification、broker 插件都可以暴露工具，但工具是否能被 Agent 使用，由 ToolRegistry、AgentRuntime 和权限策略共同决定。
 
 ### 推荐流程
 
@@ -488,7 +488,7 @@ tool_invocations
 - AgentRuntime 支持 cancel。
 - 高风险工具使用 human approval。
 - 失败输出结构化错误，进入 Decision 降级或人工确认。
-- executor tool 失败或被拒绝时，不允许 Agent 自行重试绕过限制。
+- broker tool 失败或被拒绝时，不允许 Agent 自行重试绕过限制。
 
 ### 常见错误
 

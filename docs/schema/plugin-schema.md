@@ -46,7 +46,7 @@ plugin_versions 1 ── 0..n plugin_dependency_records
 | `industry` | 行业包插件，负责事件行业分析、工具、Skill 和市场映射 |
 | `strategy` | 策略插件，负责把分析结果映射为策略建议 |
 | `notification` | 通知插件，负责 UI 或外部通知 |
-| `executor` | 执行器插件，初版只允许 disabled、虚盘或 mock 路径；虚盘对应协议值 `dry_run` |
+| `broker` | 交易通道插件，初版只允许 disabled、虚盘或 mock 路径；虚盘对应协议值 `dry_run` |
 
 ### `plugin_source`
 
@@ -76,13 +76,13 @@ plugin_versions 1 ── 0..n plugin_dependency_records
 | `failed` | 插件运行或生命周期操作失败 |
 | `installed_but_blocked` | 插件已安装，但依赖、配置或安全策略阻塞启用 |
 
-### `executor_runtime_mode`
+### `broker_runtime_mode`
 
 | 值 | 说明 |
 | --- | --- |
-| `disabled` | 执行器不可执行任何动作 |
-| `dry_run` | 执行器只允许虚盘，不操作实盘 |
-| `mock` | 执行器只允许 mock 执行 |
+| `disabled` | 交易通道不可执行任何动作 |
+| `dry_run` | 交易通道只允许虚盘，不操作实盘 |
+| `mock` | 交易通道只允许 mock 执行 |
 
 初版不支持实盘交易执行模式。真实执行需要后续单独设计权限、风险、审批和审计闭环。
 
@@ -103,14 +103,14 @@ plugin_versions 1 ── 0..n plugin_dependency_records
 | --- | --- | --- | --- |
 | `id` | `uuid` | primary key | 数据库内部主键，不等同于 manifest `id` |
 | `plugin_id` | `text` | not null, unique | manifest 中声明的全局插件 ID，例如 `quantagent.official.source.rss` |
-| `type` | `text` | not null | 插件类型，按 `plugin_type` 值约束，用于区分 source、industry、strategy、notification、executor |
+| `type` | `text` | not null | 插件类型，按 `plugin_type` 值约束，用于区分 source、industry、strategy、notification、broker |
 | `name` | `text` | not null | 当前展示名，来自 active version 的 manifest |
 | `source` | `text` | not null | 插件来源，按 `plugin_source` 值约束，用于区分官方插件、runtime 插件、Git、zip 或私有目录导入 |
 | `status` | `text` | not null | 插件当前运行时状态，按 `plugin_status` 值约束，不代表某个版本的校验状态 |
 | `active_version_id` | `uuid` | nullable | 当前 active 版本 ID；插件未安装、未校验或卸载后可以为空 |
 | `installed_version` | `text` | nullable | 当前 active 版本号的冗余字段，便于列表查询和 UI 展示 |
 | `install_path` | `text` | nullable | 当前 active 插件根目录路径 |
-| `executor_mode` | `text` | nullable | 仅 executor 插件使用，按 `executor_runtime_mode` 值约束；初版默认 `disabled`，非 executor 插件应为空 |
+| `broker_mode` | `text` | nullable | 仅 broker 插件使用，按 `broker_runtime_mode` 值约束；初版默认 `disabled`，非 broker 插件应为空 |
 | `enabled_at` | `timestamptz` | nullable | 最近一次启用成功的时间 |
 | `disabled_at` | `timestamptz` | nullable | 最近一次停用或禁用成功的时间 |
 | `uninstalled_at` | `timestamptz` | nullable | 插件软卸载时间；软卸载不删除历史记录 |
@@ -335,7 +335,7 @@ plugin_versions 1 ── 0..n plugin_dependency_records
 - active version `validation_status = valid`。
 - 存在 active config，或插件 schema 允许空配置。
 - 必需依赖均为 `satisfied` 或等价可用状态。
-- executor 插件的 `executor_mode` 不是空值，且初版只能是 `disabled`、`dry_run` 或 `mock`；其中 `dry_run` 表示虚盘，不操作实盘。
+- broker 插件的 `broker_mode` 不是空值，且初版只能是 `disabled`、`dry_run` 或 `mock`；其中 `dry_run` 表示虚盘，不操作实盘。
 
 ### 停用、reload、卸载
 

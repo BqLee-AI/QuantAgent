@@ -8,7 +8,7 @@
 
 - [x] 2.1 在 `packages/core/src/quantagent/core/registry/` 定义 `PluginManifest`、`PluginType`、`PluginStatus`、`PluginRecord` 和结构化 `PluginError`。
 - [x] 2.2 校验 `plugin.yaml` 必填字段：`id`、`name`、`type`、`version`、`entrypoint`、`capabilities`、`config_schema`。
-- [x] 2.3 将输入类型 `executor` 兼容映射为 canonical `trade_executor`，但不实现真实执行能力。
+- [x] 2.3 将历史输入类型 `executor` / `trade_executor` 兼容映射为 canonical `broker`，但不实现真实执行能力。
 - [x] 2.4 校验 `config_schema` 指向插件目录内存在的 JSON Schema 文件。
 
 ## 3. Registry 扫描器

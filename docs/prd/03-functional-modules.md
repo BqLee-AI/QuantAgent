@@ -11,7 +11,7 @@ Source Plugin
   -> Industry Plugin / AgentRuntime
   -> Scoring / Debate
   -> Decision / Policy Gate
-  -> Notification / Human Approval / Executor
+  -> Notification / Human Approval / Broker
   -> Persistence / Audit / WebSocket
 ```
 

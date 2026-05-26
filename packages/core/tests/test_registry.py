@@ -8,15 +8,15 @@ from quantagent.core.registry import PluginRegistry, PluginSource, PluginStatus,
 
 
 class PluginRegistryScannerTestCase(unittest.TestCase):
-    def test_scans_valid_official_plugin_and_normalizes_executor_alias(self) -> None:
+    def test_scans_valid_official_broker_plugin(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             official_root = root / "plugins"
             runtime_root = root / "missing-runtime"
             self._write_plugin(
-                official_root / "executors" / "mock",
-                plugin_type="executor",
-                plugin_id="quantagent.official.executor.mock",
+                official_root / "brokers" / "mock",
+                plugin_type="broker",
+                plugin_id="quantagent.official.broker.mock",
             )
 
             records = RegistryScanner(official_root=official_root, runtime_root=runtime_root).scan()
@@ -26,8 +26,30 @@ class PluginRegistryScannerTestCase(unittest.TestCase):
         self.assertEqual(record.source, PluginSource.OFFICIAL)
         self.assertEqual(record.status, PluginStatus.VALID)
         self.assertIsNotNone(record.manifest)
-        self.assertEqual(record.manifest.type, PluginType.TRADE_EXECUTOR)
+        self.assertEqual(record.manifest.type, PluginType.BROKER)
         self.assertEqual(record.config_schema_path.name, "config.schema.json")
+
+    def test_legacy_executor_and_trade_executor_types_normalize_to_broker(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            official_root = root / "plugins"
+            runtime_root = root / "missing-runtime"
+            self._write_plugin(
+                official_root / "legacy" / "executor",
+                plugin_type="executor",
+                plugin_id="quantagent.official.legacy.executor",
+            )
+            self._write_plugin(
+                official_root / "legacy" / "trade-executor",
+                plugin_type="trade_executor",
+                plugin_id="quantagent.official.legacy.trade_executor",
+            )
+
+            records = RegistryScanner(official_root=official_root, runtime_root=runtime_root).scan()
+
+        self.assertEqual(len(records), 2)
+        self.assertTrue(all(record.status == PluginStatus.VALID for record in records))
+        self.assertTrue(all(record.manifest and record.manifest.type == PluginType.BROKER for record in records))
 
     def test_missing_runtime_root_is_empty_and_directories_without_manifest_are_ignored(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

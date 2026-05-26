@@ -8,7 +8,7 @@
 
 ## 设计结论
 
-- 初版固定五类插件：`source`、`industry`、`strategy`、`notification`、`executor`。
+- 初版固定五类插件：`source`、`industry`、`strategy`、`notification`、`broker`。
 - 所有插件必须通过 `plugin.yaml` 注册。
 - 禁止在核心代码中硬编码插件注册。
 - 官方插件、第三方插件、社区插件、私有插件统一走 Registry。
@@ -24,7 +24,7 @@
 | `industry` | 对事件进行行业分析 | Oil、Semiconductor、Memory |
 | `strategy` | 将分析结果映射为策略建议 | 趋势策略、事件冲击策略、期权策略 |
 | `notification` | 发送通知或展示提醒 | UI、Discord、Telegram、Email |
-| `executor` | 交易执行能力；初版只做虚盘，不操作实盘；协议仍使用 `dry_run` 命名 | Mock executor；美股券商、Binance、OKX 作为后续实盘候选 |
+| `broker` | 交易通道能力；初版只做虚盘，不操作实盘；协议仍使用 `dry_run` 命名 | Mock broker；美股券商、Binance、OKX 作为后续实盘候选 |
 
 ## 插件目录来源
 
@@ -34,7 +34,7 @@ plugins/
   industries/
   strategies/
   notifications/
-  executors/
+  brokers/
 
 runtime/
   plugins/
@@ -344,14 +344,14 @@ validate_action(action)
 send(notification)
 ```
 
-### Executor Plugin
+### Broker Plugin
 
 ```text
 dry_run(action)
 execute(action)
 ```
 
-初版 executor 必须默认禁用真实 `execute`，只允许 `dry_run` 或 mock。
+初版 broker 必须默认禁用真实 `execute`，只允许 `dry_run` 或 mock。
 
 ## 热重载边界
 

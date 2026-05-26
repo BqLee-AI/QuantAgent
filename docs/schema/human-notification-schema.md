@@ -155,7 +155,7 @@ approval_records 1 ── 0..n notification_records
 | `event_id` | `uuid` | not null, foreign key | 关联事件 ID |
 | `decision_result_id` | `uuid` | nullable, foreign key | 触发该审批的 Decision 结果 ID |
 | `tool_invocation_id` | `uuid` | nullable, foreign key | 触发该审批的高风险工具调用 ID |
-| `target_type` | `text` | not null | 审批目标类型，例如 `decision`、`tool_invocation`、`executor_action`、`plugin_config` |
+| `target_type` | `text` | not null | 审批目标类型，例如 `decision`、`tool_invocation`、`broker_action`、`plugin_config` |
 | `target_id` | `text` | not null | 审批目标 ID，使用 text 以兼容不同目标表 |
 | `action_type` | `text` | not null | 请求动作类型，例如 `notify`、`monitor`、`dry_run`、`execute_order`、`reduce_position`；`dry_run` 表示虚盘，不操作实盘 |
 | `action_side` | `text` | not null | 风险方向，按 `action_side` 值约束，用于前端风险提示和 Policy Gate |
@@ -203,7 +203,7 @@ approval_records 1 ── 0..n notification_records
 
 ### 写入规则
 
-- 用户拒绝后，不允许同一 Decision 继续进入 executor。
+- 用户拒绝后，不允许同一 Decision 继续进入 broker。
 - 文本通道输入不能直接等价于批准，必须经过 `evaluation_summary` 或更强确认流程。
 - 一次性授权 link 只保存 token hash，必须绑定目标 action、过期时间和风险摘要。
 - 一次性授权 token hash 必须唯一映射到单条审批记录，不允许复用。

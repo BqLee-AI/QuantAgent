@@ -11,7 +11,7 @@
 - **WHEN** 开发者在 initialize-project-tooling change 完成后检查仓库
 - **THEN** `apps/api`、`apps/web`、`apps/worker`、`apps/scheduler` 存在
 - **AND** `packages/core`、`packages/agent`、`packages/plugin-sdk`、`packages/adapters`、`packages/contracts` 存在
-- **AND** `plugins/sources`、`plugins/industries`、`plugins/strategies`、`plugins/notifications`、`plugins/executors` 存在
+- **AND** `plugins/sources`、`plugins/industries`、`plugins/strategies`、`plugins/notifications`、`plugins/brokers` 存在
 - **AND** `runtime/plugins`、`runtime/config`、`runtime/data`、`runtime/logs` 存在
 - **AND** `infra/docker` 和 `infra/compose` 存在
 
@@ -104,5 +104,5 @@ initialize-project-tooling change SHALL NOT 实现超出阶段工具初始化之
 #### Scenario: No product workflow is implemented
 
 - **WHEN** initialize-project-tooling change 被评审
-- **THEN** 它不实现真实 event ingestion、event routing、agent workflows、source crawling、plugin loading、approval、notification、executor 或 trading behavior
+- **THEN** 它不实现真实 event ingestion、event routing、agent workflows、source crawling、plugin loading、approval、notification、broker 或 trading behavior
 - **AND** 未来产品行为仍保留在 PRD 和 design documents 中，不隐藏在 tooling 初始化代码里

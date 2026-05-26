@@ -60,7 +60,7 @@ Dashboard
 | Tool | Tool Invocation、Agent Run、Plugin Detail | Tool 是受控外部能力，治理重点是调用记录、权限、来源插件和 schema |
 | Industry Package | Plugins 的 `industry` 类型视图、Plugin Detail | 行业包本质是 `industry` 类型插件，不能和 Plugin 平铺成两个并列主对象 |
 | Source Binding | Industry 插件详情和事件路由解释 | Source Binding 是行业包与 source 插件之间的连接关系 |
-| Executor | Plugins 的 `executor` 类型视图、Approval / Policy 说明 | Executor 是高风险插件类型，初版只能 disabled / dry_run / mock |
+| Broker | Plugins 的 `broker` 类型视图、Approval / Policy 说明 | Broker 是高风险交易通道插件类型，初版只能 disabled / dry_run / mock |
 
 技术上可以保留 `/skills`、`/tools`、`/industries` 等资源路由或后续 deep link，但 V1 产品导航不应把它们抬成与事件、审批、运行态同级的入口。
 
@@ -78,7 +78,7 @@ Registry / Plugins
           -> MarketMapping
       -> strategy
       -> notification
-      -> executor
+      -> broker
   -> Plugin Detail
       -> Overview
       -> Config
@@ -191,9 +191,9 @@ Model Providers / LLM Policies
 
 必须做：
 
-- 统一展示插件记录，并按 source / industry / strategy / notification / executor 类型分视图。
+- 统一展示插件记录，并按 source / industry / strategy / notification / broker 类型分视图。
 - 进入插件详情查看配置、依赖、能力、健康和审计。
-- 对 executor 类型明确展示 disabled / dry_run / mock，初版不支持实盘执行。
+- 对 broker 类型明确展示 disabled / dry_run / mock，初版不支持实盘执行。
 
 不做：
 
@@ -226,7 +226,7 @@ Model Providers / LLM Policies
 
 不做：
 
-- 不承接插件配置、secret 管理、LLM provider key、模型策略、执行器权限和生产风控规则。
+- 不承接插件配置、secret 管理、LLM provider key、模型策略、broker 权限和生产风控规则。
 - 不把高风险系统开关做成普通偏好项。
 
 ## 必须对齐的系统约束
@@ -234,7 +234,7 @@ Model Providers / LLM Policies
 - REST 是业务状态真源，WebSocket 只做状态提醒和 query invalidation。
 - 前端通过 generated client、types 和 Zod schema 消费 API，不在 PRD 中发明最终 contract。
 - 高风险动作必须经过 Decision / Policy Gate。
-- 初版 executor 只允许 disabled / dry_run / mock。
+- 初版 broker 只允许 disabled / dry_run / mock。
 - 插件配置采用 schema-driven form，敏感字段只展示 masked value 或 secret reference。
 - 模型供应商配置通过 ProviderManager / ProviderPolicy 治理，AgentDefinition 只引用 provider policy，不直接绑定 API key。
 - Agent run 和 tool invocation 只展示结构化摘要，不展示完整模型推理链。

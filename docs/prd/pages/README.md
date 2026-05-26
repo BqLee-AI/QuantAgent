@@ -42,7 +42,7 @@
 - Tool：在 Tool Invocation、Agent Run、Plugin Detail 中展示。
 - Industry Package：作为 `industry` 类型插件治理，不单独和 Plugin 平铺。
 - Source Binding：作为 Industry 插件详情和路由解释的一部分。
-- Executor：作为 `executor` 类型插件治理，并受 Approval / Policy Gate 约束。
+- Broker：作为 `broker` 类型插件治理，并受 Approval / Policy Gate 约束。
 
 对应旧草案中的独立 Skill、Tool、Industry 页面已删除，避免误导后续实现。
 

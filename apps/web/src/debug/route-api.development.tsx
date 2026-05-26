@@ -139,7 +139,7 @@ const debugPageRoutes: DebugPageRouteDefinition[] = [
     kicker: '插件',
     title: '插件管理',
     description:
-      '用于查看来源、行业、策略、通知和执行器集成情况的插件清单。',
+      '用于查看来源、行业、策略、通知和交易通道集成情况的插件清单。',
     loadingMessage: '正在加载插件清单...',
     emptyTitle: '当前没有可用插件',
     emptyDescription:

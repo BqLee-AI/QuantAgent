@@ -11,9 +11,9 @@ QuantAgent 已经在 `docs/design/03-plugin-system-and-registry.md`、`plugins/`
 - 定义 Registry 扫描器行为：单个插件失败不能导致整体扫描失败，重复 ID 标记冲突，不做版本求解。
 - 定义插件管理 API 边界：列表、详情、配置 schema 查询和重新扫描，API 层只做 DTO、鉴权、响应 envelope 和路由接入。
 - 定义最小状态集合：`discovered`、`valid`、`invalid`、`enabled`、`disabled`、`failed`。V1 的 enable/disable 只是配置状态，不等于 import、load 或 start。
-- 将历史 `executor` 类型收敛为 `trade_executor` 的兼容别名策略：V1 可读入旧值，但规范输出使用 canonical type。
+- 将交易执行插件 canonical type 收敛为 `broker`，并保留历史 `executor` / `trade_executor` manifest 输入兼容；V1 可读入旧值，但规范输出使用 `broker`。
 - 明确插件协议由 QuantAgent 管理：manifest、config schema、capabilities、生命周期、tool/action 暴露和错误结构都必须通过 Registry/SDK 契约演进，不由单个插件私自定义。
-- 明确从 V1 登记处到最终插件体系的演进路线：V1 先做 Registry 与诊断，V1.1 再做最小 pull source demo，后续再接 RuntimeContext、ToolRegistry、Scheduler、AgentRuntime、Policy Gate 和 dry-run `trade_executor`。
+- 明确从 V1 登记处到最终插件体系的演进路线：V1 先做 Registry 与诊断，V1.1 再做最小 pull source demo，后续再接 RuntimeContext、ToolRegistry、Scheduler、AgentRuntime、Policy Gate 和 dry-run `broker`。
 - 明确后续 V1.1 需要提供一个可审查的小 demo 插件，用来证明第三方插件作者应该如何写 `plugin.yaml`、`config.schema.json` 和最小插件入口；demo 只走只读或 mock 路径，不接真实外部副作用。
 
 ## 能力

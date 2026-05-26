@@ -92,7 +92,7 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 - sample 或可替换的数据边界放在 `src/quantagent/api/providers/`。
 - 标准 routes 统一通过 `quantagent.api.routers.v1.register.register_api_v1_routes` 注册，不要继续在 `main.py` 零散 `include_router(...)`。
 - route 应显式声明 FastAPI `response_model=ApiResponse[T]` 和 OpenAPI `tags`。
-- `GET /api/v1/version` 是最小非业务示例：它只展示 DTO、provider、envelope 和 OpenAPI 契约，不代表 runtime、plugin、approval、Agent、tool invocation、WebSocket、executor、live trading 或业务 endpoint family 已完成。
+- `GET /api/v1/version` 是最小非业务示例：它只展示 DTO、provider、envelope 和 OpenAPI 契约，不代表 runtime、plugin、approval、Agent、tool invocation、WebSocket、broker、live trading 或业务 endpoint family 已完成。
 - `/api/v1/ready` 继续是数据库 readiness probe；不要把 sample provider 和请求级 DB session dependency 混在一起。
 - 本包当前不生成 static OpenAPI artifact、generated client、TypeScript types 或 Zod schema。
 

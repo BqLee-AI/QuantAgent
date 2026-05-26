@@ -13,7 +13,7 @@ function PluginsPage() {
         <p className="page-kicker">插件</p>
         <h1 className="page-title">插件管理</h1>
         <p className="page-description">
-          管理来源、行业、策略、通知和执行器等插件的安装、配置与运行状态。
+          管理来源、行业、策略、通知和交易通道等插件的安装、配置与运行状态。
         </p>
       </section>
 

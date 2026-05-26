@@ -439,8 +439,8 @@ HITL 采用审批工作台 + 紧急授权浮层 + 一次性授权页。
 
 - 前端基于 `/runtime/health` 或 `/me` 类接口获取 capabilities。
 - UI 隐藏不可用入口，但后端仍必须做真正权限校验。
-- 插件启停、secret 配置、approval、executor 能力都必须显示权限状态；初版 executor 只做虚盘，不操作实盘。
-- 初版虚盘 capability key 仍为 `executor.dry_run`，不因为中文术语改成虚盘而新增前端 capability key。
+- 插件启停、secret 配置、approval、broker 能力都必须显示权限状态；初版 broker 只做虚盘，不操作实盘。
+- 初版虚盘 capability key 仍为 `broker.dry_run`，不因为中文术语改成虚盘而新增前端 capability key。
 - 一次性授权 link 页面只展示该 token 允许查看和操作的最小信息。
 - 权限不足错误需要展示 `request_id`，方便排查。
 
@@ -451,7 +451,7 @@ plugin.install
 plugin.configure
 approval.approve
 approval.amend
-executor.dry_run
+broker.dry_run
 secret.manage
 runtime.inspect
 ```

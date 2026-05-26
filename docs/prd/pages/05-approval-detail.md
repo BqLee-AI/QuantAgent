@@ -81,7 +81,7 @@
 - target_type / target_id。
 - instrument / market，如果适用。
 - proposed_payload 的脱敏摘要。
-- blocked_executors / allowed_executors 摘要，如果有。
+- blocked_brokers / allowed_brokers 摘要，如果有。
 
 不得展示完整私有策略、secret、账户密钥或敏感参数。
 
@@ -115,7 +115,7 @@
 
 ## 风控边界
 
-- 批准只表示人类确认，后续仍由 Policy Gate 和 executor mode 决定。
+- 批准只表示人类确认，后续仍由 Policy Gate 和 broker mode 决定。
 - 不允许前端根据分数绕过 required_confirmation_level。
 - 不允许在详情页展示完整模型推理链。
 - 不允许明文展示 secret、token、交易账户敏感信息或完整私有策略。

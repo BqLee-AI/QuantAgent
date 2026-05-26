@@ -74,7 +74,7 @@
   "capabilities": [
     "approval.amend",
     "approval.approve",
-    "executor.dry_run",
+    "broker.dry_run",
     "plugin.configure",
     "plugin.install",
     "runtime.inspect",
@@ -104,7 +104,7 @@
   "capabilities": [
     "approval.amend",
     "approval.approve",
-    "executor.dry_run",
+    "broker.dry_run",
     "plugin.configure",
     "plugin.install",
     "runtime.inspect",
@@ -137,7 +137,7 @@
   "capabilities": [
     "approval.amend",
     "approval.approve",
-    "executor.dry_run",
+    "broker.dry_run",
     "plugin.configure",
     "plugin.install",
     "runtime.inspect",

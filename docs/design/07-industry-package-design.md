@@ -45,7 +45,7 @@
 - 不能直接绕过 AgentRuntime 创建 Agent。
 - 不能直接绕过 ToolRegistry 暴露工具。
 - 不能直接绕过 Skill Registry 注入 Skill。
-- 不能直接绕过 Decision 调用 executor。
+- 不能直接绕过 Decision 调用 broker。
 
 ## SourceBinding
 
@@ -124,7 +124,7 @@ quantagent.official.industry.oil.tool.inventory_lookup
 - 工具调用必须审计。
 - 工具需要的 API key 通过 config schema 声明，并使用 secret reference。
 - 高风险工具必须受 human approval / Policy Gate 控制。
-- 行业包工具不能直接绕过 executor 或 Decision。
+- 行业包工具不能直接绕过 broker 或 Decision。
 
 ## Skill Registry
 
@@ -209,7 +209,7 @@ Oil Main Agent
   -> tool: generate_trade_plan
   -> tool: request_monitoring
   -> tool: notify_user
-  -> tool: request_executor_action
+  -> tool: request_broker_action
 ```
 
 主 Agent 可以产出：
@@ -224,7 +224,7 @@ Oil Main Agent
 - 是否建议通知用户。
 - 是否请求自动执行。
 
-交易相关请求必须通过 executor tool，且 executor tool 必须执行权限、评分、风控和用户配置检查。
+交易相关请求必须通过 broker tool，且 broker tool 必须执行权限、评分、风控和用户配置检查。
 
 ## Market Mapping
 
@@ -240,7 +240,7 @@ mappings/
 
 - Decision 和 UI 需要稳定读取市场、标的和候选工具。
 - 交易执行细节不能藏在 prompt 里。
-- executor 偏好只是建议，最终能否执行仍由 Decision 和 executor policy 决定。
+- broker 偏好只是建议，最终能否执行仍由 Decision 和 broker policy 决定。
 
 ## Scoring Hints
 
@@ -272,7 +272,7 @@ mappings/
 - 私有行业逻辑。
 - 付费数据源 API key。
 - 交易策略偏好。
-- executor 配置。
+- broker 配置。
 
 规则：
 
@@ -437,7 +437,7 @@ IndustryAnalysis
 - `trade_plan_draft` 是交易计划草案，不是最终执行命令。
 - `monitoring_plan` 是盯盘或特征监控建议，可以交给 monitoring tool / scheduler 进一步处理。
 - `affected_instruments` 必须来自结构化 market mapping 或被明确标记为推测。
-- 行业包不能直接调用 executor。
+- 行业包不能直接调用 broker。
 
 ## 初版实现范围
 
@@ -462,7 +462,7 @@ IndustryAnalysis
 - 在线 Skill 编辑和审核流程。
 - 复杂行业评分公式。
 - 行业包市场。
-- 自动交易 executor 深度集成。
+- 自动交易 broker 深度集成。
 
 ## 待确认问题
 

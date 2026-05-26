@@ -2,7 +2,7 @@
 
 ## 页面定位
 
-Registry / Plugins 是 V1 的统一插件治理入口。它管理 `source`、`industry`、`strategy`、`notification`、`executor` 五类插件，不把 Skill、Tool、Industry Package 另外平铺成顶层页面。
+Registry / Plugins 是 V1 的统一插件治理入口。它管理 `source`、`industry`、`strategy`、`notification`、`broker` 五类插件，不把 Skill、Tool、Industry Package 另外平铺成顶层页面。
 
 ## 用户任务
 
@@ -44,7 +44,7 @@ V1 使用一个统一页面，通过类型 tab 分视图：
 - Industries。
 - Strategies。
 - Notifications。
-- Executors。
+- Brokers。
 
 ### Sources
 
@@ -83,11 +83,11 @@ Industry Package 是 `industry` 类型插件，不是独立顶层页面。
 - 送达失败。
 - 配置和 secret reference。
 
-### Executors
+### Brokers
 
 关注：
 
-- executor_runtime_mode：disabled / dry_run / mock。
+- broker_runtime_mode：disabled / dry_run / mock。
 - 初版不支持真实执行。
 - 能力、权限和 Policy Gate 约束。
 - 最近 dry_run 记录和阻断原因。
@@ -117,7 +117,7 @@ Industry Package 是 `industry` 类型插件，不是独立顶层页面。
 
 列表页不建议直接做：
 
-- 高风险启用 executor。
+- 高风险启用 broker。
 - 修改配置。
 - 卸载插件。
 - 管理 Skill 或 Tool 内容。
@@ -133,7 +133,7 @@ Industry Package 是 `industry` 类型插件，不是独立顶层页面。
 | failed | 行内展示 last_error 和详情入口 |
 | dependency_missing | 展示缺失依赖摘要 |
 | config_invalid | 展示配置无效摘要 |
-| executor enabled 风险 | 明确展示初版仅 dry_run / mock |
+| broker enabled 风险 | 明确展示初版仅 dry_run / mock |
 
 ## 验收口径
 
@@ -142,13 +142,13 @@ Industry Package 是 `industry` 类型插件，不是独立顶层页面。
 - 用户能在一个入口理解插件总体状态。
 - 用户能按插件类型治理不同对象。
 - Industry、Skill、Tool 的关系不会被误解成平级导航。
-- Executor 的 disabled / dry_run / mock 边界清晰。
+- Broker 的 disabled / dry_run / mock 边界清晰。
 
 失败信号：
 
 - 顶层导航同时出现 Plugins、Skills、Tools、Industries，且没有解释层级关系。
 - Industry Package 和 Plugin 被当成两个独立主对象。
-- Executor 被展示成可真实执行配置。
+- Broker 被展示成可真实执行配置。
 
 ## 非目标
 

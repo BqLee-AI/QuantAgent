@@ -172,7 +172,7 @@ API SHALL expose a reusable current actor dependency and centralized capability 
 - **AND** the set includes `secret.manage`
 - **AND** the set includes `approval.approve`
 - **AND** the set includes `approval.amend`
-- **AND** the set includes `executor.dry_run`
+- **AND** the set includes `broker.dry_run`
 - **AND** route handlers do not each define independent capability strings for the same concepts
 
 #### Scenario: Missing capability is forbidden

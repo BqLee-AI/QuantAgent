@@ -2,7 +2,7 @@
 
 ## 页面定位
 
-Settings 只承接会话、个人偏好和前端体验偏好。它不是插件配置中心、secret 管理中心、模型供应商配置中心、执行器权限中心或生产风控规则编辑器。
+Settings 只承接会话、个人偏好和前端体验偏好。它不是插件配置中心、secret 管理中心、模型供应商配置中心、broker 权限中心或生产风控规则编辑器。
 
 ## 用户任务
 
@@ -83,13 +83,13 @@ Settings 不承接：
 - LLM provider 管理。
 - ProviderPolicy / 模型策略。
 - 模型预算和 fallback 配置。
-- executor 权限。
+- broker 权限。
 - 自动执行开关。
 - 策略参数。
 - 生产风控规则。
 - Policy Gate 规则。
 
-这些能力应分别进入 Plugin Detail、Model Providers / LLM Policies、后续 Secret 管理、Executor/Risk/Policy 专门治理入口，并必须有更强权限和审计。
+这些能力应分别进入 Plugin Detail、Model Providers / LLM Policies、后续 Secret 管理、Broker / Risk / Policy 专门治理入口，并必须有更强权限和审计。
 
 ## 状态与失败路径
 
@@ -113,7 +113,7 @@ Settings 不承接：
 必须成立：
 
 - 用户能管理个人使用体验。
-- 用户不会在 Settings 里误以为可以控制插件、执行器或风控。
+- 用户不会在 Settings 里误以为可以控制插件、交易通道或风控。
 - 所有高风险系统能力有明确“不在本页”的归属说明。
 
 失败信号：

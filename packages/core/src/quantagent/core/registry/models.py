@@ -13,7 +13,7 @@ class PluginType(StrEnum):
     INDUSTRY = "industry"
     STRATEGY = "strategy"
     NOTIFICATION = "notification"
-    TRADE_EXECUTOR = "trade_executor"
+    BROKER = "broker"
 
 
 class PluginStatus(StrEnum):

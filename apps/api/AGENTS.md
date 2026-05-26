@@ -63,7 +63,7 @@ apps/api/
 - `debug` 路由只能用于非生产诊断；新增调试入口必须保持 `APP_ENV=production` 下不可见，并且生产 OpenAPI 不应暴露 debug 路径。
 - `GET /api/v1/health` 是存活探针，不应依赖数据库、外部服务或业务表结构。
 - `GET /api/v1/ready` 是数据库 readiness probe，只验证已配置数据库可达；不要把 sample provider 和请求级 DB session dependency 混在一起。
-- `GET /api/v1/version` 是最小非业务示例，只展示 DTO、provider、响应信封和 OpenAPI 契约；不要把它扩展成 runtime、plugin、approval、Agent、tool invocation、WebSocket、executor、live trading 或业务 endpoint family。
+- `GET /api/v1/version` 是最小非业务示例，只展示 DTO、provider、响应信封和 OpenAPI 契约；不要把它扩展成 runtime、plugin、approval、Agent、tool invocation、WebSocket、broker、live trading 或业务 endpoint family。
 - WebSocket 或实时通道只负责状态变化通知，不替代 REST 查询和数据库状态真源。
 - 高风险动作即使来自前端按钮或 AI 文本，也必须经过后端 Policy Gate。
 
