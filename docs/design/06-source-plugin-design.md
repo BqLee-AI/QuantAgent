@@ -10,7 +10,7 @@
 ## 设计原则
 
 - Source Plugin 只负责采集、接收、标准化原始信息，不直接做行业判断。
-- Source Plugin 产出的事件必须先进入 Event Bus，再由 Router Agent 和 Industry Plugin 处理。
+- Source Plugin 产出的标准 DTO / `RawEventDraft` 必须由平台写入事件链路，再进入 Event Bus 供 Router Agent 和 Industry Plugin 处理。
 - Source Plugin 可以暴露查询类工具，但工具必须注册到 ToolRegistry，并接受权限、限流和审计管理。
 - 不同 source 的输出必须归一到统一 RawEvent / Event 输入结构。
 - 插件开发者只声明插件能力和配置 schema；配置校验、保存、启停、调度和审计由平台负责。
@@ -31,7 +31,7 @@ Source Plugin
 
 ### 产出事件
 
-Source Plugin 通过拉取、接收或订阅外部信息，产出 `RawEvent`，再由核心系统标准化为 `Event`。
+Source Plugin 通过拉取、接收或订阅外部信息，返回标准 DTO 或 `RawEventDraft` 兼容结构，再由核心系统写入事件链路并标准化为 `Event`。
 
 插件只负责产出标准 DTO 或 `RawEventDraft` 兼容结构，不负责：
 
@@ -122,7 +122,7 @@ SourceBinding
 Source 输出采用 RawEvent -> Event 双层结构：
 
 ```text
-Source Plugin -> RawEvent -> Normalizer -> Event
+Source Plugin -> RawEventDraft / standard DTO -> Runtime persistence -> Normalizer -> Event
 ```
 
 ### RawEvent
@@ -321,7 +321,8 @@ Source Plugin 不能直接调用行业包。
 
 ```text
 Source Plugin
-  -> RawEvent
+  -> RawEventDraft / standard DTO
+  -> Runtime persistence
   -> Normalizer
   -> Event Bus
   -> Router Agent
@@ -417,7 +418,7 @@ quantagent.official.source.jina
 - 组合去重策略。
 - 默认配置 + 行业包覆盖配置。
 - Runtime policy 基础抽象。
-- Source Plugin 通过 Event Bus 发布事件。
+- 平台接收 Source Plugin 返回的标准 DTO / `RawEventDraft`，写入事件链路并负责通过 Event Bus 发布事件。
 - Source Plugin 工具注册到 ToolRegistry。
 - Readability Link Reader 插件。
 - Jina Link Reader 插件。
