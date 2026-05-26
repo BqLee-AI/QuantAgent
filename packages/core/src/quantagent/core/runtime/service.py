@@ -174,10 +174,18 @@ class PluginRuntimeService:
             )
 
         module = self._import_module(module_name)
-        plugin = module
+        entrypoint_object = module
         for attribute in attribute_name.split("."):
-            plugin = getattr(plugin, attribute)
-        return plugin() if inspect.isclass(plugin) else plugin
+            entrypoint_object = getattr(entrypoint_object, attribute)
+        if inspect.isclass(entrypoint_object):
+            return entrypoint_object()
+        if callable(entrypoint_object):
+            return entrypoint_object()
+        raise PluginRuntimeError(
+            code="PLUGIN_ENTRYPOINT_NOT_FACTORY",
+            message="Plugin entrypoint must be a plugin class or factory.",
+            stage="load",
+        )
 
 
 def _validate_record(record: PluginRecord) -> PluginError | None:

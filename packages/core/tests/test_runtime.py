@@ -50,8 +50,14 @@ class PluginRuntimeServiceTestCase(unittest.IsolatedAsyncioTestCase):
             sys.modules.pop(module_name, None)
 
     async def test_invokes_protocol_plugin_without_base_class(self) -> None:
-        plugin = PlainRuntimePlugin()
-        self._install_module("test_runtime_plain", plugin)
+        created_plugins = []
+
+        def create_plugin():
+            plugin = PlainRuntimePlugin()
+            created_plugins.append(plugin)
+            return plugin
+
+        self._install_module("test_runtime_plain", create_plugin)
         record = self._record(entrypoint="test_runtime_plain:plugin")
 
         invocation = await PluginRuntimeService().invoke(
@@ -64,6 +70,7 @@ class PluginRuntimeServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(invocation.ok)
         self.assertEqual(invocation.result.output["capability"], "source.fetch")
         self.assertTrue(invocation.result.output["configured"])
+        plugin = created_plugins[0]
         self.assertTrue(plugin.started)
         self.assertTrue(plugin.stopped)
 
@@ -101,7 +108,7 @@ class PluginRuntimeServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(error.details["error_type"], "ModuleNotFoundError")
 
     async def test_missing_capability_returns_invoke_error(self) -> None:
-        self._install_module("test_runtime_capability", PlainRuntimePlugin())
+        self._install_module("test_runtime_capability", PlainRuntimePlugin)
         record = self._record(entrypoint="test_runtime_capability:plugin")
 
         invocation = await PluginRuntimeService().invoke(record, capability="source.search", request_id="req-1")
@@ -235,6 +242,45 @@ class PluginRuntimeServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(second.result.output["request_id"], "req-b")
         self.assertEqual(second.result.output["context_request_id"], "req-b")
         self.assertEqual(second.result.output["before_sleep"], "req-b")
+
+    async def test_concurrent_factory_entrypoint_invocations_keep_context_isolated(self) -> None:
+        class ConcurrentFactoryPlugin(BasePlugin):
+            async def invoke(self, request):
+                before_sleep = self.context.request_id
+                await asyncio.sleep(0.01)
+                return PluginInvokeResult(
+                    output={
+                        "request_id": request.request_id,
+                        "context_request_id": self.context.request_id,
+                        "before_sleep": before_sleep,
+                    }
+                )
+
+        self._install_module("test_runtime_concurrent_factory", lambda: ConcurrentFactoryPlugin())
+        record = self._record(entrypoint="test_runtime_concurrent_factory:plugin")
+        runtime = PluginRuntimeService()
+
+        first, second = await asyncio.gather(
+            runtime.invoke(record, capability="source.fetch", request_id="req-factory-a"),
+            runtime.invoke(record, capability="source.fetch", request_id="req-factory-b"),
+        )
+
+        self.assertTrue(first.ok)
+        self.assertTrue(second.ok)
+        self.assertEqual(first.result.output["context_request_id"], "req-factory-a")
+        self.assertEqual(first.result.output["before_sleep"], "req-factory-a")
+        self.assertEqual(second.result.output["context_request_id"], "req-factory-b")
+        self.assertEqual(second.result.output["before_sleep"], "req-factory-b")
+
+    async def test_singleton_object_entrypoint_is_rejected_to_avoid_context_races(self) -> None:
+        self._install_module("test_runtime_singleton", PlainRuntimePlugin())
+        record = self._record(entrypoint="test_runtime_singleton:plugin")
+
+        plugin, error = await PluginRuntimeService().load_plugin(record, request_id="req-singleton")
+
+        self.assertIsNone(plugin)
+        self.assertEqual(error.code, "PLUGIN_ENTRYPOINT_NOT_FACTORY")
+        self.assertEqual(error.stage, "load")
 
     async def test_start_failure_still_stops_loaded_plugin(self) -> None:
         stopped = {"value": False}
