@@ -306,6 +306,84 @@ class PluginRuntimeServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(invocation.error.stage, "start")
         self.assertTrue(stopped["value"])
 
+    async def test_start_failure_exposes_cleanup_error_when_stop_fails(self) -> None:
+        class StartAndStopFailingPlugin(BasePlugin):
+            async def start(self):
+                raise PluginRuntimeError(
+                    code="PLUGIN_START_FAILED_BY_TEST",
+                    message="Plugin start failed by test.",
+                    stage="start",
+                )
+
+            async def stop(self):
+                raise PluginRuntimeError(
+                    code="PLUGIN_STOP_FAILED_BY_TEST",
+                    message="Plugin stop failed by test.",
+                    stage="stop",
+                )
+
+        self._install_module("test_runtime_start_stop_failure", StartAndStopFailingPlugin)
+        record = self._record(entrypoint="test_runtime_start_stop_failure:plugin")
+
+        invocation = await PluginRuntimeService().invoke(record, capability="source.fetch", request_id="req-start-stop")
+
+        self.assertFalse(invocation.ok)
+        self.assertEqual(invocation.error.code, "PLUGIN_START_FAILED_BY_TEST")
+        self.assertIsNotNone(invocation.cleanup_error)
+        self.assertEqual(invocation.cleanup_error.code, "PLUGIN_STOP_FAILED_BY_TEST")
+        self.assertEqual(invocation.cleanup_error.stage, "stop")
+
+    async def test_successful_invoke_exposes_cleanup_error_when_stop_fails(self) -> None:
+        class StopFailingPlugin(BasePlugin):
+            async def invoke(self, request):
+                return PluginInvokeResult(output={"ok": True})
+
+            async def stop(self):
+                raise PluginRuntimeError(
+                    code="PLUGIN_STOP_FAILED_BY_TEST",
+                    message="Plugin stop failed by test.",
+                    stage="stop",
+                )
+
+        self._install_module("test_runtime_stop_failure", StopFailingPlugin)
+        record = self._record(entrypoint="test_runtime_stop_failure:plugin")
+
+        invocation = await PluginRuntimeService().invoke(record, capability="source.fetch", request_id="req-stop")
+
+        self.assertTrue(invocation.ok)
+        self.assertEqual(invocation.result.output["ok"], True)
+        self.assertIsNotNone(invocation.cleanup_error)
+        self.assertEqual(invocation.cleanup_error.code, "PLUGIN_STOP_FAILED_BY_TEST")
+
+    async def test_plugin_runtime_error_message_and_details_are_sanitized(self) -> None:
+        class SensitiveErrorPlugin(BasePlugin):
+            async def invoke(self, request):
+                raise PluginRuntimeError(
+                    code="PLUGIN_SENSITIVE_ERROR",
+                    message="token=abc123 failed at /home/xxs/private.env",
+                    stage="invoke",
+                    details={
+                        "token": "abc123",
+                        "nested": {"cookie": "session=value"},
+                        "path": "/home/xxs/private.env",
+                        "safe": "visible",
+                    },
+                )
+
+        self._install_module("test_runtime_sensitive_error", SensitiveErrorPlugin)
+        record = self._record(entrypoint="test_runtime_sensitive_error:plugin")
+
+        invocation = await PluginRuntimeService().invoke(record, capability="source.fetch", request_id="req-sensitive")
+
+        self.assertFalse(invocation.ok)
+        self.assertEqual(invocation.error.code, "PLUGIN_SENSITIVE_ERROR")
+        self.assertNotIn("abc123", invocation.error.message)
+        self.assertNotIn("/home/xxs", invocation.error.message)
+        self.assertEqual(invocation.error.details["token"], "[REDACTED]")
+        self.assertEqual(invocation.error.details["nested"]["cookie"], "[REDACTED]")
+        self.assertEqual(invocation.error.details["path"], "[REDACTED]")
+        self.assertEqual(invocation.error.details["safe"], "visible")
+
     def _install_module(self, module_name: str, plugin) -> None:
         module = types.ModuleType(module_name)
         module.plugin = plugin

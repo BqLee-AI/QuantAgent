@@ -3,9 +3,9 @@ from __future__ import annotations
 import importlib
 import inspect
 import logging
+import re
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from quantagent.core.registry.models import PluginError, PluginRecord, PluginStatus
@@ -22,6 +22,7 @@ from quantagent.plugin_sdk import (
 class PluginRuntimeInvocation:
     result: PluginInvokeResult | None = None
     error: PluginError | None = None
+    cleanup_error: PluginError | None = None
 
     @property
     def ok(self) -> bool:
@@ -61,12 +62,13 @@ class PluginRuntimeService:
 
         start_error = await self.start_plugin(plugin)
         if start_error is not None:
-            await self.stop_plugin(plugin, plugin_id=record.id)
-            return PluginRuntimeInvocation(error=start_error)
+            cleanup_error = await self.stop_plugin(plugin, plugin_id=record.id)
+            return PluginRuntimeInvocation(error=start_error, cleanup_error=cleanup_error)
 
+        invocation = PluginRuntimeInvocation()
         try:
             if not _supports_capability(record, capability):
-                return PluginRuntimeInvocation(
+                invocation = PluginRuntimeInvocation(
                     error=PluginError(
                         code="PLUGIN_CAPABILITY_UNAVAILABLE",
                         message="Plugin capability is not declared by manifest.",
@@ -74,31 +76,39 @@ class PluginRuntimeService:
                         details={"plugin_id": record.id, "capability": capability},
                     )
                 )
-
-            result = await _call_async(
-                plugin.invoke(
-                    PluginInvokeRequest(
-                        capability=capability,
-                        request_id=request_id,
-                        input=input or {},
-                        metadata=metadata or {},
+            else:
+                result = await _call_async(
+                    plugin.invoke(
+                        PluginInvokeRequest(
+                            capability=capability,
+                            request_id=request_id,
+                            input=input or {},
+                            metadata=metadata or {},
+                        )
                     )
                 )
-            )
-            if not isinstance(result, PluginInvokeResult):
-                return PluginRuntimeInvocation(
-                    error=PluginError(
-                        code="PLUGIN_INVOKE_RESULT_INVALID",
-                        message="Plugin invoke returned an invalid result.",
-                        stage="invoke",
-                        details={"plugin_id": record.id, "result_type": type(result).__name__},
+                if not isinstance(result, PluginInvokeResult):
+                    invocation = PluginRuntimeInvocation(
+                        error=PluginError(
+                            code="PLUGIN_INVOKE_RESULT_INVALID",
+                            message="Plugin invoke returned an invalid result.",
+                            stage="invoke",
+                            details={"plugin_id": record.id, "result_type": type(result).__name__},
+                        )
                     )
-                )
-            return PluginRuntimeInvocation(result=result)
+                else:
+                    invocation = PluginRuntimeInvocation(result=result)
         except Exception as exc:
-            return PluginRuntimeInvocation(error=_to_plugin_error(exc, stage="invoke", plugin_id=record.id))
+            invocation = PluginRuntimeInvocation(error=_to_plugin_error(exc, stage="invoke", plugin_id=record.id))
         finally:
-            await self.stop_plugin(plugin, plugin_id=record.id)
+            cleanup_error = await self.stop_plugin(plugin, plugin_id=record.id)
+            if cleanup_error is not None:
+                invocation = PluginRuntimeInvocation(
+                    result=invocation.result,
+                    error=invocation.error,
+                    cleanup_error=cleanup_error,
+                )
+        return invocation
 
     async def load_plugin(
         self,
@@ -225,12 +235,12 @@ async def _call_async(value: Awaitable[Any] | Any) -> Any:
 
 def _to_plugin_error(exc: Exception, *, stage: str, plugin_id: str | None = None) -> PluginError:
     if isinstance(exc, PluginRuntimeError):
-        details = dict(exc.details)
+        details = _sanitize_details(exc.details)
         if plugin_id is not None:
             details.setdefault("plugin_id", plugin_id)
         return PluginError(
             code=exc.code,
-            message=exc.message,
+            message=_sanitize_message(exc.message),
             stage=exc.stage or stage,
             retryable=exc.retryable,
             details=details,
@@ -245,3 +255,46 @@ def _to_plugin_error(exc: Exception, *, stage: str, plugin_id: str | None = None
         stage=stage,
         details=details,
     )
+
+
+SENSITIVE_KEYWORDS = frozenset(
+    {
+        "api_key",
+        "authorization",
+        "cookie",
+        "password",
+        "secret",
+        "session",
+        "token",
+    }
+)
+SENSITIVE_VALUE_PATTERN = re.compile(
+    r"(?i)(token|secret|password|cookie|authorization|api[_-]?key)\s*[:=]\s*[^,\s]+"
+)
+LOCAL_PATH_PATTERN = re.compile(r"(/(?:home|tmp|var|Users)/[^\s,;]+|[A-Za-z]:\\[^\s,;]+)")
+REDACTED = "[REDACTED]"
+
+
+def _sanitize_message(message: str) -> str:
+    return LOCAL_PATH_PATTERN.sub(REDACTED, SENSITIVE_VALUE_PATTERN.sub(REDACTED, message))
+
+
+def _sanitize_details(details: Mapping[str, Any]) -> dict[str, Any]:
+    return {str(key): _sanitize_detail_value(str(key), value) for key, value in details.items()}
+
+
+def _sanitize_detail_value(key: str, value: Any) -> Any:
+    if _is_sensitive_key(key):
+        return REDACTED
+    if isinstance(value, str):
+        return _sanitize_message(value)
+    if isinstance(value, Mapping):
+        return _sanitize_details(value)
+    if isinstance(value, list | tuple):
+        return [_sanitize_detail_value(key, item) for item in value]
+    return value
+
+
+def _is_sensitive_key(key: str) -> bool:
+    normalized_key = key.lower().replace("-", "_")
+    return any(keyword in normalized_key for keyword in SENSITIVE_KEYWORDS)
