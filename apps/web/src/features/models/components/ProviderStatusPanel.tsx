@@ -1,21 +1,21 @@
 import { Chip } from '@heroui/react';
 
-import type { ModelConfig, ModelInvocation } from '../api';
+import type { ModelInvocation, ModelProviderDetail } from '../api';
 import { ModelInvocationTable } from './ModelInvocationTable';
 
-interface ModelStatusPanelProps {
-  config: ModelConfig | undefined;
+interface ProviderStatusPanelProps {
   invocations: readonly ModelInvocation[];
   invocationsError: boolean;
   invocationsLoading: boolean;
+  provider: ModelProviderDetail | undefined;
 }
 
-export function ModelStatusPanel({
-  config,
+export function ProviderStatusPanel({
   invocations,
   invocationsError,
   invocationsLoading,
-}: ModelStatusPanelProps) {
+  provider,
+}: ProviderStatusPanelProps) {
   const latestInvocation = invocations[0] ?? null;
   const tokenTotal = invocations.reduce((sum, item) => sum + (item.token_usage.total_tokens ?? 0), 0);
 
@@ -23,16 +23,18 @@ export function ModelStatusPanel({
     <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
       <div className="mb-5">
         <h2 className="text-base font-semibold text-slate-950">状态与统计</h2>
-        <p className="mt-1 text-sm text-slate-500">这里只展示脱敏状态、最近调用和 token usage。</p>
+        <p className="mt-1 text-sm text-slate-500">展示当前 provider 的配置状态、最近错误和最近调用。</p>
       </div>
 
-      <div className="mb-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        <Stat label="配置状态" value={<StatusChip value={config?.status ?? 'loading'} />} />
-        <Stat label="Key 状态" value={<StatusChip value={config?.key_status ?? 'loading'} />} />
-        <Stat label="Masked key" value={config?.masked_key ?? '-'} />
+      <div className="mb-5 grid gap-3 md:grid-cols-2">
+        <Stat label="配置状态" value={<StatusChip value={provider?.status ?? 'loading'} />} />
+        <Stat label="Key 状态" value={<StatusChip value={provider?.key_status ?? 'loading'} />} />
+        <Stat label="默认 Provider" value={provider?.is_default ? '是' : '否'} />
+        <Stat label="模型数量" value={String(provider?.model_count ?? 0)} />
+        <Stat label="Masked key" value={provider?.masked_key ?? '-'} />
         <Stat label="累计 total tokens" value={String(tokenTotal)} />
-        <Stat label="最近模型" value={latestInvocation?.model ?? config?.model ?? '-'} />
-        <Stat label="最近错误" value={config?.last_error ?? latestInvocation?.error_summary ?? '-'} />
+        <Stat label="最近错误" value={provider?.last_error ?? latestInvocation?.error_summary ?? '-'} />
+        <Stat label="最近预设" value={latestInvocation?.preset_key ?? '-'} />
       </div>
 
       <ModelInvocationTable

@@ -36,6 +36,70 @@ Model Providers / LLM Policies 是 AgentRuntime 的模型供应商和 provider p
 
 ## 页面结构
 
+V1 页面结构应收敛为成熟软件常见的资源管理形态，而不是单表单页：
+
+```text
+系统设置导航
+  -> 模型配置
+       -> 中栏：Provider 列表
+       -> 右栏：Provider 详情编辑
+       -> 顶部或次级视图：任务模型预设
+```
+
+### Provider 列表区
+
+Provider 列表区必须承担“找对象”和“看状态”的职责，至少包含：
+
+- 搜索框
+- 状态筛选：全部 / 已启用 / 默认 / 异常 / 缺少 Key
+- 新增 Provider 按钮
+- Provider 列表项
+
+每个列表项至少展示：
+
+- provider 名称
+- provider 类型
+- 默认标识
+- 启用状态
+- key 状态
+- 最近连接或失败状态
+- 模型数量
+- 最近更新时间
+
+### Provider 详情区
+
+Provider 详情区承担“改对象”的职责，至少分为：
+
+- 基本信息区
+- 连接配置区
+- 模型管理区
+- 状态区
+- Token 使用统计区
+
+### 新增 Provider 入口
+
+新增 Provider 不应只提供空白表单。V1 需要同时支持：
+
+1. 从预置模板新增
+2. 从空白自定义新增
+
+预置模板至少包含：
+
+- OpenAI
+- Anthropic
+- DeepSeek
+- Qwen
+- Moonshot
+- OpenRouter
+- 自定义 OpenAI-compatible
+
+模板需要提供：
+
+- 推荐显示名称
+- 默认 base URL
+- 推荐模型示例
+- provider type
+
 ```text
 页面头
   -> Provider 状态
@@ -73,6 +137,7 @@ Model Providers / LLM Policies 是 AgentRuntime 的模型供应商和 provider p
 - 默认 endpoint 或运行环境摘要，必须脱敏。
 - 最近一次成功调用时间。
 - 最近一次失败摘要。
+- 最近检测状态：未检测 / 成功 / 失败。
 
 不展示：
 
@@ -110,6 +175,12 @@ V1 至少支持以下 policy：
 - 保存前必须校验 fallback 链路、allowed_providers、预算限制和受影响 AgentDefinition。
 - 连接检查只能执行脱敏 smoke check，不发送真实事件、完整 prompt 或私有策略。
 - provider 和 policy 变更必须写入 audit logs。
+
+V1 额外要求：
+
+- API key 应支持就地测试，不要求用户先保存后离开页面再验证。
+- 用户切换 provider 时，若详情存在未保存变更，应给出明确提示。
+- 空白 key 不得覆盖已保存 key。
 
 不允许动作：
 

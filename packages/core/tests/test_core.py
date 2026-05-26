@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import os
 import unittest
 from unittest.mock import patch
 from pathlib import Path
 
 from sqlalchemy.engine import Engine
 
-from quantagent.core.config.settings import Settings
+from quantagent.core.config.settings import Settings, settings
 from quantagent.core.db.base import Base
 from quantagent.core.db import wallet_models
 from quantagent.core.db.session import create_session_factory, create_sync_engine, require_database_url, settings as db_settings

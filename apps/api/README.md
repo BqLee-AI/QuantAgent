@@ -19,7 +19,7 @@ API dotenv 文件按从低到高读取：仓库根目录 `.env`、当前工作�
 
 `APP_ENV` 先从真实环境变量读取；如果没有，再由根 `.env`、`apps/api/.env`、`apps/api/.env.local` 这几个基础层决定，用于选择对应的 `apps/api/.env.<APP_ENV>` 和 `.local` 文件。协作模板使用 `.example` 后缀，真实 `.env*` 文件不要提交。
 
-API 默认监听 `127.0.0.1:8000`。鉴权默认开启（`AUTH_ENABLED=true`）；development、test、local 环境下口令可使用代码中的弱默认值，也可显式设置 `AUTH_ENABLED=false` 完全关闭鉴权；staging 和 production 必须提供安全口令和 session secret。
+API 默认监听 `127.0.0.1:8000`。`APP_ENV=development` 或 `APP_ENV=local` 下，`uv run api` 会默认启用热更新；`staging`/`production` 等非本地环境保持单进程启动。鉴权默认开启（`AUTH_ENABLED=true`）；development、test、local 环境下口令可使用代码中的弱默认值，也可显式设置 `AUTH_ENABLED=false` 完全关闭鉴权；staging 和 production 必须提供安全口令和 session secret。
 
 ### 测试
 
@@ -195,14 +195,17 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 - `AUTH_CSRF_HEADER_NAME`：CSRF header 名称，默认 `X-CSRF-Token`。
 - `MODEL_CONFIG_ENCRYPTION_KEY`：模型供应商 API key 入库加密主密钥；配置模型 key 前必须设置，值可用 Fernet key 生成命令创建。API 不会返回或记录该值。
 
-### 模型配置 API
+### 模型 provider API
 
-- `GET /api/v1/models/config`：返回全局 OpenAI-compatible 模型配置的脱敏状态。
-- `PUT /api/v1/models/config`：保存全局模型配置；请求可提交 API key，服务端加密入库，响应不回显明文。
-- `POST /api/v1/models/actions/test-connection`：使用固定 smoke prompt 验证已保存配置，并记录 token usage。
-- `GET /api/v1/models/invocations`：返回最近模型调用摘要和基础 token usage。
+- `GET /api/v1/models/providers`：返回多个 OpenAI-compatible provider 的脱敏摘要列表和默认 provider id。
+- `POST /api/v1/models/providers`：创建新的 provider；请求可提交 API key，服务端加密入库，响应不回显明文。
+- `GET /api/v1/models/providers/{provider_id}`：返回单个 provider 的脱敏详情。
+- `PUT /api/v1/models/providers/{provider_id}`：更新 provider 配置；API key 为写入式覆盖字段。
+- `POST /api/v1/models/providers/{provider_id}/actions/set-default`：将 provider 设为默认项。
+- `POST /api/v1/models/providers/{provider_id}/actions/test-connection`：使用固定 smoke prompt 验证指定 provider，并记录 provider 维度 token usage。
+- `GET /api/v1/models/invocations`：返回最近模型调用摘要；支持按 `provider_id` 过滤。
 
-模型配置属于受保护管理面，不放入 Settings 或插件配置；写接口需要有效 Cookie Session 和 CSRF header。
+模型 provider 配置属于受保护管理面，不放入 Settings 或插件配置；写接口需要有效 Cookie Session 和 CSRF header。
 
 ### 新增 route 流程
 

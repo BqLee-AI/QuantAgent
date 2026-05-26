@@ -2,28 +2,49 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Protocol
-from urllib import request as urllib_request
 import json
+from typing import Any, Protocol
 import urllib.error
+from urllib import request as urllib_request
 
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from quantagent.core.model_config.crypto import ModelConfigCrypto, ModelConfigCryptoError
 from quantagent.core.model_config.models import (
-    ModelConfigKeyStatus,
-    ModelConfigProviderType,
-    ModelConfigStatus,
     ModelInvocationStatus,
+    ModelPresetKey,
+    ModelPresetStatus,
+    ModelProviderKeyStatus,
+    ModelProviderStatus,
+    ModelProviderType,
+    ModelResolutionSource,
 )
-from quantagent.core.model_config.orm import ModelConfigORM, ModelInvocationORM
+from quantagent.core.model_config.orm import (
+    ModelInvocationORM,
+    ModelPresetBindingORM,
+    ModelProviderModelORM,
+    ModelProviderORM,
+)
+from quantagent.core.model_config.repository import ModelProviderRepository
 
 
-GLOBAL_MODEL_CONFIG_ID = 1
 DEFAULT_PROVIDER_NAME = "OpenAI Compatible"
 DEFAULT_SMOKE_PROMPT = 'Reply with "ok".'
 DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
+PRESET_TITLES: dict[ModelPresetKey, str] = {
+    ModelPresetKey.GLOBAL_DEFAULT: "全局默认模型",
+    ModelPresetKey.ECONOMY_TEXT: "经济型模型",
+    ModelPresetKey.GENERAL_TEXT: "通用模型",
+    ModelPresetKey.REASONING_TEXT: "深度推理模型",
+    ModelPresetKey.MULTIMODAL: "多模态模型",
+}
+PRESET_DESCRIPTIONS: dict[ModelPresetKey, str] = {
+    ModelPresetKey.GLOBAL_DEFAULT: "系统兜底使用的默认模型。",
+    ModelPresetKey.ECONOMY_TEXT: "用于低成本摘要、筛选和轻量提取。",
+    ModelPresetKey.GENERAL_TEXT: "用于日常通用文本任务。",
+    ModelPresetKey.REASONING_TEXT: "用于复杂分析和高质量推理任务。",
+    ModelPresetKey.MULTIMODAL: "用于图片、图表和视觉理解任务。",
+}
 
 
 class ModelConfigServiceError(RuntimeError):
@@ -43,13 +64,44 @@ class ModelConfigServiceError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class SaveModelConfigInput:
+class CreateModelProviderInput:
     name: str
-    model: str
     base_url: str | None = None
     api_key: str | None = None
     enabled: bool = True
-    provider_type: ModelConfigProviderType = ModelConfigProviderType.OPENAI_COMPATIBLE
+    provider_type: ModelProviderType = ModelProviderType.OPENAI_COMPATIBLE
+    is_default: bool = False
+
+
+@dataclass(frozen=True)
+class UpdateModelProviderInput:
+    name: str
+    base_url: str | None = None
+    api_key: str | None = None
+    enabled: bool = True
+    provider_type: ModelProviderType = ModelProviderType.OPENAI_COMPATIBLE
+
+
+@dataclass(frozen=True)
+class CreateProviderModelInput:
+    model_name: str
+    enabled: bool = True
+    supports_vision: bool = False
+    is_global_default: bool = False
+
+
+@dataclass(frozen=True)
+class UpdateProviderModelInput:
+    model_name: str
+    enabled: bool = True
+    supports_vision: bool = False
+    is_global_default: bool = False
+
+
+@dataclass(frozen=True)
+class UpdateModelPresetInput:
+    primary_model_id: int | None
+    fallback_model_id: int | None
 
 
 @dataclass(frozen=True)
@@ -60,25 +112,83 @@ class ModelTokenUsage:
 
 
 @dataclass(frozen=True)
-class ModelConfigResult:
-    provider_type: ModelConfigProviderType
+class ModelProviderModelResult:
+    id: int
+    provider_id: int
+    model_name: str
+    enabled: bool
+    supports_vision: bool
+    is_global_default: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class ModelProviderSummaryResult:
+    id: int
+    provider_type: ModelProviderType
     name: str
     base_url: str | None
-    model: str
     enabled: bool
-    status: ModelConfigStatus
-    key_status: ModelConfigKeyStatus
+    is_default: bool
+    status: ModelProviderStatus
+    key_status: ModelProviderKeyStatus
     masked_key: str | None
     last_error: str | None
-    updated_at: datetime | None
+    model_count: int
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class ModelProviderDetailResult:
+    id: int
+    provider_type: ModelProviderType
+    name: str
+    base_url: str | None
+    enabled: bool
+    is_default: bool
+    status: ModelProviderStatus
+    key_status: ModelProviderKeyStatus
+    masked_key: str | None
+    last_error: str | None
+    model_count: int
+    models: list[ModelProviderModelResult]
+    updated_at: datetime
+
+
+@dataclass(frozen=True)
+class ModelProviderListResult:
+    default_provider_id: int | None
+    providers: list[ModelProviderSummaryResult]
+
+
+@dataclass(frozen=True)
+class ModelPresetBindingResult:
+    preset_key: ModelPresetKey
+    title: str
+    description: str
+    primary_model: ModelProviderModelResult | None
+    fallback_model: ModelProviderModelResult | None
+    status: ModelPresetStatus
+    validation_message: str | None
+
+
+@dataclass(frozen=True)
+class ResolvedModelResult:
+    preset_key: ModelPresetKey
+    source: ModelResolutionSource
+    provider: ModelProviderORM
+    model: ModelProviderModelORM
 
 
 @dataclass(frozen=True)
 class ModelInvocationResult:
     id: int | None
-    provider_type: ModelConfigProviderType
+    provider_id: int | None
+    provider_type: ModelProviderType
     provider_name: str
     model: str
+    preset_key: ModelPresetKey | None
     status: ModelInvocationStatus
     token_usage: ModelTokenUsage
     error_summary: str | None
@@ -106,7 +216,7 @@ class FixedModelCallClient(Protocol):
 
 
 class OpenAICompatibleModelClient:
-    """Minimal OpenAI-compatible chat completions client used by V1 smoke checks."""
+    """Minimal OpenAI-compatible chat completions client used by provider smoke checks."""
 
     def run_fixed_smoke(
         self,
@@ -189,135 +299,526 @@ class ModelConfigService:
         self._session = session
         self._encryption_key = encryption_key
         self._client = client or OpenAICompatibleModelClient()
+        self._repository = ModelProviderRepository(session)
 
-    def get_config(self) -> ModelConfigResult:
-        return _config_result(self._get_config())
+    def list_providers(self) -> ModelProviderListResult:
+        providers = self._repository.list_providers()
+        default_provider = self._repository.find_default_provider()
+        return ModelProviderListResult(
+            default_provider_id=default_provider.id if default_provider else None,
+            providers=[self._provider_summary_result(item) for item in providers],
+        )
 
-    def save_config(self, payload: SaveModelConfigInput) -> ModelConfigResult:
-        config = self._get_config()
+    def get_provider(self, provider_id: int) -> ModelProviderDetailResult:
+        provider = self._require_provider(provider_id)
+        return self._provider_detail_result(provider)
+
+    def create_provider(self, payload: CreateModelProviderInput) -> ModelProviderDetailResult:
         now = _utcnow()
-        if config is None:
-            config = ModelConfigORM(
-                id=GLOBAL_MODEL_CONFIG_ID,
-                provider_type=payload.provider_type.value,
-                name=payload.name,
-                base_url=payload.base_url,
-                model=payload.model,
-                enabled=payload.enabled,
-                encrypted_api_key=None,
-                last_error=None,
-                created_at=now,
-                updated_at=now,
-            )
-            self._session.add(config)
-
-        config.provider_type = payload.provider_type.value
-        config.name = payload.name
-        config.base_url = payload.base_url
-        config.model = payload.model
-        config.enabled = payload.enabled
-        config.last_error = None
-        config.updated_at = now
+        provider = ModelProviderORM(
+            provider_type=payload.provider_type.value,
+            name=payload.name,
+            base_url=payload.base_url,
+            enabled=payload.enabled,
+            is_default=False,
+            encrypted_api_key=None,
+            last_error=None,
+            created_at=now,
+            updated_at=now,
+        )
         if payload.api_key is not None:
-            try:
-                config.encrypted_api_key = self._crypto().encrypt(payload.api_key)
-            except ModelConfigCryptoError as exc:
-                raise ModelConfigServiceError(
-                    "Model API key encryption is not configured",
-                    code="MODEL_CONFIG_ENCRYPTION_UNAVAILABLE",
-                ) from exc
+            provider.encrypted_api_key = self._encrypt_key(payload.api_key)
+
+        self._repository.create_provider(provider)
+        if payload.is_default or self._repository.find_default_provider() is None:
+            self._set_default_provider(provider)
+        self._session.commit()
+        self._session.refresh(provider)
+        return self._provider_detail_result(provider)
+
+    def update_provider(self, provider_id: int, payload: UpdateModelProviderInput) -> ModelProviderDetailResult:
+        provider = self._require_provider(provider_id)
+        provider.provider_type = payload.provider_type.value
+        provider.name = payload.name
+        provider.base_url = payload.base_url
+        provider.enabled = payload.enabled
+        provider.last_error = None
+        provider.updated_at = _utcnow()
+        if payload.api_key is not None:
+            provider.encrypted_api_key = self._encrypt_key(payload.api_key)
+
+        if provider.is_default and not provider.enabled:
+            self._clear_default_provider_and_promote_next(excluding_provider_id=provider.id)
 
         self._session.commit()
-        self._session.refresh(config)
-        return _config_result(config)
+        self._session.refresh(provider)
+        return self._provider_detail_result(provider)
 
-    def test_connection(self, *, request_id: str | None = None, trace_id: str | None = None) -> ModelInvocationResult:
-        config = self._get_config()
-        if config is None or not config.encrypted_api_key:
-            invocation = self._record_invocation(
-                config=config,
-                status=ModelInvocationStatus.FAILED,
-                token_usage=ModelTokenUsage(),
-                error_summary="MODEL_CONFIG_KEY_MISSING",
+    def set_default_provider(self, provider_id: int) -> ModelProviderDetailResult:
+        provider = self._require_provider(provider_id)
+        self._set_default_provider(provider)
+        self._session.commit()
+        self._session.refresh(provider)
+        return self._provider_detail_result(provider)
+
+    def create_provider_model(self, provider_id: int, payload: CreateProviderModelInput) -> ModelProviderModelResult:
+        provider = self._require_provider(provider_id)
+        if self._repository.find_provider_model_by_name(provider_id=provider.id, model_name=payload.model_name):
+            raise ModelConfigServiceError(
+                "Model already exists under provider",
+                code="MODEL_PROVIDER_MODEL_DUPLICATE",
+                safe_details={"provider_id": provider.id},
+            )
+
+        now = _utcnow()
+        model = ModelProviderModelORM(
+            provider_id=provider.id,
+            model_name=payload.model_name,
+            enabled=payload.enabled,
+            supports_vision=payload.supports_vision,
+            is_global_default=False,
+            created_at=now,
+            updated_at=now,
+        )
+        self._repository.create_provider_model(model)
+        if payload.is_global_default or self._repository.find_global_default_model() is None:
+            self._set_global_default_model(model)
+        provider.updated_at = _utcnow()
+        self._session.commit()
+        self._session.refresh(model)
+        return _provider_model_result(model)
+
+    def update_provider_model(
+        self,
+        provider_id: int,
+        model_id: int,
+        payload: UpdateProviderModelInput,
+    ) -> ModelProviderModelResult:
+        provider = self._require_provider(provider_id)
+        model = self._require_provider_model(model_id)
+        if model.provider_id != provider.id:
+            raise ModelConfigServiceError("Provider model was not found", code="MODEL_PROVIDER_MODEL_NOT_FOUND")
+
+        duplicate = self._repository.find_provider_model_by_name(provider_id=provider.id, model_name=payload.model_name)
+        if duplicate is not None and duplicate.id != model.id:
+            raise ModelConfigServiceError(
+                "Model already exists under provider",
+                code="MODEL_PROVIDER_MODEL_DUPLICATE",
+                safe_details={"provider_id": provider.id},
+            )
+
+        model.model_name = payload.model_name
+        model.enabled = payload.enabled
+        model.supports_vision = payload.supports_vision
+        model.updated_at = _utcnow()
+        if payload.is_global_default:
+            self._set_global_default_model(model)
+        elif model.is_global_default and not payload.is_global_default:
+            self._clear_global_default_and_promote_next(excluding_model_id=model.id)
+
+        provider.updated_at = _utcnow()
+        self._session.commit()
+        self._session.refresh(model)
+        return _provider_model_result(model)
+
+    def delete_provider_model(self, provider_id: int, model_id: int) -> None:
+        provider = self._require_provider(provider_id)
+        model = self._require_provider_model(model_id)
+        if model.provider_id != provider.id:
+            raise ModelConfigServiceError("Provider model was not found", code="MODEL_PROVIDER_MODEL_NOT_FOUND")
+
+        self._validate_delete_provider_model(model)
+        was_global_default = model.is_global_default
+        self._repository.delete_provider_model(model)
+        if was_global_default:
+            self._clear_global_default_and_promote_next(excluding_model_id=model.id)
+        provider.updated_at = _utcnow()
+        self._session.commit()
+
+    def list_presets(self) -> list[ModelPresetBindingResult]:
+        self._ensure_all_presets_exist()
+        return [self._preset_binding_result(item) for item in self._repository.list_preset_bindings()]
+
+    def update_preset(self, preset_key: ModelPresetKey, payload: UpdateModelPresetInput) -> ModelPresetBindingResult:
+        self._ensure_all_presets_exist()
+        primary_model = self._optional_provider_model(payload.primary_model_id)
+        fallback_model = self._optional_provider_model(payload.fallback_model_id)
+        self._validate_preset_models(preset_key, primary_model, fallback_model)
+        binding = self._repository.upsert_preset_binding(
+            preset_key=preset_key,
+            primary_model_id=primary_model.id if primary_model else None,
+            fallback_model_id=fallback_model.id if fallback_model else None,
+        )
+        self._session.commit()
+        self._session.refresh(binding)
+        return self._preset_binding_result(binding)
+
+    def resolve_preset_model(self, preset_key: ModelPresetKey) -> ResolvedModelResult:
+        binding = self._repository.get_preset_binding(preset_key)
+        if binding is None or binding.primary_model_id is None:
+            raise ModelConfigServiceError(
+                "Preset primary model is not configured",
+                code="MODEL_PRESET_PRIMARY_MISSING",
+                safe_details={"preset_key": preset_key.value},
+            )
+
+        primary_model = self._require_provider_model(binding.primary_model_id)
+        if self._is_usable_model(primary_model, preset_key):
+            return self._resolved_model_result(preset_key, primary_model, ModelResolutionSource.PRIMARY)
+
+        if binding.fallback_model_id is not None:
+            fallback_model = self._require_provider_model(binding.fallback_model_id)
+            if self._is_usable_model(fallback_model, preset_key):
+                return self._resolved_model_result(preset_key, fallback_model, ModelResolutionSource.FALLBACK)
+
+        global_default_model = self._repository.find_global_default_model()
+        if global_default_model is not None and self._is_usable_model(global_default_model, preset_key):
+            return self._resolved_model_result(
+                preset_key,
+                global_default_model,
+                ModelResolutionSource.GLOBAL_DEFAULT,
+            )
+
+        raise ModelConfigServiceError(
+            "No compatible model is available for preset",
+            code="MODEL_PRESET_NO_AVAILABLE_MODEL",
+            safe_details={"preset_key": preset_key.value},
+        )
+
+    def test_connection(
+        self,
+        provider_id: int,
+        *,
+        request_id: str | None = None,
+        trace_id: str | None = None,
+    ) -> ModelInvocationResult:
+        provider = self._require_provider(provider_id)
+        model = self._pick_provider_test_model(provider)
+        if not provider.encrypted_api_key:
+            invocation = self._record_failed_invocation_and_commit(
+                provider=provider,
+                model_name=model.model_name if model else DEFAULT_PROVIDER_NAME,
+                preset_key=ModelPresetKey.GLOBAL_DEFAULT,
+                error_summary="MODEL_PROVIDER_KEY_MISSING",
                 request_id=request_id,
                 trace_id=trace_id,
             )
             raise ModelConfigServiceError(
-                "Model API key is missing",
-                code="MODEL_CONFIG_KEY_MISSING",
-                safe_details={"invocation_id": invocation.id},
+                "Model provider API key is missing",
+                code="MODEL_PROVIDER_KEY_MISSING",
+                safe_details={"invocation_id": invocation.id, "provider_id": provider.id},
             )
-        if not config.enabled:
-            invocation = self._record_invocation(
-                config=config,
-                status=ModelInvocationStatus.FAILED,
-                token_usage=ModelTokenUsage(),
-                error_summary="MODEL_CONFIG_DISABLED",
+        if not provider.enabled:
+            invocation = self._record_failed_invocation_and_commit(
+                provider=provider,
+                model_name=model.model_name if model else DEFAULT_PROVIDER_NAME,
+                preset_key=ModelPresetKey.GLOBAL_DEFAULT,
+                error_summary="MODEL_PROVIDER_DISABLED",
                 request_id=request_id,
                 trace_id=trace_id,
             )
             raise ModelConfigServiceError(
-                "Model config is disabled",
-                code="MODEL_CONFIG_DISABLED",
-                safe_details={"invocation_id": invocation.id},
+                "Model provider is disabled",
+                code="MODEL_PROVIDER_DISABLED",
+                safe_details={"invocation_id": invocation.id, "provider_id": provider.id},
+            )
+        if model is None:
+            invocation = self._record_failed_invocation_and_commit(
+                provider=provider,
+                model_name=DEFAULT_PROVIDER_NAME,
+                preset_key=ModelPresetKey.GLOBAL_DEFAULT,
+                error_summary="MODEL_PROVIDER_MODEL_MISSING",
+                request_id=request_id,
+                trace_id=trace_id,
+            )
+            raise ModelConfigServiceError(
+                "Provider does not have an enabled model",
+                code="MODEL_PROVIDER_MODEL_MISSING",
+                safe_details={"invocation_id": invocation.id, "provider_id": provider.id},
             )
 
         try:
             # Plaintext exists only in this runtime scope; query APIs and invocation logs never receive it.
-            api_key = self._crypto().decrypt(config.encrypted_api_key)
+            api_key = self._crypto().decrypt(provider.encrypted_api_key)
             call_result = self._client.run_fixed_smoke(
-                base_url=config.base_url,
-                model=config.model,
+                base_url=provider.base_url,
+                model=model.model_name,
                 api_key=api_key,
                 request_id=request_id,
             )
         except ModelConfigCryptoError as exc:
-            invocation = self._record_invocation(
-                config=config,
-                status=ModelInvocationStatus.FAILED,
-                token_usage=ModelTokenUsage(),
-                error_summary="MODEL_CONFIG_DECRYPT_FAILED",
+            invocation = self._record_failed_invocation_and_commit(
+                provider=provider,
+                model_name=model.model_name,
+                preset_key=ModelPresetKey.GLOBAL_DEFAULT,
+                error_summary="MODEL_PROVIDER_DECRYPT_FAILED",
                 request_id=request_id,
                 trace_id=trace_id,
             )
             raise ModelConfigServiceError(
-                "Model API key cannot be decrypted",
-                code="MODEL_CONFIG_DECRYPT_FAILED",
-                safe_details={"invocation_id": invocation.id},
+                "Model provider API key cannot be decrypted",
+                code="MODEL_PROVIDER_DECRYPT_FAILED",
+                safe_details={"invocation_id": invocation.id, "provider_id": provider.id},
             ) from exc
         except ModelConfigServiceError as exc:
-            config.last_error = exc.code
-            invocation = self._record_invocation(
-                config=config,
-                status=ModelInvocationStatus.FAILED,
-                token_usage=ModelTokenUsage(),
+            provider.last_error = exc.code
+            invocation = self._record_failed_invocation_and_commit(
+                provider=provider,
+                model_name=model.model_name,
+                preset_key=ModelPresetKey.GLOBAL_DEFAULT,
                 error_summary=exc.code,
                 request_id=request_id,
                 trace_id=trace_id,
             )
             exc.safe_details.setdefault("invocation_id", invocation.id)
+            exc.safe_details.setdefault("provider_id", provider.id)
             raise
 
-        config.last_error = None
-        return self._record_invocation(
-            config=config,
+        provider.last_error = None
+        invocation = self._record_invocation(
+            provider=provider,
+            model_name=model.model_name,
+            preset_key=ModelPresetKey.GLOBAL_DEFAULT,
             status=ModelInvocationStatus.SUCCEEDED,
             token_usage=call_result.token_usage,
             error_summary=None,
             request_id=request_id,
             trace_id=trace_id,
         )
+        self._session.commit()
+        return invocation
 
-    def list_invocations(self, *, limit: int = 20) -> list[ModelInvocationResult]:
-        statement = (
-            select(ModelInvocationORM)
-            .order_by(ModelInvocationORM.created_at.desc(), ModelInvocationORM.id.desc())
-            .limit(limit)
+    def list_invocations(
+        self,
+        *,
+        limit: int = 20,
+        provider_id: int | None = None,
+        preset_key: ModelPresetKey | None = None,
+    ) -> list[ModelInvocationResult]:
+        if provider_id is not None and self._repository.get_provider(provider_id) is None:
+            raise ModelConfigServiceError("Model provider was not found", code="MODEL_PROVIDER_NOT_FOUND")
+        return [
+            _invocation_result(item)
+            for item in self._repository.list_invocations(limit=limit, provider_id=provider_id, preset_key=preset_key)
+        ]
+
+    def _encrypt_key(self, api_key: str) -> str:
+        try:
+            return self._crypto().encrypt(api_key)
+        except ModelConfigCryptoError as exc:
+            raise ModelConfigServiceError(
+                "Model API key encryption is not configured",
+                code="MODEL_CONFIG_ENCRYPTION_UNAVAILABLE",
+            ) from exc
+
+    def _require_provider(self, provider_id: int) -> ModelProviderORM:
+        provider = self._repository.get_provider(provider_id)
+        if provider is None:
+            raise ModelConfigServiceError("Model provider was not found", code="MODEL_PROVIDER_NOT_FOUND")
+        return provider
+
+    def _require_provider_model(self, model_id: int) -> ModelProviderModelORM:
+        model = self._repository.get_provider_model(model_id)
+        if model is None:
+            raise ModelConfigServiceError("Provider model was not found", code="MODEL_PROVIDER_MODEL_NOT_FOUND")
+        return model
+
+    def _optional_provider_model(self, model_id: int | None) -> ModelProviderModelORM | None:
+        if model_id is None:
+            return None
+        return self._require_provider_model(model_id)
+
+    def _set_default_provider(self, provider: ModelProviderORM) -> None:
+        self._repository.clear_default_provider()
+        provider.is_default = True
+        provider.updated_at = _utcnow()
+
+    def _clear_default_provider_and_promote_next(self, *, excluding_provider_id: int) -> None:
+        self._repository.clear_default_provider()
+        for candidate in self._repository.list_providers():
+            if candidate.id == excluding_provider_id or not candidate.enabled:
+                continue
+            candidate.is_default = True
+            candidate.updated_at = _utcnow()
+            return
+
+    def _set_global_default_model(self, model: ModelProviderModelORM) -> None:
+        self._repository.clear_global_default_model()
+        model.is_global_default = True
+        model.updated_at = _utcnow()
+
+    def _clear_global_default_and_promote_next(self, *, excluding_model_id: int) -> None:
+        self._repository.clear_global_default_model()
+        for provider in self._repository.list_providers():
+            if not provider.enabled:
+                continue
+            for candidate in self._repository.list_provider_models(provider.id):
+                if candidate.id == excluding_model_id or not candidate.enabled:
+                    continue
+                self._set_global_default_model(candidate)
+                return
+
+    def _validate_delete_provider_model(self, model: ModelProviderModelORM) -> None:
+        for binding in self._repository.list_preset_bindings():
+            if binding.primary_model_id == model.id or binding.fallback_model_id == model.id:
+                raise ModelConfigServiceError(
+                    "Provider model is still referenced by preset",
+                    code="MODEL_PROVIDER_MODEL_IN_USE",
+                    safe_details={"preset_key": binding.preset_key},
+                )
+
+    def _ensure_all_presets_exist(self) -> None:
+        for preset_key in ModelPresetKey:
+            if self._repository.get_preset_binding(preset_key) is None:
+                self._repository.upsert_preset_binding(
+                    preset_key=preset_key,
+                    primary_model_id=None,
+                    fallback_model_id=None,
+                )
+        self._session.flush()
+
+    def _validate_preset_models(
+        self,
+        preset_key: ModelPresetKey,
+        primary_model: ModelProviderModelORM | None,
+        fallback_model: ModelProviderModelORM | None,
+    ) -> None:
+        if preset_key is not ModelPresetKey.GLOBAL_DEFAULT and primary_model is None:
+            raise ModelConfigServiceError(
+                "Preset primary model is required",
+                code="MODEL_PRESET_PRIMARY_REQUIRED",
+                safe_details={"preset_key": preset_key.value},
+            )
+        if primary_model and not self._is_bindable_model(primary_model, preset_key):
+            raise ModelConfigServiceError(
+                "Primary model does not satisfy preset requirements",
+                code="MODEL_PRESET_PRIMARY_INVALID",
+                safe_details={"preset_key": preset_key.value, "model_id": primary_model.id},
+            )
+        if fallback_model and not self._is_bindable_model(fallback_model, preset_key):
+            raise ModelConfigServiceError(
+                "Fallback model does not satisfy preset requirements",
+                code="MODEL_PRESET_FALLBACK_INVALID",
+                safe_details={"preset_key": preset_key.value, "model_id": fallback_model.id},
+            )
+
+    def _resolved_model_result(
+        self,
+        preset_key: ModelPresetKey,
+        model: ModelProviderModelORM,
+        source: ModelResolutionSource,
+    ) -> ResolvedModelResult:
+        provider = self._require_provider(model.provider_id)
+        return ResolvedModelResult(
+            preset_key=preset_key,
+            source=source,
+            provider=provider,
+            model=model,
         )
-        return [_invocation_result(row) for row in self._session.scalars(statement).all()]
 
-    def _get_config(self) -> ModelConfigORM | None:
-        return self._session.get(ModelConfigORM, GLOBAL_MODEL_CONFIG_ID)
+    def _is_usable_model(
+        self,
+        model: ModelProviderModelORM,
+        preset_key: ModelPresetKey,
+        *,
+        ignore_current_binding: bool = False,
+    ) -> bool:
+        provider = self._repository.get_provider(model.provider_id)
+        if provider is None or not provider.enabled or not model.enabled:
+            return False
+        if preset_key is ModelPresetKey.MULTIMODAL and not model.supports_vision:
+            return False
+        if ignore_current_binding:
+            return True
+        return True
+
+    def _is_bindable_model(self, model: ModelProviderModelORM, preset_key: ModelPresetKey) -> bool:
+        provider = self._repository.get_provider(model.provider_id)
+        if provider is None:
+            return False
+        if preset_key is ModelPresetKey.MULTIMODAL and not model.supports_vision:
+            return False
+        return True
+
+    def _pick_provider_test_model(self, provider: ModelProviderORM) -> ModelProviderModelORM | None:
+        models = self._repository.list_provider_models(provider.id)
+        for candidate in models:
+            if candidate.enabled:
+                return candidate
+        return None
+
+    def _provider_summary_result(self, provider: ModelProviderORM) -> ModelProviderSummaryResult:
+        models = self._repository.list_provider_models(provider.id)
+        has_key = bool(provider.encrypted_api_key)
+        status = ModelProviderStatus.CONFIGURED
+        if not provider.enabled:
+            status = ModelProviderStatus.DISABLED
+        elif not has_key:
+            status = ModelProviderStatus.MISSING_KEY
+        elif provider.last_error:
+            status = ModelProviderStatus.FAILED
+
+        return ModelProviderSummaryResult(
+            id=provider.id,
+            provider_type=ModelProviderType(provider.provider_type),
+            name=provider.name,
+            base_url=provider.base_url,
+            enabled=provider.enabled,
+            is_default=provider.is_default,
+            status=status,
+            key_status=ModelProviderKeyStatus.CONFIGURED if has_key else ModelProviderKeyStatus.MISSING,
+            # This marker is deliberately non-reversible; it only communicates configured state to the UI.
+            masked_key="********" if has_key else None,
+            last_error=provider.last_error,
+            model_count=len(models),
+            updated_at=provider.updated_at,
+        )
+
+    def _provider_detail_result(self, provider: ModelProviderORM) -> ModelProviderDetailResult:
+        summary = self._provider_summary_result(provider)
+        models = [_provider_model_result(item) for item in self._repository.list_provider_models(provider.id)]
+        return ModelProviderDetailResult(
+            id=summary.id,
+            provider_type=summary.provider_type,
+            name=summary.name,
+            base_url=summary.base_url,
+            enabled=summary.enabled,
+            is_default=summary.is_default,
+            status=summary.status,
+            key_status=summary.key_status,
+            masked_key=summary.masked_key,
+            last_error=summary.last_error,
+            model_count=summary.model_count,
+            models=models,
+            updated_at=summary.updated_at,
+        )
+
+    def _preset_binding_result(self, binding: ModelPresetBindingORM) -> ModelPresetBindingResult:
+        preset_key = ModelPresetKey(binding.preset_key)
+        primary_model = self._optional_provider_model(binding.primary_model_id)
+        fallback_model = self._optional_provider_model(binding.fallback_model_id)
+        status = ModelPresetStatus.CONFIGURED
+        validation_message: str | None = None
+
+        if preset_key is not ModelPresetKey.GLOBAL_DEFAULT and primary_model is None:
+            status = ModelPresetStatus.MISSING_PRIMARY
+            validation_message = "未配置主模型"
+        elif primary_model is not None and not self._is_usable_model(primary_model, preset_key, ignore_current_binding=True):
+            status = ModelPresetStatus.INVALID
+            validation_message = "主模型不满足当前类别要求"
+        elif fallback_model is not None and not self._is_usable_model(fallback_model, preset_key, ignore_current_binding=True):
+            status = ModelPresetStatus.INVALID
+            validation_message = "Fallback 模型不满足当前类别要求"
+
+        return ModelPresetBindingResult(
+            preset_key=preset_key,
+            title=PRESET_TITLES[preset_key],
+            description=PRESET_DESCRIPTIONS[preset_key],
+            primary_model=_provider_model_result(primary_model) if primary_model else None,
+            fallback_model=_provider_model_result(fallback_model) if fallback_model else None,
+            status=status,
+            validation_message=validation_message,
+        )
 
     def _crypto(self) -> ModelConfigCrypto:
         return ModelConfigCrypto(self._encryption_key)
@@ -325,7 +826,9 @@ class ModelConfigService:
     def _record_invocation(
         self,
         *,
-        config: ModelConfigORM | None,
+        provider: ModelProviderORM,
+        model_name: str,
+        preset_key: ModelPresetKey | None,
         status: ModelInvocationStatus,
         token_usage: ModelTokenUsage,
         error_summary: str | None,
@@ -333,11 +836,12 @@ class ModelConfigService:
         trace_id: str | None,
         agent_run_id: str | None = None,
     ) -> ModelInvocationResult:
-        now = _utcnow()
         invocation = ModelInvocationORM(
-            provider_type=(config.provider_type if config is not None else ModelConfigProviderType.OPENAI_COMPATIBLE.value),
-            provider_name=(config.name if config is not None else DEFAULT_PROVIDER_NAME),
-            model=(config.model if config is not None else ""),
+            provider_id=provider.id,
+            preset_key=preset_key.value if preset_key else None,
+            provider_type=provider.provider_type,
+            provider_name=provider.name,
+            model=model_name,
             status=status.value,
             prompt_tokens=token_usage.prompt_tokens,
             completion_tokens=token_usage.completion_tokens,
@@ -346,61 +850,58 @@ class ModelConfigService:
             request_id=request_id,
             trace_id=trace_id,
             agent_run_id=agent_run_id,
-            created_at=now,
+            created_at=_utcnow(),
         )
         self._session.add(invocation)
-        if config is not None:
-            config.updated_at = now
-        self._session.commit()
-        self._session.refresh(invocation)
+        provider.updated_at = _utcnow()
+        self._session.flush()
         return _invocation_result(invocation)
 
-
-def _config_result(config: ModelConfigORM | None) -> ModelConfigResult:
-    if config is None:
-        return ModelConfigResult(
-            provider_type=ModelConfigProviderType.OPENAI_COMPATIBLE,
-            name=DEFAULT_PROVIDER_NAME,
-            base_url=None,
-            model="",
-            enabled=False,
-            status=ModelConfigStatus.MISSING_KEY,
-            key_status=ModelConfigKeyStatus.MISSING,
-            masked_key=None,
-            last_error=None,
-            updated_at=None,
+    def _record_failed_invocation_and_commit(
+        self,
+        *,
+        provider: ModelProviderORM,
+        model_name: str,
+        preset_key: ModelPresetKey | None,
+        error_summary: str,
+        request_id: str | None,
+        trace_id: str | None,
+    ) -> ModelInvocationResult:
+        invocation = self._record_invocation(
+            provider=provider,
+            model_name=model_name,
+            preset_key=preset_key,
+            status=ModelInvocationStatus.FAILED,
+            token_usage=ModelTokenUsage(),
+            error_summary=error_summary,
+            request_id=request_id,
+            trace_id=trace_id,
         )
+        self._session.commit()
+        return invocation
 
-    has_key = bool(config.encrypted_api_key)
-    status = ModelConfigStatus.CONFIGURED
-    if not config.enabled:
-        status = ModelConfigStatus.DISABLED
-    elif not has_key:
-        status = ModelConfigStatus.MISSING_KEY
-    elif config.last_error:
-        status = ModelConfigStatus.FAILED
 
-    return ModelConfigResult(
-        provider_type=ModelConfigProviderType(config.provider_type),
-        name=config.name,
-        base_url=config.base_url,
-        model=config.model,
-        enabled=config.enabled,
-        status=status,
-        key_status=ModelConfigKeyStatus.CONFIGURED if has_key else ModelConfigKeyStatus.MISSING,
-        # This marker is deliberately non-reversible; it only communicates configured state to the UI.
-        masked_key="********" if has_key else None,
-        last_error=config.last_error,
-        updated_at=config.updated_at,
+def _provider_model_result(model: ModelProviderModelORM) -> ModelProviderModelResult:
+    return ModelProviderModelResult(
+        id=model.id,
+        provider_id=model.provider_id,
+        model_name=model.model_name,
+        enabled=model.enabled,
+        supports_vision=model.supports_vision,
+        is_global_default=model.is_global_default,
+        created_at=model.created_at,
+        updated_at=model.updated_at,
     )
 
 
 def _invocation_result(invocation: ModelInvocationORM) -> ModelInvocationResult:
     return ModelInvocationResult(
         id=invocation.id,
-        provider_type=ModelConfigProviderType(invocation.provider_type),
+        provider_id=invocation.provider_id,
+        provider_type=ModelProviderType(invocation.provider_type),
         provider_name=invocation.provider_name,
         model=invocation.model,
+        preset_key=ModelPresetKey(invocation.preset_key) if invocation.preset_key else None,
         status=ModelInvocationStatus(invocation.status),
         token_usage=ModelTokenUsage(
             prompt_tokens=invocation.prompt_tokens,

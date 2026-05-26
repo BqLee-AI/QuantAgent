@@ -1,11 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://quantagent.local/schemas/model-invocation-minimal-v1.schema.json",
-  "title": "Model Invocation Minimal V1",
+  "$id": "https://quantagent.local/schemas/model-invocation-provider-v1.schema.json",
+  "title": "Model Invocation Provider V1",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "id": {
+      "type": ["integer", "null"]
+    },
+    "provider_id": {
       "type": ["integer", "null"]
     },
     "provider_type": {
@@ -16,6 +19,10 @@
     },
     "model": {
       "type": "string"
+    },
+    "preset_key": {
+      "type": ["string", "null"],
+      "enum": ["global_default", "economy_text", "general_text", "reasoning_text", "multimodal", null]
     },
     "status": {
       "enum": ["succeeded", "failed"]
@@ -58,9 +65,11 @@
   },
   "required": [
     "id",
+    "provider_id",
     "provider_type",
     "provider_name",
     "model",
+    "preset_key",
     "status",
     "token_usage",
     "error_summary",

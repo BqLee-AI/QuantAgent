@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quantagent.local/schemas/model-provider-multi-provider-v1.schema.json",
+  "title": "Model Provider Multi Provider V1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "default_provider_id": {
+      "type": ["integer", "null"]
+    },
+    "providers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "provider_type": {
+            "const": "openai_compatible"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "base_url": {
+            "type": ["string", "null"]
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "is_default": {
+            "type": "boolean"
+          },
+          "status": {
+            "enum": ["configured", "missing_key", "disabled", "failed"]
+          },
+          "key_status": {
+            "enum": ["configured", "missing"]
+          },
+          "masked_key": {
+            "type": ["string", "null"]
+          },
+          "last_error": {
+            "type": ["string", "null"]
+          },
+          "model_count": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "provider_type",
+          "name",
+          "base_url",
+          "enabled",
+          "is_default",
+          "status",
+          "key_status",
+          "masked_key",
+          "last_error",
+          "model_count",
+          "updated_at"
+        ]
+      }
+    }
+  },
+  "required": ["default_provider_id", "providers"]
+}

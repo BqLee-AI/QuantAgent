@@ -1430,14 +1430,14 @@ class ApiAppTestCase(unittest.TestCase):
             "PLUGIN_CONFIG_SCHEMA_NOT_FOUND",
         )
 
-    def test_model_config_requires_session(self) -> None:
-        response = self.client.get("/api/v1/models/config")
+    def test_model_providers_require_session(self) -> None:
+        response = self.client.get("/api/v1/models/providers")
         body = response.json()
 
         self.assertEqual(response.status_code, 401)
         self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
 
-    def test_model_config_save_masks_key_and_test_connection_records_usage(self) -> None:
+    def test_model_provider_create_masks_key_and_test_connection_records_usage(self) -> None:
         database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         database_file.close()
         self.addCleanup(lambda: os.unlink(database_file.name))
@@ -1454,54 +1454,97 @@ class ApiAppTestCase(unittest.TestCase):
             login_response = client.post("/api/v1/auth/login", json={"password": settings.AUTH_ADMIN_PASSWORD})
             csrf_token = login_response.json()["data"]["csrf_token"]
 
-            save_response = client.put(
-                "/api/v1/models/config",
+            save_response = client.post(
+                "/api/v1/models/providers",
                 headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
                 json={
                     "provider_type": "openai_compatible",
                     "name": "Local Gateway",
                     "base_url": "http://127.0.0.1:11434/v1",
-                    "model": "qwen-test",
                     "api_key": "sk-api-secret",
                     "enabled": True,
+                    "is_default": True,
                 },
             )
-            config_response = client.get("/api/v1/models/config")
+            provider_id = save_response.json()["data"]["id"]
+            create_model_response = client.post(
+                f"/api/v1/models/providers/{provider_id}/models",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+                json={
+                    "model_name": "qwen-test",
+                    "enabled": True,
+                    "supports_vision": False,
+                    "is_global_default": True,
+                },
+            )
+            providers_response = client.get("/api/v1/models/providers")
+            detail_response = client.get(f"/api/v1/models/providers/{provider_id}")
+            presets_response = client.get("/api/v1/models/presets")
             test_response = client.post(
-                "/api/v1/models/actions/test-connection",
+                f"/api/v1/models/providers/{provider_id}/actions/test-connection",
                 headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token, "X-Request-ID": "req-model"},
             )
-            invocations_response = client.get("/api/v1/models/invocations")
+            invocations_response = client.get(
+                f"/api/v1/models/invocations?provider_id={provider_id}&preset_key=global_default"
+            )
 
             encrypted_value = client.app.state.db_session_factory().execute(
-                Base.metadata.tables["model_configs"].select()
+                Base.metadata.tables["model_providers"].select()
             ).mappings().one()["encrypted_api_key"]
 
         save_body = save_response.json()
         self.assertEqual(save_response.status_code, 200)
         self.assertEqual(save_body["data"]["masked_key"], "********")
+        self.assertTrue(save_body["data"]["is_default"])
         self.assertNotIn("sk-api-secret", str(save_body))
         self.assertNotEqual(encrypted_value, "sk-api-secret")
+        self.assertEqual(save_body["data"]["model_count"], 0)
 
-        config_body = config_response.json()
-        self.assertEqual(config_response.status_code, 200)
-        self.assertEqual(config_body["data"]["status"], "configured")
-        self.assertEqual(config_body["data"]["key_status"], "configured")
-        self.assertNotIn("sk-api-secret", str(config_body))
+        create_model_body = create_model_response.json()
+        self.assertEqual(create_model_response.status_code, 200)
+        self.assertEqual(create_model_body["data"]["model_name"], "qwen-test")
+        self.assertTrue(create_model_body["data"]["is_global_default"])
+
+        providers_body = providers_response.json()
+        self.assertEqual(providers_response.status_code, 200)
+        self.assertEqual(providers_body["data"]["default_provider_id"], provider_id)
+        self.assertEqual(len(providers_body["data"]["providers"]), 1)
+        self.assertEqual(providers_body["data"]["providers"][0]["model_count"], 1)
+
+        detail_body = detail_response.json()
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_body["data"]["status"], "configured")
+        self.assertEqual(detail_body["data"]["key_status"], "configured")
+        self.assertNotIn("sk-api-secret", str(detail_body))
+        self.assertEqual(len(detail_body["data"]["models"]), 1)
+        self.assertEqual(detail_body["data"]["models"][0]["model_name"], "qwen-test")
+
+        presets_body = presets_response.json()
+        self.assertEqual(presets_response.status_code, 200)
+        self.assertEqual(len(presets_body["data"]), 5)
+        self.assertEqual(
+            {item["preset_key"] for item in presets_body["data"]},
+            {"global_default", "economy_text", "general_text", "reasoning_text", "multimodal"},
+        )
 
         test_body = test_response.json()
         self.assertEqual(test_response.status_code, 200)
         self.assertTrue(test_body["data"]["success"])
+        self.assertEqual(test_body["data"]["invocation"]["provider_id"], provider_id)
+        self.assertEqual(test_body["data"]["invocation"]["preset_key"], "global_default")
         self.assertEqual(test_body["data"]["invocation"]["token_usage"]["total_tokens"], 3)
         self.assertEqual(fake_client.calls[0]["api_key"], "sk-api-secret")
+        self.assertEqual(fake_client.calls[0]["model"], "qwen-test")
         self.assertNotIn("sk-api-secret", str(test_body))
 
         invocations_body = invocations_response.json()
         self.assertEqual(invocations_response.status_code, 200)
+        self.assertEqual(invocations_body["data"][0]["provider_id"], provider_id)
+        self.assertEqual(invocations_body["data"][0]["preset_key"], "global_default")
         self.assertEqual(invocations_body["data"][0]["request_id"], "req-model")
         self.assertEqual(invocations_body["data"][0]["token_usage"]["prompt_tokens"], 2)
 
-    def test_model_config_save_requires_csrf_and_encryption_key(self) -> None:
+    def test_model_provider_save_requires_csrf_and_encryption_key(self) -> None:
         database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         database_file.close()
         self.addCleanup(lambda: os.unlink(database_file.name))
@@ -1511,22 +1554,22 @@ class ApiAppTestCase(unittest.TestCase):
         with TestClient(app) as client:
             Base.metadata.create_all(client.app.state.db_engine)
             login_response = client.post("/api/v1/auth/login", json={"password": settings.AUTH_ADMIN_PASSWORD})
-            forbidden_response = client.put(
-                "/api/v1/models/config",
+            forbidden_response = client.post(
+                "/api/v1/models/providers",
                 json={
                     "name": "OpenAI",
-                    "model": "gpt-test",
                     "api_key": "sk-should-not-leak",
+                    "is_default": True,
                 },
             )
             csrf_token = login_response.json()["data"]["csrf_token"]
-            missing_key_response = client.put(
-                "/api/v1/models/config",
+            missing_key_response = client.post(
+                "/api/v1/models/providers",
                 headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
                 json={
                     "name": "OpenAI",
-                    "model": "gpt-test",
                     "api_key": "sk-should-not-leak",
+                    "is_default": True,
                 },
             )
 
@@ -1537,7 +1580,7 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(body["error"]["details"]["code"], "MODEL_CONFIG_ENCRYPTION_UNAVAILABLE")
         self.assertNotIn("sk-should-not-leak", str(body))
 
-    def test_model_test_connection_missing_key_records_safe_failure(self) -> None:
+    def test_model_provider_test_connection_missing_key_records_safe_failure(self) -> None:
         database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         database_file.close()
         self.addCleanup(lambda: os.unlink(database_file.name))
@@ -1551,19 +1594,127 @@ class ApiAppTestCase(unittest.TestCase):
             Base.metadata.create_all(client.app.state.db_engine)
             login_response = client.post("/api/v1/auth/login", json={"password": settings.AUTH_ADMIN_PASSWORD})
             csrf_token = login_response.json()["data"]["csrf_token"]
+            create_response = client.post(
+                "/api/v1/models/providers",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+                json={
+                    "name": "Missing Key Provider",
+                    "enabled": True,
+                    "is_default": True,
+                },
+            )
+            provider_id = create_response.json()["data"]["id"]
+            client.post(
+                f"/api/v1/models/providers/{provider_id}/models",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+                json={
+                    "model_name": "gpt-test",
+                    "enabled": True,
+                    "supports_vision": False,
+                    "is_global_default": True,
+                },
+            )
             response = client.post(
-                "/api/v1/models/actions/test-connection",
+                f"/api/v1/models/providers/{provider_id}/actions/test-connection",
                 headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
             )
-            invocations_response = client.get("/api/v1/models/invocations")
+            invocations_response = client.get(f"/api/v1/models/invocations?provider_id={provider_id}")
 
         body = response.json()
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(body["error"]["details"]["code"], "MODEL_CONFIG_KEY_MISSING")
+        self.assertEqual(body["error"]["details"]["code"], "MODEL_PROVIDER_KEY_MISSING")
         self.assertNotIn("api_key", str(body).lower())
         invocation = invocations_response.json()["data"][0]
         self.assertEqual(invocation["status"], "failed")
-        self.assertEqual(invocation["error_summary"], "MODEL_CONFIG_KEY_MISSING")
+        self.assertEqual(invocation["error_summary"], "MODEL_PROVIDER_KEY_MISSING")
+
+    def test_model_provider_models_and_presets_support_binding_and_validation(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(
+            DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}",
+            MODEL_CONFIG_ENCRYPTION_KEY=ModelConfigCrypto.generate_key(),
+        )
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            login_response = client.post("/api/v1/auth/login", json={"password": settings.AUTH_ADMIN_PASSWORD})
+            csrf_token = login_response.json()["data"]["csrf_token"]
+            create_provider_response = client.post(
+                "/api/v1/models/providers",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+                json={
+                    "name": "Preset Provider",
+                    "base_url": "https://api.example.com/v1",
+                    "api_key": "sk-preset",
+                    "enabled": True,
+                    "is_default": True,
+                },
+            )
+            provider_id = create_provider_response.json()["data"]["id"]
+            text_model_response = client.post(
+                f"/api/v1/models/providers/{provider_id}/models",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+                json={
+                    "model_name": "text-model",
+                    "enabled": True,
+                    "supports_vision": False,
+                    "is_global_default": True,
+                },
+            )
+            vision_model_response = client.post(
+                f"/api/v1/models/providers/{provider_id}/models",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+                json={
+                    "model_name": "vision-model",
+                    "enabled": True,
+                    "supports_vision": True,
+                    "is_global_default": False,
+                },
+            )
+            text_model_id = text_model_response.json()["data"]["id"]
+            vision_model_id = vision_model_response.json()["data"]["id"]
+
+            invalid_multimodal_response = client.put(
+                "/api/v1/models/presets/multimodal",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+                json={"primary_model_id": text_model_id, "fallback_model_id": None},
+            )
+            valid_multimodal_response = client.put(
+                "/api/v1/models/presets/multimodal",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+                json={"primary_model_id": vision_model_id, "fallback_model_id": None},
+            )
+            economy_response = client.put(
+                "/api/v1/models/presets/economy_text",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+                json={"primary_model_id": text_model_id, "fallback_model_id": vision_model_id},
+            )
+            presets_response = client.get("/api/v1/models/presets")
+
+        invalid_body = invalid_multimodal_response.json()
+        self.assertEqual(invalid_multimodal_response.status_code, 400)
+        self.assertEqual(invalid_body["error"]["details"]["code"], "MODEL_PRESET_PRIMARY_INVALID")
+
+        valid_multimodal_body = valid_multimodal_response.json()
+        self.assertEqual(valid_multimodal_response.status_code, 200)
+        self.assertEqual(valid_multimodal_body["data"]["preset_key"], "multimodal")
+        self.assertEqual(valid_multimodal_body["data"]["primary_model"]["id"], vision_model_id)
+
+        economy_body = economy_response.json()
+        self.assertEqual(economy_response.status_code, 200)
+        self.assertEqual(economy_body["data"]["preset_key"], "economy_text")
+        self.assertEqual(economy_body["data"]["primary_model"]["id"], text_model_id)
+        self.assertEqual(economy_body["data"]["fallback_model"]["id"], vision_model_id)
+
+        presets_body = presets_response.json()
+        self.assertEqual(presets_response.status_code, 200)
+        by_key = {item["preset_key"]: item for item in presets_body["data"]}
+        self.assertEqual(by_key["multimodal"]["primary_model"]["id"], vision_model_id)
+        self.assertEqual(by_key["economy_text"]["primary_model"]["id"], text_model_id)
+        self.assertEqual(by_key["economy_text"]["fallback_model"]["id"], vision_model_id)
 
     def test_missing_capability_is_forbidden(self) -> None:
         reduced_capabilities = frozenset({"plugin.configure"})
@@ -1638,9 +1789,17 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertIn("wallet", schema["paths"]["/api/v1/wallet/accounts/{account_id}/cash-balances"]["get"]["tags"])
         self.assertNotIn("/api/v1/wallet/accounts", schema["paths"])
         self.assertNotIn("/api/v1/wallet/accounts/{account_id}/wallet-facts", schema["paths"])
-        self.assertIn("models", schema["paths"]["/api/v1/models/config"]["get"]["tags"])
-        self.assertIn("models", schema["paths"]["/api/v1/models/config"]["put"]["tags"])
-        self.assertIn("models", schema["paths"]["/api/v1/models/actions/test-connection"]["post"]["tags"])
+        self.assertIn("models", schema["paths"]["/api/v1/models/providers"]["get"]["tags"])
+        self.assertIn("models", schema["paths"]["/api/v1/models/providers"]["post"]["tags"])
+        self.assertIn("models", schema["paths"]["/api/v1/models/providers/{provider_id}"]["get"]["tags"])
+        self.assertIn("models", schema["paths"]["/api/v1/models/providers/{provider_id}"]["put"]["tags"])
+        self.assertIn("models", schema["paths"]["/api/v1/models/providers/{provider_id}/actions/set-default"]["post"]["tags"])
+        self.assertIn("models", schema["paths"]["/api/v1/models/providers/{provider_id}/actions/test-connection"]["post"]["tags"])
+        self.assertIn("models", schema["paths"]["/api/v1/models/providers/{provider_id}/models"]["post"]["tags"])
+        self.assertIn("models", schema["paths"]["/api/v1/models/providers/{provider_id}/models/{model_id}"]["put"]["tags"])
+        self.assertIn("models", schema["paths"]["/api/v1/models/providers/{provider_id}/models/{model_id}"]["delete"]["tags"])
+        self.assertIn("models", schema["paths"]["/api/v1/models/presets"]["get"]["tags"])
+        self.assertIn("models", schema["paths"]["/api/v1/models/presets/{preset_key}"]["put"]["tags"])
         self.assertIn("models", schema["paths"]["/api/v1/models/invocations"]["get"]["tags"])
         self.assertNotIn("/api/v1/auth/test-actions/runtime-inspect", schema["paths"])
 
@@ -1689,7 +1848,7 @@ class ApiAppTestCase(unittest.TestCase):
             }.issubset(wallet_cash_items_schema["properties"])
         )
 
-        models_schema = self._resolve_response_schema(schema, "/api/v1/models/config")
+        models_schema = self._resolve_response_schema(schema, "/api/v1/models/providers")
         self.assertTrue({"code", "data", "msg", "error"}.issubset(models_schema["properties"].keys()))
 
     def test_production_openapi_excludes_debug_routes(self) -> None:
