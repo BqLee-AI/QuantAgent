@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quantagent.local/schemas/model-provider-config-minimal-v1.schema.json",
+  "title": "Model Provider Config Minimal V1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "provider_type": {
+      "const": "openai_compatible"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "base_url": {
+      "type": ["string", "null"]
+    },
+    "model": {
+      "type": "string",
+      "minLength": 1
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "status": {
+      "enum": ["configured", "missing_key", "disabled", "failed"]
+    },
+    "key_status": {
+      "enum": ["configured", "missing"]
+    },
+    "masked_key": {
+      "type": ["string", "null"]
+    },
+    "last_error": {
+      "type": ["string", "null"]
+    },
+    "updated_at": {
+      "type": ["string", "null"],
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "provider_type",
+    "name",
+    "base_url",
+    "model",
+    "enabled",
+    "status",
+    "key_status",
+    "masked_key",
+    "last_error",
+    "updated_at"
+  ]
+}

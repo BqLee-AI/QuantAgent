@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str | None = None
     RUNTIME_DIR: Path = Path("runtime")
     LOG_LEVEL: str = "INFO"
+    MODEL_CONFIG_ENCRYPTION_KEY: str | None = None
 
     @property
     def is_production(self) -> bool:

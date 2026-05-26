@@ -14,6 +14,7 @@ export type WorkspaceRoutePath =
   | '/approvals'
   | '/events'
   | '/industries'
+  | '/models'
   | '/plugins'
   | '/runtime'
   | '/settings'
@@ -46,6 +47,7 @@ export const WORKSPACE_ROUTE_POLICY: Record<WorkspaceRoutePath, readonly Capabil
   '/approvals': [APPROVAL_APPROVE_CAPABILITY, APPROVAL_AMEND_CAPABILITY],
   '/events': [RUNTIME_INSPECT_CAPABILITY],
   '/industries': [RUNTIME_INSPECT_CAPABILITY],
+  '/models': [SECRET_MANAGE_CAPABILITY],
   '/plugins': [PLUGIN_CONFIGURE_CAPABILITY, PLUGIN_INSTALL_CAPABILITY],
   '/runtime': [RUNTIME_INSPECT_CAPABILITY],
   '/settings': [SECRET_MANAGE_CAPABILITY],
@@ -57,6 +59,7 @@ export const NAV_POLICY: readonly NavPolicyEntry[] = [
   { label: '仪表盘', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/'], to: '/' },
   { label: '事件', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/events'], to: '/events' },
   { label: '运行态', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/runtime'], to: '/runtime' },
+  { label: '模型', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/models'], to: '/models' },
   { label: '审批', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/approvals'], to: '/approvals' },
   { label: '插件', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/plugins'], to: '/plugins' },
   { label: '技能', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/skills'], to: '/skills' },

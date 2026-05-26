@@ -18,6 +18,7 @@ import { Route as AppworkspaceSkillsIndexRouteImport } from './routes/_app/(work
 import { Route as AppworkspaceSettingsIndexRouteImport } from './routes/_app/(workspace)/settings/index'
 import { Route as AppworkspaceRuntimeIndexRouteImport } from './routes/_app/(workspace)/runtime/index'
 import { Route as AppworkspacePluginsIndexRouteImport } from './routes/_app/(workspace)/plugins/index'
+import { Route as AppworkspaceModelsIndexRouteImport } from './routes/_app/(workspace)/models/index'
 import { Route as AppworkspaceIndustriesIndexRouteImport } from './routes/_app/(workspace)/industries/index'
 import { Route as AppworkspaceEventsIndexRouteImport } from './routes/_app/(workspace)/events/index'
 import { Route as AppworkspaceApprovalsIndexRouteImport } from './routes/_app/(workspace)/approvals/index'
@@ -73,6 +74,11 @@ const AppworkspacePluginsIndexRoute =
     path: '/plugins/',
     getParentRoute: () => AppworkspaceRouteRoute,
   } as any)
+const AppworkspaceModelsIndexRoute = AppworkspaceModelsIndexRouteImport.update({
+  id: '/models/',
+  path: '/models/',
+  getParentRoute: () => AppworkspaceRouteRoute,
+} as any)
 const AppworkspaceIndustriesIndexRoute =
   AppworkspaceIndustriesIndexRouteImport.update({
     id: '/industries/',
@@ -118,6 +124,7 @@ export interface FileRoutesByFullPath {
   '/approvals/': typeof AppworkspaceApprovalsIndexRoute
   '/events/': typeof AppworkspaceEventsIndexRoute
   '/industries/': typeof AppworkspaceIndustriesIndexRoute
+  '/models/': typeof AppworkspaceModelsIndexRoute
   '/plugins/': typeof AppworkspacePluginsIndexRoute
   '/runtime/': typeof AppworkspaceRuntimeIndexRoute
   '/settings/': typeof AppworkspaceSettingsIndexRoute
@@ -134,6 +141,7 @@ export interface FileRoutesByTo {
   '/approvals': typeof AppworkspaceApprovalsIndexRoute
   '/events': typeof AppworkspaceEventsIndexRoute
   '/industries': typeof AppworkspaceIndustriesIndexRoute
+  '/models': typeof AppworkspaceModelsIndexRoute
   '/plugins': typeof AppworkspacePluginsIndexRoute
   '/runtime': typeof AppworkspaceRuntimeIndexRoute
   '/settings': typeof AppworkspaceSettingsIndexRoute
@@ -152,6 +160,7 @@ export interface FileRoutesById {
   '/_app/(workspace)/approvals/': typeof AppworkspaceApprovalsIndexRoute
   '/_app/(workspace)/events/': typeof AppworkspaceEventsIndexRoute
   '/_app/(workspace)/industries/': typeof AppworkspaceIndustriesIndexRoute
+  '/_app/(workspace)/models/': typeof AppworkspaceModelsIndexRoute
   '/_app/(workspace)/plugins/': typeof AppworkspacePluginsIndexRoute
   '/_app/(workspace)/runtime/': typeof AppworkspaceRuntimeIndexRoute
   '/_app/(workspace)/settings/': typeof AppworkspaceSettingsIndexRoute
@@ -170,6 +179,7 @@ export interface FileRouteTypes {
     | '/approvals/'
     | '/events/'
     | '/industries/'
+    | '/models/'
     | '/plugins/'
     | '/runtime/'
     | '/settings/'
@@ -186,6 +196,7 @@ export interface FileRouteTypes {
     | '/approvals'
     | '/events'
     | '/industries'
+    | '/models'
     | '/plugins'
     | '/runtime'
     | '/settings'
@@ -203,6 +214,7 @@ export interface FileRouteTypes {
     | '/_app/(workspace)/approvals/'
     | '/_app/(workspace)/events/'
     | '/_app/(workspace)/industries/'
+    | '/_app/(workspace)/models/'
     | '/_app/(workspace)/plugins/'
     | '/_app/(workspace)/runtime/'
     | '/_app/(workspace)/settings/'
@@ -282,6 +294,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppworkspacePluginsIndexRouteImport
       parentRoute: typeof AppworkspaceRouteRoute
     }
+    '/_app/(workspace)/models/': {
+      id: '/_app/(workspace)/models/'
+      path: '/models'
+      fullPath: '/models/'
+      preLoaderRoute: typeof AppworkspaceModelsIndexRouteImport
+      parentRoute: typeof AppworkspaceRouteRoute
+    }
     '/_app/(workspace)/industries/': {
       id: '/_app/(workspace)/industries/'
       path: '/industries'
@@ -348,6 +367,7 @@ interface AppworkspaceRouteRouteChildren {
   AppworkspaceApprovalsIndexRoute: typeof AppworkspaceApprovalsIndexRoute
   AppworkspaceEventsIndexRoute: typeof AppworkspaceEventsIndexRoute
   AppworkspaceIndustriesIndexRoute: typeof AppworkspaceIndustriesIndexRoute
+  AppworkspaceModelsIndexRoute: typeof AppworkspaceModelsIndexRoute
   AppworkspacePluginsIndexRoute: typeof AppworkspacePluginsIndexRoute
   AppworkspaceRuntimeIndexRoute: typeof AppworkspaceRuntimeIndexRoute
   AppworkspaceSettingsIndexRoute: typeof AppworkspaceSettingsIndexRoute
@@ -362,6 +382,7 @@ const AppworkspaceRouteRouteChildren: AppworkspaceRouteRouteChildren = {
   AppworkspaceApprovalsIndexRoute: AppworkspaceApprovalsIndexRoute,
   AppworkspaceEventsIndexRoute: AppworkspaceEventsIndexRoute,
   AppworkspaceIndustriesIndexRoute: AppworkspaceIndustriesIndexRoute,
+  AppworkspaceModelsIndexRoute: AppworkspaceModelsIndexRoute,
   AppworkspacePluginsIndexRoute: AppworkspacePluginsIndexRoute,
   AppworkspaceRuntimeIndexRoute: AppworkspaceRuntimeIndexRoute,
   AppworkspaceSettingsIndexRoute: AppworkspaceSettingsIndexRoute,

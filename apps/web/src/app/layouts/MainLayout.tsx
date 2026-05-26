@@ -6,6 +6,7 @@ const routeLabels = new Map<string, string>([
   ['events', '事件'],
   ['audit', '审计时间线'],
   ['runtime', '运行态'],
+  ['models', '模型'],
   ['approvals', '审批'],
   ['approval-link', '一次性授权'],
   ['plugins', '插件'],

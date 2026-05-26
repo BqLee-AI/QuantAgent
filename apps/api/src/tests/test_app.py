@@ -36,6 +36,9 @@ from quantagent.api.routers.v1.register import (
     build_api_v1_public_route_allowlist,
     register_api_v1_protected_router,
 )
+from quantagent.core.db.base import Base
+from quantagent.core.model_config import FixedModelCallClient, ModelConfigCrypto, ModelTokenUsage
+from quantagent.core.model_config.service import ModelCallResult
 from quantagent.core.registry import PluginRegistry, RegistryScanner
 from quantagent.core.wallet import (
     AccountMode,
@@ -52,6 +55,29 @@ from quantagent.core.wallet import (
     WalletLedgerEntryType,
     WalletLedgerSourceType,
 )
+
+
+class FakeModelClient(FixedModelCallClient):
+    def __init__(self) -> None:
+        self.calls: list[dict[str, str | None]] = []
+
+    def run_fixed_smoke(
+        self,
+        *,
+        base_url: str | None,
+        model: str,
+        api_key: str,
+        request_id: str | None,
+    ) -> ModelCallResult:
+        self.calls.append(
+            {
+                "base_url": base_url,
+                "model": model,
+                "api_key": api_key,
+                "request_id": request_id,
+            }
+        )
+        return ModelCallResult(token_usage=ModelTokenUsage(prompt_tokens=2, completion_tokens=1, total_tokens=3))
 
 
 class FakeSession:
@@ -1404,6 +1430,141 @@ class ApiAppTestCase(unittest.TestCase):
             "PLUGIN_CONFIG_SCHEMA_NOT_FOUND",
         )
 
+    def test_model_config_requires_session(self) -> None:
+        response = self.client.get("/api/v1/models/config")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+
+    def test_model_config_save_masks_key_and_test_connection_records_usage(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        fake_client = FakeModelClient()
+        settings = self._settings(
+            DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}",
+            MODEL_CONFIG_ENCRYPTION_KEY=ModelConfigCrypto.generate_key(),
+        )
+        app = create_app(settings)
+        app.state.model_call_client = fake_client
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            login_response = client.post("/api/v1/auth/login", json={"password": settings.AUTH_ADMIN_PASSWORD})
+            csrf_token = login_response.json()["data"]["csrf_token"]
+
+            save_response = client.put(
+                "/api/v1/models/config",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+                json={
+                    "provider_type": "openai_compatible",
+                    "name": "Local Gateway",
+                    "base_url": "http://127.0.0.1:11434/v1",
+                    "model": "qwen-test",
+                    "api_key": "sk-api-secret",
+                    "enabled": True,
+                },
+            )
+            config_response = client.get("/api/v1/models/config")
+            test_response = client.post(
+                "/api/v1/models/actions/test-connection",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token, "X-Request-ID": "req-model"},
+            )
+            invocations_response = client.get("/api/v1/models/invocations")
+
+            encrypted_value = client.app.state.db_session_factory().execute(
+                Base.metadata.tables["model_configs"].select()
+            ).mappings().one()["encrypted_api_key"]
+
+        save_body = save_response.json()
+        self.assertEqual(save_response.status_code, 200)
+        self.assertEqual(save_body["data"]["masked_key"], "********")
+        self.assertNotIn("sk-api-secret", str(save_body))
+        self.assertNotEqual(encrypted_value, "sk-api-secret")
+
+        config_body = config_response.json()
+        self.assertEqual(config_response.status_code, 200)
+        self.assertEqual(config_body["data"]["status"], "configured")
+        self.assertEqual(config_body["data"]["key_status"], "configured")
+        self.assertNotIn("sk-api-secret", str(config_body))
+
+        test_body = test_response.json()
+        self.assertEqual(test_response.status_code, 200)
+        self.assertTrue(test_body["data"]["success"])
+        self.assertEqual(test_body["data"]["invocation"]["token_usage"]["total_tokens"], 3)
+        self.assertEqual(fake_client.calls[0]["api_key"], "sk-api-secret")
+        self.assertNotIn("sk-api-secret", str(test_body))
+
+        invocations_body = invocations_response.json()
+        self.assertEqual(invocations_response.status_code, 200)
+        self.assertEqual(invocations_body["data"][0]["request_id"], "req-model")
+        self.assertEqual(invocations_body["data"][0]["token_usage"]["prompt_tokens"], 2)
+
+    def test_model_config_save_requires_csrf_and_encryption_key(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            login_response = client.post("/api/v1/auth/login", json={"password": settings.AUTH_ADMIN_PASSWORD})
+            forbidden_response = client.put(
+                "/api/v1/models/config",
+                json={
+                    "name": "OpenAI",
+                    "model": "gpt-test",
+                    "api_key": "sk-should-not-leak",
+                },
+            )
+            csrf_token = login_response.json()["data"]["csrf_token"]
+            missing_key_response = client.put(
+                "/api/v1/models/config",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+                json={
+                    "name": "OpenAI",
+                    "model": "gpt-test",
+                    "api_key": "sk-should-not-leak",
+                },
+            )
+
+        self.assertEqual(forbidden_response.status_code, 403)
+        body = missing_key_response.json()
+        self.assertEqual(missing_key_response.status_code, 503)
+        self.assertEqual(body["error"]["code"], "SERVICE_UNAVAILABLE")
+        self.assertEqual(body["error"]["details"]["code"], "MODEL_CONFIG_ENCRYPTION_UNAVAILABLE")
+        self.assertNotIn("sk-should-not-leak", str(body))
+
+    def test_model_test_connection_missing_key_records_safe_failure(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(
+            DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}",
+            MODEL_CONFIG_ENCRYPTION_KEY=ModelConfigCrypto.generate_key(),
+        )
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            login_response = client.post("/api/v1/auth/login", json={"password": settings.AUTH_ADMIN_PASSWORD})
+            csrf_token = login_response.json()["data"]["csrf_token"]
+            response = client.post(
+                "/api/v1/models/actions/test-connection",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+            )
+            invocations_response = client.get("/api/v1/models/invocations")
+
+        body = response.json()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(body["error"]["details"]["code"], "MODEL_CONFIG_KEY_MISSING")
+        self.assertNotIn("api_key", str(body).lower())
+        invocation = invocations_response.json()["data"][0]
+        self.assertEqual(invocation["status"], "failed")
+        self.assertEqual(invocation["error_summary"], "MODEL_CONFIG_KEY_MISSING")
+
     def test_missing_capability_is_forbidden(self) -> None:
         reduced_capabilities = frozenset({"plugin.configure"})
         issued_session = issue_session("local_admin", self.settings, capabilities=reduced_capabilities)
@@ -1477,6 +1638,10 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertIn("wallet", schema["paths"]["/api/v1/wallet/accounts/{account_id}/cash-balances"]["get"]["tags"])
         self.assertNotIn("/api/v1/wallet/accounts", schema["paths"])
         self.assertNotIn("/api/v1/wallet/accounts/{account_id}/wallet-facts", schema["paths"])
+        self.assertIn("models", schema["paths"]["/api/v1/models/config"]["get"]["tags"])
+        self.assertIn("models", schema["paths"]["/api/v1/models/config"]["put"]["tags"])
+        self.assertIn("models", schema["paths"]["/api/v1/models/actions/test-connection"]["post"]["tags"])
+        self.assertIn("models", schema["paths"]["/api/v1/models/invocations"]["get"]["tags"])
         self.assertNotIn("/api/v1/auth/test-actions/runtime-inspect", schema["paths"])
 
         login_schema = self._resolve_response_schema(schema, "/api/v1/auth/login", method="post")
@@ -1523,6 +1688,9 @@ class ApiAppTestCase(unittest.TestCase):
                 "updated_at",
             }.issubset(wallet_cash_items_schema["properties"])
         )
+
+        models_schema = self._resolve_response_schema(schema, "/api/v1/models/config")
+        self.assertTrue({"code", "data", "msg", "error"}.issubset(models_schema["properties"].keys()))
 
     def test_production_openapi_excludes_debug_routes(self) -> None:
         production_app = create_app(self._settings(APP_ENV="production"))

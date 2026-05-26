@@ -193,6 +193,16 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 - `AUTH_SESSION_ABSOLUTE_LIFETIME_SECONDS`：absolute timeout 上限，默认 `86400`。
 - `AUTH_SESSION_REFRESH_THRESHOLD_SECONDS`：显式 refresh 触发重签的剩余 idle 阈值，默认 `1800`。
 - `AUTH_CSRF_HEADER_NAME`：CSRF header 名称，默认 `X-CSRF-Token`。
+- `MODEL_CONFIG_ENCRYPTION_KEY`：模型供应商 API key 入库加密主密钥；配置模型 key 前必须设置，值可用 Fernet key 生成命令创建。API 不会返回或记录该值。
+
+### 模型配置 API
+
+- `GET /api/v1/models/config`：返回全局 OpenAI-compatible 模型配置的脱敏状态。
+- `PUT /api/v1/models/config`：保存全局模型配置；请求可提交 API key，服务端加密入库，响应不回显明文。
+- `POST /api/v1/models/actions/test-connection`：使用固定 smoke prompt 验证已保存配置，并记录 token usage。
+- `GET /api/v1/models/invocations`：返回最近模型调用摘要和基础 token usage。
+
+模型配置属于受保护管理面，不放入 Settings 或插件配置；写接口需要有效 Cookie Session 和 CSRF header。
 
 ### 新增 route 流程
 
