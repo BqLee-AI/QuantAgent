@@ -2,4 +2,5 @@
 members = [
   "apps/api",
   "packages/core",
+  "packages/plugin-sdk",
 ]

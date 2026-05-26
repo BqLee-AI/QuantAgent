@@ -11,6 +11,7 @@ resolution-markers = [
 members = [
     "quantagent-api",
     "quantagent-core",
+    "quantagent-plugin-sdk",
 ]
 
 [[package]]
@@ -864,6 +865,11 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "sqlalchemy", specifier = ">=2.0.44" },
 ]
+
+[[package]]
+name = "quantagent-plugin-sdk"
+version = "0.1.0"
+source = { editable = "packages/plugin-sdk" }
 
 [[package]]
 name = "rich"
