@@ -252,15 +252,15 @@ Model Providers / LLM Policies
 
 组件名、字段草案和原型只能作为参考，不应替代 `packages/contracts`、OpenAPI、JSON Schema 或 OpenSpec。
 
-## 后续 OpenSpec 建议
+## 对应 OpenSpec 真源
 
-若本 PRD 评审通过，应创建统一 change：
+本 PRD 对应的统一页面行为真源为：
 
 ```text
-web-trader-workbench-v1
+web-p0-mainflow-pages
 ```
 
-建议包含：
+该 change 当前承接：
 
 - Dashboard / Events / Event Detail 行为 spec。
 - ApprovalRequest / ApprovalDecision / ApprovalLink 行为 spec。
