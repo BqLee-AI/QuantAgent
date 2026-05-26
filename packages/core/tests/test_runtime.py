@@ -143,6 +143,29 @@ class PluginRuntimeServiceTestCase(unittest.IsolatedAsyncioTestCase):
         for forbidden in ("db", "session", "scheduler", "event_bus", "service", "secret_resolver"):
             self.assertFalse(hasattr(context, forbidden))
 
+    async def test_validated_config_is_injected_into_runtime_context(self) -> None:
+        captured = {}
+
+        class ConfigPlugin(BasePlugin):
+            async def invoke(self, request):
+                captured["config"] = self.context.config
+                return PluginInvokeResult(output={"configured": self.context.config["enabled"]})
+
+        self._install_module("test_runtime_config", ConfigPlugin)
+        record = self._record(entrypoint="test_runtime_config:plugin")
+
+        invocation = await PluginRuntimeService().invoke(
+            record,
+            capability="source.fetch",
+            request_id="req-1",
+            config={"enabled": True},
+        )
+
+        self.assertTrue(invocation.ok)
+        self.assertTrue(invocation.result.output["configured"])
+        with self.assertRaises(TypeError):
+            captured["config"]["enabled"] = False
+
     def _install_module(self, module_name: str, plugin) -> None:
         module = types.ModuleType(module_name)
         module.plugin = plugin
