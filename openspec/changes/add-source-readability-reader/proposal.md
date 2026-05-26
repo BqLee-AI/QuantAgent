@@ -1,6 +1,6 @@
 ## Why
 
-QuantAgent 已经通过 `#137` 和 `docs/design/11-crawler-source-plugin-boundary.md` 收住了 crawler Source Plugin 的插件包交付边界，也在 `docs/design/06-source-plugin-design.md` 中把 `quantagent.official.source.readability` 列为初版官方 Source Plugin 能力。但当前仓库里仍只有 `placeholder-source` 这类最小样例，还没有可复用的正文读取插件。
+QuantAgent 已经通过 `#137` 和 `docs/design/11-crawler-source-plugin-boundary.md` 收住了 crawler Source Plugin 的插件包交付边界，也在 `docs/design/06-source-plugin-design.md` 中把 `quantagent.official.source.readability` 列为初版官方 Source Plugin 能力。`#155` 这组 `Readability Link Reader` artifacts 也明确建立在 `#145` 已收敛的 `source-plugin-boundary` 之上，沿用那一层“插件返回标准 DTO、平台接管事件链路”的职责边界。但当前仓库里仍只有 `placeholder-source` 这类最小样例，还没有可复用的正文读取插件。
 
 如果这一层能力继续缺失，后续新闻抓取、公司财报抓取、特定内容搜索等插件 issue 会被迫在同一刀里同时定义 reader 能力、业务抓取逻辑和 fallback 方案，导致 scope 漂移，也会让“插件只负责能力和配置契约，平台负责调度和事件链路”的边界再次变模糊。
 
