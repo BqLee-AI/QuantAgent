@@ -854,6 +854,7 @@ dependencies = [
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
     { name = "pyyaml" },
+    { name = "quantagent-plugin-sdk" },
     { name = "sqlalchemy" },
 ]
 
@@ -863,6 +864,7 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.2" },
     { name = "pydantic-settings", specifier = ">=2.14.1" },
     { name = "pyyaml", specifier = ">=6.0.3" },
+    { name = "quantagent-plugin-sdk", editable = "packages/plugin-sdk" },
     { name = "sqlalchemy", specifier = ">=2.0.44" },
 ]
 

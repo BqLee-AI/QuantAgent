@@ -7,9 +7,13 @@ dependencies = [
     "alembic>=1.17.2",
     "pydantic-settings>=2.14.1",
     "psycopg[binary]>=3.3.2",
+    "quantagent-plugin-sdk",
     "pyyaml>=6.0.3",
     "sqlalchemy>=2.0.44",
 ]
+
+[tool.uv.sources]
+quantagent-plugin-sdk = { workspace = true }
 
 [tool.uv.build-backend]
 module-root = "src"
