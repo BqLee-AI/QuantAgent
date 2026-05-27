@@ -232,6 +232,31 @@ class AlpacaPaperAdapterSpikeTestCase(unittest.TestCase):
         self.assertEqual(order.client_order_id, "client_redacted_1")
         self.assertEqual(order.requested_at, datetime(2026, 5, 26, 6, 0, tzinfo=timezone.utc))
 
+    def test_client_requires_list_of_mappings_for_positions_orders_and_activities(self) -> None:
+        client = AlpacaPaperClient(
+            AlpacaPaperConfig(
+                base_url=ALPACA_PAPER_BASE_URL,
+                api_key_id="paper-key",
+                api_secret_key="paper-secret",
+                smoke_enabled=True,
+                order_smoke_enabled=False,
+            ),
+            transport=MockTransport(
+                responses=[
+                    AlpacaHttpResponse(200, "not-a-list"),
+                    AlpacaHttpResponse(200, ["not-a-mapping"]),
+                    AlpacaHttpResponse(200, "still-not-a-list"),
+                ]
+            ),
+        )
+
+        with self.assertRaisesRegex(ValueError, "positions response must be a list of mappings"):
+            client.get_positions()
+        with self.assertRaisesRegex(ValueError, "orders response must be a list of mappings"):
+            client.get_orders()
+        with self.assertRaisesRegex(ValueError, "activities response must be a list of mappings"):
+            client.get_fill_activities()
+
     def test_fill_activity_uses_account_scoped_source_key_and_wallet_idempotency(self) -> None:
         snapshot = fetch_read_only_snapshot(
             AlpacaPaperClient(

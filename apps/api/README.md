@@ -25,7 +25,7 @@ cd apps/api && uv run python -m unittest discover -s src/tests
 
 Alpaca wallet API E2E validation 也落在 `apps/api/src/tests/`，只做测试链路验证，不新增任何 Alpaca route 或 runtime adapter：
 
-- 默认离线 E2E：复用 `packages/core/tests/alpaca_paper_adapter_spike.py` 的 Alpaca-shaped mapping，与 `WalletService.ingest_paper_execution()`、既有 `/api/v1/wallet/**` 只读 endpoints 组成受控读回链路。
+- 默认离线 E2E：使用 `apps/api/src/tests/alpaca_wallet_api_e2e_support.py` 中抽出的最小 Alpaca-shaped mapping helper，与 `WalletService.ingest_paper_execution()`、既有 `/api/v1/wallet/**` 只读 endpoints 组成受控读回链路。
 - 可选外部 smoke：只有同时满足 `QUANTAGENT_ALPACA_WALLET_API_E2E_SMOKE=1`、`QUANTAGENT_ALPACA_PAPER_SMOKE=1`、paper credentials 与 `https://paper-api.alpaca.markets` URL guard 时才运行。
 - 外部 smoke 只读取 Alpaca paper account、positions、orders；本地 wallet state 使用 `acct_alpaca_e2e_redacted`、`order_redacted_*`、`client_redacted_*`、`activity_redacted_*` 等脱敏 identifier，不提交 paper order。
 

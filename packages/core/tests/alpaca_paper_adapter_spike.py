@@ -310,8 +310,7 @@ class AlpacaPaperClient:
 
     def get_positions(self) -> Sequence[Mapping[str, Any]]:
         payload = self._request_json("GET", "/v2/positions")
-        if not isinstance(payload, Sequence):
-            raise ValueError("Alpaca positions response must be a sequence.")
+        _require_mapping_list(payload, field_name="positions")
         return payload
 
     def get_orders(self, *, status: str = "all", limit: int = 50) -> Sequence[Mapping[str, Any]]:
@@ -320,8 +319,7 @@ class AlpacaPaperClient:
             "/v2/orders",
             params={"status": status, "limit": limit, "direction": "desc"},
         )
-        if not isinstance(payload, Sequence):
-            raise ValueError("Alpaca orders response must be a sequence.")
+        _require_mapping_list(payload, field_name="orders")
         return payload
 
     def get_fill_activities(self, *, page_size: int = 100) -> Sequence[Mapping[str, Any]]:
@@ -330,8 +328,7 @@ class AlpacaPaperClient:
             "/v2/account/activities/FILL",
             params={"direction": "desc", "page_size": page_size},
         )
-        if not isinstance(payload, Sequence):
-            raise ValueError("Alpaca activities response must be a sequence.")
+        _require_mapping_list(payload, field_name="activities")
         return payload
 
     def submit_order(self, request: AlpacaOrderSmokeRequest) -> Mapping[str, Any]:
@@ -541,6 +538,11 @@ def _extract_message(payload: Any) -> str:
     if isinstance(payload, str):
         return payload
     return ""
+
+
+def _require_mapping_list(payload: Any, *, field_name: str) -> None:
+    if not isinstance(payload, list) or any(not isinstance(item, Mapping) for item in payload):
+        raise ValueError(f"Alpaca {field_name} response must be a list of mappings.")
 
 
 def _parse_timestamp(value: Any) -> datetime:
