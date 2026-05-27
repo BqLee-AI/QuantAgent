@@ -1,8 +1,8 @@
 ## Status
 
-- [ ] 本 change 必须先提交 OpenSpec-only PR 审核；未批准或未明确评论“没问题”前，不开始实现。
-- [ ] 当前实现范围限定为测试 / 验证能力，不新增 Alpaca API route，不新增 runtime adapter，不新增官方 plugin。
-- [ ] 外部 Alpaca paper E2E smoke 是可选补充验证；离线 E2E 是本 change 的必跑验收。
+- [x] 本 change 的 OpenSpec 审核门禁已完成；实现按审核后的 change 继续推进。
+- [x] 当前实现范围保持在测试 / 验证能力内，没有新增 Alpaca API route、runtime adapter 或官方 plugin。
+- [x] 外部 Alpaca paper E2E smoke 维持为可选补充验证；离线 E2E 仍是本 change 的必跑验收。
 
 ## Graph Overview
 
