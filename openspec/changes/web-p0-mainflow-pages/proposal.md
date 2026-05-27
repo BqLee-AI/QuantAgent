@@ -26,6 +26,6 @@ Issue #127 以及其评论已经明确三个产品结论：根路径必须保留
 
 - OpenSpec stable spec：后续归档会新增 `web-p0-mainflow-pages`，并更新 `router-layout` 的根路径默认入口语义。
 - Web 实现输入：后续实现阶段需要调整 `apps/web` 的根路由、Dashboard 入口、导航/面包屑和默认入口策略。
-- PRD 对齐：`docs/prd/08-frontend-pages-overview.md` 需要指向本 change，避免 PRD 与 OpenSpec 分叉。
+- PRD 对齐：`docs/prd/08-frontend-pages-overview.md` 需要在独立文档变更中回链本 change，避免 PRD 与 OpenSpec 分叉，同时保持本 PR 为 OpenSpec-only 边界。
 - 下游 issue：#129、#130、#131 需以本 change 作为统一上游，不再各自发明首页和主链路边界。
 - 非影响范围：本 change 不实现 React 页面、API contract、generated client、数据模型或真实审批执行链路。

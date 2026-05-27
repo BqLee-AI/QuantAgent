@@ -84,22 +84,23 @@
 
 替代方案是在本 change 的 `router-layout` delta 中同时复制登录恢复、403 和 capability snapshot 语义。该方案会让归档后的 `router-layout` 变成认证和权限真源，造成职责重叠，因此不采用。
 
-### 7. PRD 只做最小对齐，不重写页面附录
+### 7. PRD 回链单独处理，不在 OpenSpec-only PR 中混入页面附录改动
 
 当前 `origin/main` 上的页面 PRD 已经基本符合 `issue #127` 结论。再次大规模重写 PRD 只会扩大本轮范围，并增加 OpenSpec-only PR 的噪音。
 
-因此本轮只做最小对齐：
+因此本轮保持 OpenSpec-only 边界：
 
-- 在 `docs/prd/08-frontend-pages-overview.md` 中把“后续建议创建 change”替换为本次已实际创建的 change 名称。
-- 不大改 `00-dashboard.md`、`02-events-home.md`、`03-event-detail.md`、`04-approvals-index.md`，除非发现与新 spec 直接冲突的语句。
+- 本 change 只提交 `proposal.md`、`design.md`、`tasks.md`、`specs/**/spec.md` 和必要元数据。
+- `docs/prd/08-frontend-pages-overview.md` 对 `web-p0-mainflow-pages` 的回链在后续独立文档变更中处理，不与 OpenSpec-only PR 混提。
+- 不大改 `00-dashboard.md`、`02-events-home.md`、`03-event-detail.md`、`04-approvals-index.md`，除非后续实现或评审发现与 stable spec 直接冲突的语句。
 
 ## Risks / Trade-offs
 
 - [Risk] 只修改 OpenSpec 而不立刻改路由代码，短期内仓库实现仍然保持 `/ -> /events`。
   -> Mitigation：在 tasks 中明确实现 PR 必须先处理默认首页入口，再进入 Dashboard UI 或详情/审批页面实现。
 
-- [Risk] 新增 `web-p0-mainflow-pages` capability 后，reviewer 可能质疑和现有页面 PRD 的边界重复。
-  -> Mitigation：proposal 和 PRD 对齐中明确 PRD 是页面附录，OpenSpec 是行为真源；PRD 不再悬空建议一个未来 change。
+- [Risk] 新增 `web-p0-mainflow-pages` capability 后，reviewer 可能质疑和现有页面 PRD 的边界重复，或认为 OpenSpec-only PR 混入了页面附录改动。
+  -> Mitigation：proposal 和 design 中明确 PRD 是页面附录，OpenSpec 是行为真源；PRD 回链单独处理，不在本 PR 混入。
 
 - [Risk] 事件详情页当前 PRD 提到了更多信息块，spec 若写得过细会抢掉 #130 的设计空间。
   -> Mitigation：spec 只固定主阅读顺序、关键入口和 P0 非目标，不发明最终字段 contract 或交互细节。
