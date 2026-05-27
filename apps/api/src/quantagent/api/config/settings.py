@@ -12,13 +12,19 @@ from quantagent.core.config.settings import Settings as CoreSettings
 _API_APP_DIR = Path(__file__).resolve().parents[4]
 _REPO_ROOT_DIR = Path(__file__).resolve().parents[6]
 _CWD = Path.cwd()
-_ENV_FILE_CANDIDATES = (
-    _REPO_ROOT_DIR / ".env",
-    _CWD / ".env",
-    _REPO_ROOT_DIR / "apps/api/.env",
-    _API_APP_DIR / ".env",
-)
-_ENV_FILES = tuple(str(path) for path in dict.fromkeys(_ENV_FILE_CANDIDATES))
+
+
+def _build_env_files() -> tuple[str, ...]:
+    candidates = [_CWD / ".env", _API_APP_DIR / ".env"]
+
+    repo_api_dir = _REPO_ROOT_DIR / "apps/api"
+    if repo_api_dir == _API_APP_DIR:
+        candidates.extend((_REPO_ROOT_DIR / ".env", repo_api_dir / ".env"))
+
+    return tuple(str(path) for path in dict.fromkeys(candidates))
+
+
+_ENV_FILES = _build_env_files()
 
 
 class Settings(CoreSettings):

@@ -634,6 +634,26 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(settings.API_HOST, "0.0.0.0")
         self.assertEqual(settings.API_PORT, 9100)
 
+    def test_api_host_and_port_env_names_are_loaded_from_environment(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"API_HOST": "0.0.0.0", "API_PORT": "9200", "AUTH_ADMIN_PASSWORD": "test-admin-password", "AUTH_SESSION_SECRET": "test-session-secret"},
+            clear=False,
+        ):
+            settings = Settings(_env_file=None)
+        self.assertEqual(settings.API_HOST, "0.0.0.0")
+        self.assertEqual(settings.API_PORT, 9200)
+
+    def test_legacy_host_and_port_env_names_are_still_loaded_from_environment(self) -> None:
+        with patch.dict(
+            os.environ,
+            {"HOST": "0.0.0.0", "PORT": "9300", "AUTH_ADMIN_PASSWORD": "test-admin-password", "AUTH_SESSION_SECRET": "test-session-secret"},
+            clear=False,
+        ):
+            settings = Settings(_env_file=None)
+        self.assertEqual(settings.API_HOST, "0.0.0.0")
+        self.assertEqual(settings.API_PORT, 9300)
+
     def test_same_site_none_requires_secure_cookie(self) -> None:
         with self.assertRaisesRegex(ValueError, "AUTH_COOKIE_SAME_SITE=none requires AUTH_COOKIE_SECURE=true"):
             Settings(
