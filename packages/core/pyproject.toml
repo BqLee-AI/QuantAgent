@@ -12,6 +12,9 @@ dependencies = [
     "sqlalchemy>=2.0.44",
 ]
 
+[project.scripts]
+quantagent-db = "quantagent.core.db.cli:main"
+
 [tool.uv.sources]
 quantagent-plugin-sdk = { workspace = true }
 

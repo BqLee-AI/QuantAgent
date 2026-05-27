@@ -68,3 +68,13 @@ docker compose --profile migration run --rm migrate
 `migrate` 服务默认不会随 `docker compose up api` 自动运行，避免本地启动 API 时隐式修改数据库结构。
 
 如果修改了 `POSTGRES_DB`、`POSTGRES_USER` 或 `POSTGRES_PASSWORD`，请同步调整 `API_DATABASE_URL` 和 `MIGRATION_DATABASE_URL`。
+
+本地直跑数据库迁移命令由 `packages/core` 提供，API 启动流程不负责自动迁移：
+
+```bash
+uv run quantagent-db upgrade
+uv run quantagent-db current
+uv run quantagent-db check
+```
+
+使用 `uv run` 时需要在仓库根目录或 `packages/core` 这类可发现 workspace/project 的目录下执行。服务器或容器中如果已经把 `quantagent-db` 安装进虚拟环境或镜像 `PATH`，命令默认会从当前目录及其祖先目录尝试定位 `packages/core/alembic.ini` 和 `packages/core/alembic/`；如果部署目录不保留这类仓库结构，需要通过 `QUANTAGENT_CORE_MIGRATION_ROOT=/path/to/packages/core` 显式指定迁移目录。

@@ -73,11 +73,23 @@ Compose 中的 API 容器通过 `API_DATABASE_URL` 连接 `db:5432`；宿主机�
 
 ### 数据库迁移
 
-执行 Alembic 迁移，从仓库根目录运行：
+执行数据库迁移，从仓库根目录运行：
 
 ```bash
 docker compose --profile migration run --rm migrate
 ```
+
+本地直跑时使用 `packages/core` 提供的独立 CLI：
+
+```bash
+uv run quantagent-db upgrade
+uv run quantagent-db current
+uv run quantagent-db check
+```
+
+API 启动流程不自动执行迁移；API 只负责创建数据库连接并通过 `/api/v1/ready` 暴露 readiness probe。
+
+使用 `uv run` 时需要在仓库根目录或 `packages/core` 这类可发现 workspace/project 的目录下执行。服务器或容器中如果已经把 `quantagent-db` 安装进虚拟环境或镜像 `PATH`，命令默认会从当前目录及其祖先目录尝试定位 `packages/core/alembic.ini` 和 `packages/core/alembic/`；如果部署目录不保留这类仓库结构，需要通过 `QUANTAGENT_CORE_MIGRATION_ROOT=/path/to/packages/core` 显式指定迁移目录。
 
 ### 健康检查
 

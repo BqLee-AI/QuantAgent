@@ -27,7 +27,7 @@ services:
     profiles:
       - migration
     working_dir: /app/packages/core
-    command: ["alembic", "upgrade", "head"]
+    command: ["quantagent-db", "upgrade"]
     environment:
       APP_ENV: ${APP_ENV:-local}
       DATABASE_URL: ${MIGRATION_DATABASE_URL:-postgresql+psycopg://quantagent:quantagent@db:5432/quantagent}
