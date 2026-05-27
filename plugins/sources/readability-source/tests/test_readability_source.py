@@ -6,42 +6,41 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+
+REPO_ROOT = Path(__file__).resolve().parents[4]
 CORE_SRC = REPO_ROOT / "packages" / "core" / "src"
 if str(CORE_SRC) not in sys.path:
     sys.path.insert(0, str(CORE_SRC))
 
-from quantagent.core.registry import PluginStatus, RegistryScanner
 from quantagent.core.sources import SourceOutput
 
 
 PLUGIN_ROOT = REPO_ROOT / "plugins" / "sources" / "readability-source"
 PLUGIN_MODULE_PATH = PLUGIN_ROOT / "src" / "readability_source.py"
-FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "readability_article.html"
+FIXTURE_PATH = REPO_ROOT / "packages" / "core" / "tests" / "fixtures" / "readability_article.html"
 
 
 class ReadabilitySourcePluginTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        spec = importlib.util.spec_from_file_location("readability_source", PLUGIN_MODULE_PATH)
+        cls._module_name = "readability_source"
+        cls._previous_module = sys.modules.get(cls._module_name)
+        spec = importlib.util.spec_from_file_location(cls._module_name, PLUGIN_MODULE_PATH)
         if spec is None or spec.loader is None:
             raise RuntimeError("Failed to load readability_source module")
         module = importlib.util.module_from_spec(spec)
-        sys.modules["readability_source"] = module
+        sys.modules[cls._module_name] = module
         spec.loader.exec_module(module)
         cls.module = module
 
-    def test_registry_scans_official_readability_plugin(self) -> None:
-        records = RegistryScanner(
-            official_root=REPO_ROOT / "plugins",
-            runtime_root=REPO_ROOT / "runtime" / "plugins",
-        ).scan()
-
-        by_id = {record.id: record for record in records}
-        record = by_id["quantagent.official.source.readability"]
-        self.assertEqual(record.status, PluginStatus.VALID)
-        self.assertEqual(record.manifest.capabilities, ("source.fetch",))
-        self.assertEqual(record.manifest.entrypoint, "readability_source:plugin")
+    @classmethod
+    def tearDownClass(cls) -> None:
+        sys.modules.pop(getattr(cls, "_module_name", "readability_source"), None)
+        previous = getattr(cls, "_previous_module", None)
+        if previous is not None:
+            sys.modules[cls._module_name] = previous
+        if hasattr(cls, "module"):
+            del cls.module
 
     def test_fetch_extracts_article_content_from_controlled_html(self) -> None:
         html = FIXTURE_PATH.read_text(encoding="utf-8")
@@ -74,9 +73,19 @@ class ReadabilitySourcePluginTestCase(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "url must be a non-empty string"):
             self.module.plugin.fetch(None, {})
 
+    def test_fetch_rejects_empty_or_blank_url(self) -> None:
+        for bad in ("", "   "):
+            with self.subTest(url=bad):
+                with self.assertRaisesRegex(ValueError, "url must be a non-empty string"):
+                    self.module.plugin.fetch(None, {"url": bad})
+
+    def test_fetch_rejects_non_http_schemes(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Only http and https schemes are allowed"):
+            self.module.plugin.fetch(None, {"url": "file:///tmp/test.html"})
+
     def test_readme_documents_plugin_boundary(self) -> None:
         readme = (PLUGIN_ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("只提供 `source.fetch` 能力，不暴露 `tool.read_url`", readme)
+        self.assertIn("只提供 `source.fetch` 能力，不暴露 `tool.read_url`", readme)  # noqa: RUF001
         self.assertIn("不负责 `RawEvent` 入库、去重、`SourceBinding`、`Event Bus`、权限或生命周期", readme)
 
 

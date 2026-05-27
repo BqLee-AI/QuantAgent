@@ -20,6 +20,9 @@ class ReadabilitySource:
     def fetch(self, cursor: str | None, config: Mapping[str, Any]) -> list[SourceOutput]:
         del cursor
         url = _require_string(config, "url")
+        parsed_url = urlparse(url)
+        if parsed_url.scheme not in {"http", "https"}:
+            raise ValueError(f"Only http and https schemes are allowed, got: {parsed_url.scheme or '<empty>'}")
         headers = _coerce_headers(config.get("headers"))
         timeout_seconds = _coerce_timeout(config.get("timeout_seconds"))
         min_text_length = _coerce_min_text_length(config.get("min_text_length"))
