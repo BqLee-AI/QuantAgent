@@ -59,11 +59,15 @@ Plugin IO DTO V1 SHALL define a first-pass typed contract for `source.fetch`.
 - **THEN** 可以使用 `SourceFetchInput` 表达 capability-specific 输入
 - **AND** 该输入可映射到 Runtime V1 通用 invoke request 的 `input`
 - **AND** 输入支持 `query`、`limit`、`cursor` 和 `metadata`
-- **AND** `metadata` 必须是 JSON-like object
+- **AND** `metadata` 必须是 JSON-like object，且值只能使用 JSON-safe 类型：string、number、boolean、null、array、object
 
 #### Scenario: source fetch 输出使用 `SourceItemDraft`
 - **WHEN** source 插件成功返回抓取结果
 - **THEN** 结果使用 `SourceFetchResult`
+- **AND** `SourceFetchResult` 包含 `items`
+- **AND** `SourceFetchResult` 可以包含 `next_cursor`
+- **AND** `SourceFetchResult` 包含 `metadata`
+- **AND** `SourceFetchResult.metadata` 必须是 JSON-like object，且值只能使用 JSON-safe 类型：string、number、boolean、null、array、object
 - **AND** 单条产物使用中性的 `SourceItemDraft`
 - **AND** `SourceItemDraft` 不直接命名为 `RawEventDraft`
 - **AND** `SourceItemDraft` 不直接命名为 `EventDraft`
@@ -86,7 +90,8 @@ Plugin IO DTO V1 SHALL define a first-pass typed contract for `notification.send
 - **AND** 输入至少支持 `channel`
 - **AND** 输入至少支持 `severity`
 - **AND** 输入可以支持 `recipient`
-- **AND** 输入可以携带必要 metadata
+- **AND** 输入可以携带必要 `metadata`
+- **AND** `metadata` 必须是 JSON-like object，且值只能使用 JSON-safe 类型：string、number、boolean、null、array、object
 
 #### Scenario: notification send 输出表达发送结果
 - **WHEN** notification 插件完成发送尝试
@@ -94,6 +99,8 @@ Plugin IO DTO V1 SHALL define a first-pass typed contract for `notification.send
 - **AND** 结果包含 `accepted`
 - **AND** 结果可以包含 `provider_message_id`
 - **AND** 结果包含 `retryable`
+- **AND** 结果包含 `metadata`
+- **AND** `metadata` 必须是 JSON-like object，且值只能使用 JSON-safe 类型：string、number、boolean、null、array、object
 - **AND** 结果适合被审计记录、测试 harness 或后续日志层消费
 
 #### Scenario: notification send 失败语义分层
