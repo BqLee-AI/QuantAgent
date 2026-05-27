@@ -11,6 +11,13 @@ Plugin Runtime V1 SHALL use valid Plugin Registry records and manifest entrypoin
 - **AND** Runtime 不重新扫描插件目录
 - **AND** Runtime 不通过硬编码 class、import 列表或 if/else 注册插件
 
+#### Scenario: entrypoint 每次调用产生独立插件实例
+- **WHEN** Runtime 加载 manifest entrypoint
+- **THEN** entrypoint 必须是插件 class 或 factory
+- **AND** Runtime 每次调用都获得独立插件实例
+- **AND** 预实例化 singleton 插件对象会被拒绝
+- **AND** 并发调用不得共享同一个 RuntimeContext
+
 #### Scenario: 无效 Registry 记录不会进入 runtime load
 - **WHEN** 插件记录状态不是有效可加载状态
 - **THEN** Runtime 拒绝加载该插件

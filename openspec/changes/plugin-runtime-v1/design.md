@@ -30,7 +30,7 @@ Runtime V1 的核心风险不是“能不能 import 一个对象”，而是边�
 
 ### 1. Runtime V1 复用 Registry V1，不重新发现插件
 
-Plugin Runtime V1 SHALL 从 Registry 返回的有效 `PluginRecord` 出发，读取 manifest 中的 `entrypoint`、`id`、`version`、`type`、`capabilities` 和 `config_schema` 等信息。Runtime 不扫描额外目录，也不通过硬编码 class、import 列表或 if/else 注册插件。
+Plugin Runtime V1 SHALL 从 Registry 返回的有效 `PluginRecord` 出发，读取 manifest 中的 `entrypoint`、`id`、`version`、`type`、`capabilities` 和 `config_schema` 等信息。Runtime 不扫描额外目录，也不通过硬编码 class、import 列表或 if/else 注册插件。V1 的 entrypoint 必须是插件 class 或 factory，每次运行时调用都创建新的插件实例；Runtime 不接受预实例化 singleton 对象作为 entrypoint，以避免并发请求覆盖同一个 RuntimeContext。
 
 替代方案是在 Runtime 中再次扫描插件目录或维护独立插件列表。该方案会制造第二套插件真源，破坏 Registry V1 已经收住的 manifest-first 边界，因此不采用。
 
