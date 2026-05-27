@@ -4,7 +4,7 @@ import os
 import tempfile
 import unittest
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 
 from fastapi.testclient import TestClient
 
@@ -394,7 +394,9 @@ class AlpacaWalletApiE2ETestCase(unittest.TestCase):
         )
         if matching_balance <= 0:
             return Decimal("0")
-        affordable_quantity = matching_balance / price
+        affordable_quantity = (matching_balance / price).quantize(Decimal("0.00000001"), rounding=ROUND_DOWN)
+        while affordable_quantity > 0 and (affordable_quantity * price) > matching_balance:
+            affordable_quantity -= Decimal("0.00000001")
         return min(desired_quantity, affordable_quantity)
 
     def _get_external_smoke_skip_reason(self, config: AlpacaPaperConfig) -> str | None:

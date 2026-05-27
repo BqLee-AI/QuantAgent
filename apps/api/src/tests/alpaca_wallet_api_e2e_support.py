@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
@@ -87,9 +88,19 @@ class BrokerSimulatorCashBalance:
 
 
 @dataclass(frozen=True)
+class BrokerSimulatorPositionContext:
+    instrument: str
+    market: str
+    currency: str
+    quantity: Decimal | str | int
+    average_cost: Decimal | str | int | None = None
+
+
+@dataclass(frozen=True)
 class BrokerSimulatorFixture:
     account: BrokerSimulatorAccount
     cash_balances: tuple[BrokerSimulatorCashBalance, ...] = ()
+    position_contexts: tuple[BrokerSimulatorPositionContext, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -206,7 +217,12 @@ def map_alpaca_error(
     normalized_payload = sanitize_for_logs(payload)
     details = {"payload": normalized_payload} if payload is not None else {}
 
-    if isinstance(exception, TimeoutError):
+    if isinstance(exception, urllib_error.URLError) and isinstance(
+        getattr(exception, "reason", None),
+        (TimeoutError, socket.timeout),
+    ):
+        return AlpacaBrokerError("timeout", "alpaca paper request timed out", details=MappingProxyType(details))
+    if isinstance(exception, (TimeoutError, socket.timeout)):
         return AlpacaBrokerError("timeout", "alpaca paper request timed out", details=MappingProxyType(details))
     if exception is not None:
         return AlpacaBrokerError(
@@ -263,6 +279,8 @@ class UrllibAlpacaTransport:
                 payload=_decode_json_body(raw_body),
                 raw_body=raw_body,
             )
+        except urllib_error.URLError as exc:
+            raise AlpacaPaperRequestError(map_alpaca_error(exception=exc)) from exc
         except TimeoutError as exc:
             raise AlpacaPaperRequestError(map_alpaca_error(exception=exc)) from exc
         except OSError as exc:
@@ -285,8 +303,7 @@ class AlpacaPaperClient:
 
     def get_positions(self) -> Sequence[Mapping[str, Any]]:
         payload = self._request_json("GET", "/v2/positions")
-        if not isinstance(payload, Sequence):
-            raise ValueError("Alpaca positions response must be a sequence.")
+        _require_mapping_list(payload, field_name="positions")
         return payload
 
     def get_orders(self, *, status: str = "all", limit: int = 50) -> Sequence[Mapping[str, Any]]:
@@ -295,8 +312,7 @@ class AlpacaPaperClient:
             "/v2/orders",
             params={"status": status, "limit": limit, "direction": "desc"},
         )
-        if not isinstance(payload, Sequence):
-            raise ValueError("Alpaca orders response must be a sequence.")
+        _require_mapping_list(payload, field_name="orders")
         return payload
 
     def _request_json(
@@ -325,10 +341,12 @@ class AlpacaPaperClient:
 
 def fetch_read_only_snapshot(client: AlpacaPaperClient) -> AlpacaReadOnlySnapshot:
     account = map_alpaca_account(client.get_account())
+    positions = tuple(map_alpaca_position(item) for item in client.get_positions())
     orders = tuple(map_alpaca_order(item) for item in client.get_orders())
     fixture = BrokerSimulatorFixture(
         account=account.fixture.account,
         cash_balances=account.fixture.cash_balances,
+        position_contexts=positions,
     )
     return AlpacaReadOnlySnapshot(
         fixture=fixture,
@@ -379,6 +397,16 @@ def map_alpaca_order(payload: Mapping[str, Any]) -> BrokerSimulatorOrderInput:
     )
 
 
+def map_alpaca_position(payload: Mapping[str, Any]) -> BrokerSimulatorPositionContext:
+    return BrokerSimulatorPositionContext(
+        instrument=_require_text(payload, "symbol"),
+        market=_normalize_market(payload),
+        currency=_normalize_currency(payload.get("currency", "USD")),
+        quantity=_require_decimal(payload, "qty"),
+        average_cost=_optional_decimal(payload.get("avg_entry_price")),
+    )
+
+
 def map_alpaca_fill_activity(payload: Mapping[str, Any], *, account_id: str) -> BrokerSimulatorExecutionInput:
     activity_id = _require_text(payload, "id")
     return BrokerSimulatorExecutionInput(
@@ -423,7 +451,7 @@ def _parse_timestamp(value: Any) -> datetime:
             return value.replace(tzinfo=timezone.utc)
         return value
     if value in (None, ""):
-        return datetime.now(timezone.utc)
+        raise ValueError("Alpaca timestamp is required.")
     text = str(value).strip()
     if text.endswith("Z"):
         text = f"{text[:-1]}+00:00"
@@ -431,6 +459,11 @@ def _parse_timestamp(value: Any) -> datetime:
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed
+
+
+def _require_mapping_list(payload: Any, *, field_name: str) -> None:
+    if not isinstance(payload, list) or any(not isinstance(item, Mapping) for item in payload):
+        raise ValueError(f"Alpaca {field_name} response must be a list of mappings.")
 
 
 def _normalize_currency(value: Any) -> str:
