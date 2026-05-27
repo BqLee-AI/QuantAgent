@@ -86,6 +86,25 @@ Discord 会先发送 `PING` 验证请求；验证通过后才会继续发送真�
 
 如果后续还定义了实际 slash command，再执行一次最小 command smoke test，确认 endpoint 返回的 interaction response 能被 Discord 接受。
 
+## 本地签名 Smoke
+
+如果你还没把公网 HTTPS 地址接给 Discord，可以先做一次本地签名联调：
+
+1. 生成一组测试私钥/公钥，把公钥填到 `DISCORD_INTERACTIONS_PUBLIC_KEY`。
+2. 启动 API。
+3. 设置测试私钥后执行：
+
+```bash
+DISCORD_INTERACTIONS_TEST_PRIVATE_KEY=<hex-private-key> \
+uv run python plugins/sources/discord-interaction-webhook/smoke_receive.py
+```
+
+脚本会对本地 endpoint 发送一条带官方 `Ed25519` 风格签名的请求，并打印：
+
+- `derived_public_key`：由测试私钥推导出的公钥，应该与你配置到 API 的 `DISCORD_INTERACTIONS_PUBLIC_KEY` 一致。
+- `http_status`
+- `response_body`
+
 ## 非目标
 
 - 不支持 polling、gateway、审批回流、自动执行、统一聊天通道或主事件流接入。
