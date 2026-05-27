@@ -9,9 +9,7 @@ import {
 
 import {
   createApiClient,
-  createBaseApi,
   type ApiClient,
-  type BaseApi,
 } from "@/shared/api";
 import { useRuntimeConfig } from "@/shared/config";
 
@@ -112,8 +110,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }),
     [config.apiBaseUrl, resetToUnauthenticated],
   );
-  const baseApi = useMemo<BaseApi>(() => createBaseApi(apiClient), [apiClient]);
-  const authApi = useMemo<AuthApi>(() => createAuthApi(baseApi), [baseApi]);
+  const authApi = useMemo<AuthApi>(() => createAuthApi(apiClient), [apiClient]);
 
   const refreshAuthenticatedSession = useCallback(async () => {
     if (!config.authEnabled || !csrfTokenRef.current) {
@@ -245,12 +242,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     () => ({
       ...state,
       apiClient,
-      baseApi,
       bootstrap,
       login,
       logout,
     }),
-    [apiClient, baseApi, bootstrap, login, logout, state],
+    [apiClient, bootstrap, login, logout, state],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,6 +1,6 @@
 import { ApiError } from "@/shared/api";
 
-import type { AuthApi } from "./api";
+import type { AuthApiContract } from "./api";
 import { isForbidden, toForbiddenDetails } from "./forbidden";
 import type {
   AuthenticatedActor,
@@ -76,7 +76,7 @@ export type RefreshSessionResult =
   | UnauthenticatedSessionResult;
 
 export interface SessionActionOptions {
-  authApi: AuthApi;
+  authApi: AuthApiContract;
   isAuthDisabled: boolean;
 }
 

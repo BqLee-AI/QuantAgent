@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/shared/api";
 
-import type { AuthApi } from "./api";
+import type { AuthApiContract } from "./api";
 import {
   bootstrapSession,
   loginSession,
@@ -10,7 +10,7 @@ import {
   refreshSession,
 } from "./session-actions";
 
-function createAuthApiMock(): AuthApi {
+function createAuthApiMock(): AuthApiContract {
   return {
     fetchCurrentActor: vi.fn(),
     loginWithPassword: vi.fn(),

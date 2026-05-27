@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { createBaseApi, joinApiPath, type ApiClient } from "@/shared/api";
+import { BaseApi, joinApiPath, type ApiClient } from "@/shared/api";
 
 function createApiClientMock(): ApiClient {
   return {
@@ -26,30 +26,54 @@ describe("joinApiPath", () => {
   });
 });
 
-describe("createBaseApi", () => {
+class TestApi extends BaseApi {
+  constructor(apiClient: ApiClient, basePath?: string) {
+    super(apiClient, { basePath });
+  }
+
+  read(path: string, config?: Parameters<ApiClient["get"]>[1]) {
+    return this.get(path, config);
+  }
+
+  write(path: string, config?: Parameters<ApiClient["post"]>[2]) {
+    return this.post(path, undefined, config);
+  }
+}
+
+describe("BaseApi", () => {
   it("prefixes requests with the configured base path", async () => {
     const client = createApiClientMock();
     vi.mocked(client.get).mockResolvedValue({ ok: true });
 
-    const baseApi = createBaseApi(client, { basePath: "/auth" });
+    const api = new TestApi(client, "/auth");
 
-    await baseApi.get("/me", { dedupeKey: false });
+    await api.read("/me", { dedupeKey: false });
 
     expect(client.get).toHaveBeenCalledWith("/auth/me", { dedupeKey: false });
   });
 
-  it("creates nested base APIs for grouped endpoints", async () => {
+  it("lets feature APIs compose nested path segments through inheritance", async () => {
     const client = createApiClientMock();
     vi.mocked(client.post).mockResolvedValue({ ok: true });
 
-    const pluginsApi = createBaseApi(client)
-      .withBasePath("/plugins")
-      .withBasePath("/:pluginId/actions");
+    class PluginActionApi extends BaseApi {
+      constructor(apiClient: ApiClient) {
+        super(apiClient, { basePath: "/plugins" });
+      }
 
-    await pluginsApi.post("enable", undefined, { dedupeKey: false });
+      enable(pluginId: string) {
+        return this.post(`/${pluginId}/actions/enable`, undefined, {
+          dedupeKey: false,
+        });
+      }
+    }
+
+    const pluginsApi = new PluginActionApi(client);
+
+    await pluginsApi.enable("demo");
 
     expect(client.post).toHaveBeenCalledWith(
-      "/plugins/:pluginId/actions/enable",
+      "/plugins/demo/actions/enable",
       undefined,
       { dedupeKey: false },
     );
