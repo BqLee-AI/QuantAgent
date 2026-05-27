@@ -15,12 +15,16 @@ _CWD = Path.cwd()
 
 
 def _build_env_files() -> tuple[str, ...]:
-    candidates = [_CWD / ".env", _API_APP_DIR / ".env"]
-
+    candidates = []
     repo_api_dir = _REPO_ROOT_DIR / "apps/api"
     if repo_api_dir == _API_APP_DIR:
         candidates.extend((_REPO_ROOT_DIR / ".env", repo_api_dir / ".env"))
 
+    cwd_env = _CWD / ".env"
+    if cwd_env not in {_REPO_ROOT_DIR / ".env", _API_APP_DIR / ".env"}:
+        candidates.append(cwd_env)
+
+    candidates.append(_API_APP_DIR / ".env")
     return tuple(str(path) for path in dict.fromkeys(candidates))
 
 
