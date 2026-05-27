@@ -76,7 +76,7 @@ function readHeader(
   return undefined;
 }
 
-export function isApiResponse<T>(value: unknown): value is ApiResponse<T> {
+function isApiResponse<T>(value: unknown): value is ApiResponse<T> {
   if (!value || typeof value !== "object") {
     return false;
   }

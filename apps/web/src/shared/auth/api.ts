@@ -1,4 +1,4 @@
-import type { ApiClient } from "@/shared/api";
+import type { BaseApi } from "@/shared/api";
 
 import type {
   AuthenticatedActor,
@@ -7,35 +7,34 @@ import type {
   RefreshedSession,
 } from "./types";
 
-export function loginWithPassword(
-  apiClient: ApiClient,
-  payload: LoginPayload,
-): Promise<AuthenticatedActor> {
-  return apiClient.post<LoginPayload, AuthenticatedActor>(
-    "/auth/login",
-    payload,
-    { skipCsrf: true },
-  );
+export interface AuthApi {
+  fetchCurrentActor(): Promise<AuthenticatedActor>;
+  loginWithPassword(payload: LoginPayload): Promise<AuthenticatedActor>;
+  logoutSession(): Promise<LogoutResponse>;
+  refreshCurrentSession(): Promise<RefreshedSession>;
 }
 
-export function fetchCurrentActor(
-  apiClient: ApiClient,
-): Promise<AuthenticatedActor> {
-  return apiClient.get<AuthenticatedActor>("/me", { dedupeKey: false });
-}
+export function createAuthApi(baseApi: BaseApi): AuthApi {
+  const authApi = baseApi.withBasePath("/auth");
 
-export function logoutSession(apiClient: ApiClient): Promise<LogoutResponse> {
-  return apiClient.post<undefined, LogoutResponse>("/auth/logout", undefined, {
-    dedupeKey: false,
-  });
-}
-
-export function refreshCurrentSession(
-  apiClient: ApiClient,
-): Promise<RefreshedSession> {
-  return apiClient.post<undefined, RefreshedSession>(
-    "/auth/refresh",
-    undefined,
-    { dedupeKey: false },
-  );
+  return {
+    fetchCurrentActor(): Promise<AuthenticatedActor> {
+      return baseApi.get<AuthenticatedActor>("/me", { dedupeKey: false });
+    },
+    loginWithPassword(payload: LoginPayload): Promise<AuthenticatedActor> {
+      return authApi.post<LoginPayload, AuthenticatedActor>("/login", payload, {
+        skipCsrf: true,
+      });
+    },
+    logoutSession(): Promise<LogoutResponse> {
+      return authApi.post<undefined, LogoutResponse>("/logout", undefined, {
+        dedupeKey: false,
+      });
+    },
+    refreshCurrentSession(): Promise<RefreshedSession> {
+      return authApi.post<undefined, RefreshedSession>("/refresh", undefined, {
+        dedupeKey: false,
+      });
+    },
+  };
 }

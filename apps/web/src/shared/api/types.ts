@@ -1,4 +1,4 @@
-import type { AxiosAdapter } from "axios";
+import type { AxiosAdapter, AxiosRequestConfig } from "axios";
 
 import type { ApiError } from "./errors";
 
@@ -36,6 +36,12 @@ export interface ApiClientConfig {
 export interface RequestOptions<TBody> extends RequestConfig {
   method?: ApiMethod;
   data?: TBody;
+}
+
+export interface InternalRequestConfig extends AxiosRequestConfig {
+  dedupeKey?: false | string;
+  _returnEnvelope?: boolean;
+  skipCsrf?: boolean;
 }
 
 // TODO: Replace app-local API payloads with generated contract types from @quantagent/contracts.

@@ -1,74 +1,79 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { ApiClient } from "@/shared/api";
+import type { BaseApi } from "@/shared/api";
 
-import {
-  fetchCurrentActor,
-  loginWithPassword,
-  logoutSession,
-  refreshCurrentSession,
-} from "./api";
+import { createAuthApi } from "./api";
 
-function createApiClientMock(): ApiClient {
+function createBaseApiMock(): BaseApi {
   return {
     del: vi.fn(),
     get: vi.fn(),
-    instance: {} as ApiClient["instance"],
     patch: vi.fn(),
     post: vi.fn(),
     put: vi.fn(),
     request: vi.fn(),
     requestEnvelope: vi.fn(),
+    withBasePath: vi.fn(),
   };
 }
 
 describe("auth API helpers", () => {
   it("logs in without CSRF because no session exists yet", async () => {
-    const client = createApiClientMock();
-    vi.mocked(client.post).mockResolvedValue({
+    const baseApi = createBaseApiMock();
+    const authBaseApi = createBaseApiMock();
+    vi.mocked(baseApi.withBasePath).mockReturnValue(authBaseApi);
+    vi.mocked(authBaseApi.post).mockResolvedValue({
       actor_id: "local_admin",
       actor_type: "local_single_user",
       capabilities: ["runtime.inspect"],
       csrf_token: "csrf-login",
     });
+    const authApi = createAuthApi(baseApi);
 
-    await loginWithPassword(client, { password: "admin-password" });
+    await authApi.loginWithPassword({ password: "admin-password" });
 
-    expect(client.post).toHaveBeenCalledWith(
-      "/auth/login",
+    expect(authBaseApi.post).toHaveBeenCalledWith(
+      "/login",
       { password: "admin-password" },
       { skipCsrf: true },
     );
   });
 
   it("bootstraps the current actor through /me without request dedupe", async () => {
-    const client = createApiClientMock();
-    vi.mocked(client.get).mockResolvedValue({
+    const baseApi = createBaseApiMock();
+    vi.mocked(baseApi.withBasePath).mockReturnValue(createBaseApiMock());
+    vi.mocked(baseApi.get).mockResolvedValue({
       actor_id: "local_admin",
       actor_type: "local_single_user",
       capabilities: ["runtime.inspect"],
       csrf_token: "csrf-me",
     });
+    const authApi = createAuthApi(baseApi);
 
-    await fetchCurrentActor(client);
+    await authApi.fetchCurrentActor();
 
-    expect(client.get).toHaveBeenCalledWith("/me", { dedupeKey: false });
+    expect(baseApi.get).toHaveBeenCalledWith("/me", { dedupeKey: false });
   });
 
   it("logs out through the shared API client so CSRF injection stays centralized", async () => {
-    const client = createApiClientMock();
-    vi.mocked(client.post).mockResolvedValue({ cleared: true });
+    const baseApi = createBaseApiMock();
+    const authBaseApi = createBaseApiMock();
+    vi.mocked(baseApi.withBasePath).mockReturnValue(authBaseApi);
+    vi.mocked(authBaseApi.post).mockResolvedValue({ cleared: true });
+    const authApi = createAuthApi(baseApi);
 
-    await logoutSession(client);
+    await authApi.logoutSession();
 
-    expect(client.post).toHaveBeenCalledWith("/auth/logout", undefined, {
+    expect(authBaseApi.post).toHaveBeenCalledWith("/logout", undefined, {
       dedupeKey: false,
     });
   });
 
   it("refreshes the current session through the explicit refresh endpoint", async () => {
-    const client = createApiClientMock();
-    vi.mocked(client.post).mockResolvedValue({
+    const baseApi = createBaseApiMock();
+    const authBaseApi = createBaseApiMock();
+    vi.mocked(baseApi.withBasePath).mockReturnValue(authBaseApi);
+    vi.mocked(authBaseApi.post).mockResolvedValue({
       actor_id: "local_admin",
       actor_type: "local_single_user",
       capabilities: ["runtime.inspect"],
@@ -76,10 +81,11 @@ describe("auth API helpers", () => {
       expires_at: 1_700_000_000,
       max_expires_at: 1_700_003_600,
     });
+    const authApi = createAuthApi(baseApi);
 
-    await refreshCurrentSession(client);
+    await authApi.refreshCurrentSession();
 
-    expect(client.post).toHaveBeenCalledWith("/auth/refresh", undefined, {
+    expect(authBaseApi.post).toHaveBeenCalledWith("/refresh", undefined, {
       dedupeKey: false,
     });
   });

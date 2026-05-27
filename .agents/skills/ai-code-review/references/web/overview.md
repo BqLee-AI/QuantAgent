@@ -1,6 +1,8 @@
 # apps/web Review Overview
 
-本文件是 `apps/web` 变更的 AI Code Review 索引。先用 changed files 和 diff 识别场景，再加载未来对应细则；当前只定义导航和核心审查问题。
+本文件是 `apps/web` 变更的 AI Code Review 索引。先用 changed files 和 diff 识别场景，再加载对应细则。
+
+现有代码只能作为迁移背景，不是规范来源。审查新增或被修改代码时，以 `architecture-principles.md`、`apps/web/AGENTS.md`、设计文档和前端主流分层实践作为目标边界。
 
 主要真源：
 
@@ -8,11 +10,13 @@
 - `docs/design/09-frontend-architecture-design.md`
 - `docs/design/08-api-and-websocket-design.md`
 - `.agents/skills/references/engineering-quality-gate.md`
+- `architecture-principles.md`
 
 ## 场景索引
 
 | 场景 | 触发信号 | 未来细则 | 核心审查问题 |
 | --- | --- | --- | --- |
+| 架构基准 | 任意 `apps/web/**` 变更 | `architecture-principles.md` | 是否按目标分层审查，而不是把当前不规范代码当模板 |
 | API 与 TanStack Query | `src/shared/api/**`、`src/features/**/api.ts`、`src/features/**/queries.ts`、diff 出现 `apiClient` / `fetch` / `ApiResponse` / `code/data/msg/error` | `api-and-query.md` | 是否绕过 feature API / query 层直接请求；是否手写 envelope；query key、mutation invalidation、request id 和错误 UI 是否稳定 |
 | Route 与 layout | `src/routes/**`、`src/app/router.tsx`、`src/app/layouts/**`、`src/routeTree.gen.ts` | `routes-and-layout.md` | route 是否保持薄层；公开页和后台 shell 是否分离；权限、redirect、search params、生成路由是否符合边界 |
 | 组件与 MVVM | `src/features/**/components/**`、`src/shared/ui/**`、`src/app/components/**` | `components-and-mvvm.md` | 组件是否按 feature/shared 边界放置；props 是否稳定；复杂状态、请求、权限和 JSX 是否被拆分 |
@@ -29,6 +33,7 @@
 - route 中出现裸 `apiClient.get(...)`、`fetch(...)` 或 envelope 解析时，必须审查 API 与 TanStack Query 场景。
 - 新增共享组件时，必须审查组件边界；只有复杂或跨域组件才要求 README / usage note。
 - 修改 auth、approval、plugin config 或 runtime detail 时，必须额外审查敏感信息和权限边界。
+- 修改旧的不规范区域但只改文案或样式时，不强制要求顺手重构；如果继续追加业务请求、状态或权限逻辑，应按扩大债务处理。
 
 ## 初始 finding 倾向
 
@@ -39,3 +44,12 @@
 - 403、后端错误或操作失败没有 request id / trace id。
 - UI 展示 secret、完整 prompt、私有策略或完整模型推理链。
 - WebSocket payload 被当成长期业务状态真源。
+
+## 已落地细则
+
+- `architecture-principles.md`
+- `api-and-query.md`
+- `routes-and-layout.md`
+- `components-and-mvvm.md`
+
+其余场景暂时只保留索引，后续按 #166 逐步细化。

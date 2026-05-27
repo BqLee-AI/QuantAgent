@@ -1,30 +1,28 @@
 import axios, {
   AxiosHeaders,
   type AxiosInstance,
-  type AxiosRequestConfig,
-  type AxiosResponse,
   type InternalAxiosRequestConfig,
 } from "axios";
 
 import {
-  ApiError,
-  createApiErrorFromEnvelope,
-  isApiResponse,
+  CSRF_METHODS,
+  DEFAULT_API_BASE_URL,
+  DEFAULT_API_TIMEOUT_MS,
+  DEFAULT_CSRF_HEADER_NAME,
+} from "./client-config";
+import { getDedupeKey } from "./dedupe";
+import { normalizeResponse } from "./envelope";
+import {
   toApiError,
 } from "./errors";
 import type {
   ApiClientConfig,
   ApiMethod,
   ApiResponse,
+  InternalRequestConfig,
   RequestConfig,
   RequestOptions,
 } from "./types";
-
-interface InternalRequestConfig extends AxiosRequestConfig {
-  dedupeKey?: false | string;
-  _returnEnvelope?: boolean;
-  skipCsrf?: boolean;
-}
 
 export interface ApiClient {
   readonly instance: AxiosInstance;
@@ -55,67 +53,14 @@ export interface ApiClient {
   ): Promise<ApiResponse<TResponse>>;
 }
 
-const DEFAULT_BASE_URL = "/api/v1";
-const DEFAULT_TIMEOUT = 10_000;
-const DEFAULT_CSRF_HEADER_NAME = "X-CSRF-Token";
-const CSRF_METHODS = new Set(["delete", "patch", "post", "put"]);
-
-function getDedupeKey(config: InternalRequestConfig): string | undefined {
-  if (config.signal || config.dedupeKey === false) {
-    return undefined;
-  }
-
-  if (typeof config.dedupeKey === "string" && config.dedupeKey.length > 0) {
-    return config.dedupeKey;
-  }
-
-  const method = config.method?.toLowerCase();
-
-  if (method !== "get" && method !== "head") {
-    return undefined;
-  }
-
-  const params =
-    config.params && typeof config.params === "object"
-      ? JSON.stringify(config.params)
-      : "";
-  const responseMode = config._returnEnvelope ? "envelope" : "data";
-
-  return `${method}:${config.baseURL ?? ""}:${config.url ?? ""}:${params}:${responseMode}`;
-}
-
-function normalizeResponse<TResponse>(
-  response: AxiosResponse<ApiResponse<TResponse>>,
-  requestConfig: InternalRequestConfig,
-): ApiResponse<TResponse> | TResponse {
-  if (!isApiResponse<TResponse>(response.data)) {
-    throw new ApiError({
-      code: response.status,
-      msg: "Malformed API response envelope.",
-      status: response.status,
-      cause: response.data,
-    });
-  }
-
-  if (requestConfig._returnEnvelope) {
-    return response.data;
-  }
-
-  if (response.data.code !== 0) {
-    throw createApiErrorFromEnvelope(response.data, response.status);
-  }
-
-  return response.data.data as TResponse;
-}
-
 export function createApiClient(config: ApiClientConfig = {}): ApiClient {
   const inflight = new Map<string, Promise<unknown>>();
 
   const instance = axios.create({
     adapter: config.adapter,
-    baseURL: config.baseURL ?? DEFAULT_BASE_URL,
+    baseURL: config.baseURL ?? DEFAULT_API_BASE_URL,
     headers: config.headers,
-    timeout: config.timeout ?? DEFAULT_TIMEOUT,
+    timeout: config.timeout ?? DEFAULT_API_TIMEOUT_MS,
     withCredentials: config.withCredentials ?? true,
   });
 
@@ -258,9 +203,5 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
     },
   };
 }
-
-export const apiClient = createApiClient({
-  withCredentials: true,
-});
 
 export type { ApiMethod };
