@@ -3,19 +3,19 @@
   "title": "Discord Interaction Webhook Source Plugin Config",
   "type": "object",
   "properties": {
-    "signing_secret_ref": {
+    "public_key_ref": {
       "type": "string",
-      "title": "Signing Secret Reference",
-      "description": "Secret reference used by the experimental HMAC verification path.",
+      "title": "Discord Public Key Reference",
+      "description": "Reference to the Discord application public key used for official Ed25519 verification.",
       "minLength": 1,
       "x-quantagent-secret-ref": true
     },
-    "timestamp_tolerance_seconds": {
-      "type": "integer",
-      "title": "Timestamp Tolerance Seconds",
-      "description": "Allowed skew between request timestamp and verifier clock.",
-      "minimum": 0,
-      "default": 300
+    "response_text": {
+      "type": "string",
+      "title": "Response Text",
+      "description": "Ephemeral response text returned to supported application commands.",
+      "minLength": 1,
+      "default": "QuantAgent received your Discord interaction."
     },
     "guild_allowlist": {
       "type": "array",
@@ -39,7 +39,7 @@
     }
   },
   "required": [
-    "signing_secret_ref"
+    "public_key_ref"
   ],
   "additionalProperties": false
 }

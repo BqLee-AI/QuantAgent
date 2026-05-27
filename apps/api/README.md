@@ -21,6 +21,23 @@ API dotenv 文件按从低到高读取：仓库根目录 `.env`、当前工作�
 
 API 默认监听 `127.0.0.1:8000`。`APP_ENV=development` 或 `APP_ENV=local` 下，`uv run api` 会默认启用热更新；`staging`/`production` 等非本地环境保持单进程启动。鉴权默认开启（`AUTH_ENABLED=true`）；development、test、local 环境下口令可使用代码中的弱默认值，也可显式设置 `AUTH_ENABLED=false` 完全关闭鉴权；staging 和 production 必须提供安全口令和 session secret。
 
+如果要启用真实 Discord interaction webhook ingress，还需要额外配置：
+
+```bash
+DISCORD_INTERACTIONS_ENABLED=true
+DISCORD_INTERACTIONS_PLUGIN_ID=quantagent.official.source.discord_interaction_webhook
+DISCORD_INTERACTIONS_PUBLIC_KEY=<discord application public key>
+DISCORD_INTERACTIONS_RESPONSE_TEXT=QuantAgent received your Discord interaction.
+```
+
+启用后会开放公开 endpoint：
+
+```text
+POST /api/v1/integrations/discord/interactions
+```
+
+这个 endpoint 直接返回 Discord 原生 interaction response，不走项目统一 `code/data/msg/error` envelope。
+
 ### 测试
 
 ```bash

@@ -172,6 +172,10 @@ class Settings(CoreSettings):
     AUTH_SESSION_ABSOLUTE_LIFETIME_SECONDS: int = Field(default=86400, ge=300)
     AUTH_SESSION_REFRESH_THRESHOLD_SECONDS: int = Field(default=1800, ge=0)
     AUTH_CSRF_HEADER_NAME: str = "X-CSRF-Token"
+    DISCORD_INTERACTIONS_ENABLED: bool = False
+    DISCORD_INTERACTIONS_PLUGIN_ID: str = "quantagent.official.source.discord_interaction_webhook"
+    DISCORD_INTERACTIONS_PUBLIC_KEY: str | None = None
+    DISCORD_INTERACTIONS_RESPONSE_TEXT: str = "QuantAgent received your Discord interaction."
 
     @field_validator("AUTH_COOKIE_SAME_SITE", mode="before")
     @classmethod
@@ -186,6 +190,10 @@ class Settings(CoreSettings):
             self.AUTH_ADMIN_PASSWORD = self.AUTH_ADMIN_PASSWORD.strip()
         if self.AUTH_SESSION_SECRET is not None:
             self.AUTH_SESSION_SECRET = self.AUTH_SESSION_SECRET.strip()
+        if self.DISCORD_INTERACTIONS_PUBLIC_KEY is not None:
+            self.DISCORD_INTERACTIONS_PUBLIC_KEY = self.DISCORD_INTERACTIONS_PUBLIC_KEY.strip() or None
+        self.DISCORD_INTERACTIONS_PLUGIN_ID = self.DISCORD_INTERACTIONS_PLUGIN_ID.strip()
+        self.DISCORD_INTERACTIONS_RESPONSE_TEXT = self.DISCORD_INTERACTIONS_RESPONSE_TEXT.strip()
 
         if self.AUTH_COOKIE_SECURE is None:
             self.AUTH_COOKIE_SECURE = self.is_production
@@ -237,6 +245,11 @@ class Settings(CoreSettings):
                 or self.AUTH_SESSION_SECRET.lower() in _WEAK_SESSION_SECRET_VALUES
             ):
                 raise ValueError("AUTH_SESSION_SECRET must be at least 32 characters and not look like a development placeholder outside development/test/local")
+        if self.DISCORD_INTERACTIONS_ENABLED:
+            if not self.DISCORD_INTERACTIONS_PLUGIN_ID:
+                raise ValueError("DISCORD_INTERACTIONS_PLUGIN_ID is required when Discord interactions are enabled")
+            if not self.DISCORD_INTERACTIONS_PUBLIC_KEY:
+                raise ValueError("DISCORD_INTERACTIONS_PUBLIC_KEY is required when Discord interactions are enabled")
 
         return self
 

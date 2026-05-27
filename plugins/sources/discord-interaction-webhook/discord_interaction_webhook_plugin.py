@@ -1,20 +1,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import hashlib
-import hmac
 import json
-import time
 from typing import Any, Mapping
 
+from nacl.exceptions import BadSignatureError
+from nacl.signing import VerifyKey
 
-SIGNATURE_HEADER = "x-quantagent-signature"
+
+SIGNATURE_HEADER = "x-signature-ed25519"
 TIMESTAMP_HEADER = "x-signature-timestamp"
+PING_TYPE = 1
+APPLICATION_COMMAND_TYPE = 2
+PONG_RESPONSE = {"type": 1}
+CHANNEL_MESSAGE_WITH_SOURCE = 4
+EPHEMERAL_FLAG = 64
 
 
 @dataclass(frozen=True)
 class DiscordInteractionDto:
-    message_id: str
+    interaction_id: str
     source_id: str
     text: str
     payload_summary: Mapping[str, Any]
@@ -28,12 +33,13 @@ class ReceiveResult:
     ok: bool
     code: str
     message: str
+    response: Mapping[str, Any] | None = None
     dto: DiscordInteractionDto | None = None
     retryable: bool = False
 
 
 class DiscordInteractionWebhookSourcePlugin:
-    """Standalone experimental receiver for Discord-style interaction webhooks."""
+    """Discord interaction webhook source plugin with official request verification."""
 
     def receive_request(
         self,
@@ -42,57 +48,29 @@ class DiscordInteractionWebhookSourcePlugin:
         body: bytes,
         *,
         secrets: Mapping[str, str] | None = None,
-        now: int | None = None,
     ) -> ReceiveResult:
-        signing_secret_ref = _optional_str(config.get("signing_secret_ref"))
-        if signing_secret_ref is None:
+        public_key = _resolve_public_key(config, secrets)
+        if public_key is None:
             return ReceiveResult(
                 ok=False,
                 code="MISSING_CONFIG",
-                message="Missing required config field: signing_secret_ref.",
-            )
-
-        signing_secret = _resolve_secret(signing_secret_ref, secrets)
-        if signing_secret is None:
-            return ReceiveResult(
-                ok=False,
-                code="SECRET_NOT_RESOLVED",
-                message="Signing secret reference could not be resolved.",
+                message="Missing Discord interactions public key configuration.",
             )
 
         signature = _get_header(headers, SIGNATURE_HEADER)
-        timestamp_text = _get_header(headers, TIMESTAMP_HEADER)
-        if signature is None or timestamp_text is None:
+        timestamp = _get_header(headers, TIMESTAMP_HEADER)
+        if signature is None or timestamp is None:
             return ReceiveResult(
                 ok=False,
                 code="SIGNATURE_MISSING",
-                message="Missing required signature headers.",
+                message="Missing required Discord signature headers.",
             )
 
-        try:
-            timestamp_value = int(timestamp_text)
-        except ValueError:
-            return ReceiveResult(
-                ok=False,
-                code="TIMESTAMP_INVALID",
-                message="Request timestamp header is not a valid integer.",
-            )
-
-        current_time = now if now is not None else int(time.time())
-        tolerance = _resolve_tolerance(config)
-        if abs(current_time - timestamp_value) > tolerance:
-            return ReceiveResult(
-                ok=False,
-                code="SIGNATURE_STALE",
-                message="Request timestamp is outside the allowed verification window.",
-            )
-
-        expected_signature = sign_request_body(body, timestamp_value, signing_secret)
-        if not hmac.compare_digest(signature, expected_signature):
+        if not verify_discord_request(body, timestamp, signature, public_key):
             return ReceiveResult(
                 ok=False,
                 code="SIGNATURE_INVALID",
-                message="Request signature validation failed.",
+                message="Discord request signature validation failed.",
             )
 
         try:
@@ -111,7 +89,16 @@ class DiscordInteractionWebhookSourcePlugin:
                 message="Request payload must be a JSON object.",
             )
 
-        if payload.get("type") != 2:
+        payload_type = payload.get("type")
+        if payload_type == PING_TYPE:
+            return ReceiveResult(
+                ok=True,
+                code="PING",
+                message="Discord interaction ping acknowledged.",
+                response=PONG_RESPONSE,
+            )
+
+        if payload_type != APPLICATION_COMMAND_TYPE:
             return ReceiveResult(
                 ok=False,
                 code="UNSUPPORTED_EVENT_TYPE",
@@ -145,52 +132,64 @@ class DiscordInteractionWebhookSourcePlugin:
             )
 
         dto = DiscordInteractionDto(
-            message_id=_required_identifier(payload.get("id"), fallback="unknown-interaction"),
+            interaction_id=_required_identifier(payload.get("id"), fallback="unknown-interaction"),
             source_id=f"discord.interaction:{_required_identifier(payload.get('application_id'), fallback='unknown-app')}",
             text=text,
             guild_id=guild_id,
             channel_id=channel_id,
             author_id=_extract_author_id(payload),
             payload_summary={
-                "type": payload.get("type"),
+                "type": payload_type,
                 "command_name": _optional_str(_mapping(payload.get("data")).get("name")),
                 "option_names": _extract_option_names(payload),
             },
         )
+
+        response_text = _optional_str(config.get("response_text")) or "QuantAgent received your Discord interaction."
+        response = {
+            "type": CHANNEL_MESSAGE_WITH_SOURCE,
+            "data": {
+                "content": response_text,
+                "flags": EPHEMERAL_FLAG,
+            },
+        }
         return ReceiveResult(
             ok=True,
             code="RECEIVED",
             message="Discord interaction webhook payload received.",
+            response=response,
             dto=dto,
         )
 
 
-def sign_request_body(body: bytes, timestamp: int, signing_secret: str) -> str:
-    payload = str(timestamp).encode("utf-8") + b"." + body
-    return hmac.new(signing_secret.encode("utf-8"), payload, hashlib.sha256).hexdigest()
+def verify_discord_request(body: bytes, timestamp: str, signature: str, public_key: str) -> bool:
+    try:
+        verify_key = VerifyKey(bytes.fromhex(public_key))
+        verify_key.verify(timestamp.encode("utf-8") + body, bytes.fromhex(signature))
+    except (BadSignatureError, ValueError):
+        return False
+    return True
 
 
-def _resolve_secret(secret_ref: str, secrets: Mapping[str, str] | None) -> str | None:
-    if secrets is None:
+def _resolve_public_key(config: Mapping[str, Any], secrets: Mapping[str, str] | None) -> str | None:
+    public_key = _optional_str(config.get("public_key"))
+    if public_key is not None:
+        return public_key
+    public_key_ref = _optional_str(config.get("public_key_ref"))
+    if public_key_ref is None or secrets is None:
         return None
-    value = secrets.get(secret_ref)
+    value = secrets.get(public_key_ref)
     if not isinstance(value, str):
         return None
-    return value.strip() or None
-
-
-def _resolve_tolerance(config: Mapping[str, Any]) -> int:
-    raw_value = config.get("timestamp_tolerance_seconds", 300)
-    try:
-        return max(int(raw_value), 0)
-    except (TypeError, ValueError):
-        return 300
+    stripped = value.strip()
+    return stripped or None
 
 
 def _get_header(headers: Mapping[str, str], name: str) -> str | None:
     for key, value in headers.items():
         if key.lower() == name.lower():
-            return value.strip()
+            stripped = value.strip()
+            return stripped or None
     return None
 
 

@@ -6,12 +6,15 @@ import unittest
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
+from nacl.encoding import HexEncoder
+from nacl.signing import SigningKey
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -909,6 +912,7 @@ class ApiAppTestCase(unittest.TestCase):
                     ("GET", "/health"),
                     ("GET", "/ready"),
                     ("GET", "/version"),
+                    ("POST", "/integrations/discord/interactions"),
                     ("POST", "/auth/login"),
                 }
             ),
@@ -931,6 +935,7 @@ class ApiAppTestCase(unittest.TestCase):
                     ("GET", "/health"),
                     ("GET", "/ready"),
                     ("GET", "/version"),
+                    ("POST", "/integrations/discord/interactions"),
                     ("POST", "/auth/login"),
                 }
             ),
@@ -945,6 +950,7 @@ class ApiAppTestCase(unittest.TestCase):
                     ("GET", f"{custom_prefix}/health"),
                     ("GET", f"{custom_prefix}/ready"),
                     ("GET", f"{custom_prefix}/version"),
+                    ("POST", f"{custom_prefix}/integrations/discord/interactions"),
                     ("POST", f"{custom_prefix}/auth/login"),
                 }
             ),
@@ -1716,6 +1722,137 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(by_key["economy_text"]["primary_model"]["id"], text_model_id)
         self.assertEqual(by_key["economy_text"]["fallback_model"]["id"], vision_model_id)
 
+    def test_discord_interactions_endpoint_returns_not_found_when_disabled(self) -> None:
+        response = self.client.post("/api/v1/integrations/discord/interactions", content=b"{}")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(body["error"]["code"], "NOT_FOUND")
+
+    def test_discord_interactions_endpoint_rejects_invalid_signature(self) -> None:
+        app = create_app(
+            self._settings(
+                DISCORD_INTERACTIONS_ENABLED=True,
+                DISCORD_INTERACTIONS_PUBLIC_KEY="a" * 64,
+            )
+        )
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/integrations/discord/interactions",
+                content=b'{"type":1}',
+                headers={
+                    "X-Signature-Timestamp": "1700000000",
+                    "X-Signature-Ed25519": "00",
+                },
+            )
+
+        body = response.json()
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+
+    def test_discord_interactions_endpoint_returns_pong_for_valid_ping(self) -> None:
+        signing_key = SigningKey.generate()
+        public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
+        app = create_app(
+            self._settings(
+                DISCORD_INTERACTIONS_ENABLED=True,
+                DISCORD_INTERACTIONS_PUBLIC_KEY=public_key,
+            )
+        )
+        body = b'{"type":1}'
+        timestamp = "1700000000"
+        signature = signing_key.sign(timestamp.encode("utf-8") + body).signature.hex()
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/integrations/discord/interactions",
+                content=body,
+                headers={
+                    "X-Signature-Timestamp": timestamp,
+                    "X-Signature-Ed25519": signature,
+                    "X-Request-ID": "req-discord-ping",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["X-Request-ID"], "req-discord-ping")
+        self.assertEqual(response.json(), {"type": 1})
+
+    def test_discord_interactions_endpoint_returns_response_for_valid_command(self) -> None:
+        signing_key = SigningKey.generate()
+        public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
+        app = create_app(
+            self._settings(
+                DISCORD_INTERACTIONS_ENABLED=True,
+                DISCORD_INTERACTIONS_PUBLIC_KEY=public_key,
+                DISCORD_INTERACTIONS_RESPONSE_TEXT="API route received interaction.",
+            )
+        )
+        body = json.dumps(
+            {
+                "id": "1234567890",
+                "application_id": "app-1",
+                "type": 2,
+                "guild_id": "guild-1",
+                "channel_id": "channel-1",
+                "member": {"user": {"id": "user-1"}},
+                "data": {
+                    "name": "notify",
+                    "options": [{"name": "text", "type": 3, "value": "hello from discord"}],
+                },
+            }
+        ).encode("utf-8")
+        timestamp = "1700000000"
+        signature = signing_key.sign(timestamp.encode("utf-8") + body).signature.hex()
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/integrations/discord/interactions",
+                content=body,
+                headers={
+                    "X-Signature-Timestamp": timestamp,
+                    "X-Signature-Ed25519": signature,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {
+                "type": 4,
+                "data": {
+                    "content": "API route received interaction.",
+                    "flags": 64,
+                },
+            },
+        )
+
+    def test_discord_interactions_endpoint_returns_bad_request_for_unsupported_type(self) -> None:
+        signing_key = SigningKey.generate()
+        public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
+        app = create_app(
+            self._settings(
+                DISCORD_INTERACTIONS_ENABLED=True,
+                DISCORD_INTERACTIONS_PUBLIC_KEY=public_key,
+            )
+        )
+        body = b'{"type":3}'
+        timestamp = "1700000000"
+        signature = signing_key.sign(timestamp.encode("utf-8") + body).signature.hex()
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/integrations/discord/interactions",
+                content=body,
+                headers={
+                    "X-Signature-Timestamp": timestamp,
+                    "X-Signature-Ed25519": signature,
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"], "UNSUPPORTED_EVENT_TYPE")
+
     def test_missing_capability_is_forbidden(self) -> None:
         reduced_capabilities = frozenset({"plugin.configure"})
         issued_session = issue_session("local_admin", self.settings, capabilities=reduced_capabilities)
@@ -1763,6 +1900,7 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertTrue({"code", "data", "msg", "error"}.issubset(ready_schema["properties"].keys()))
 
         self.assertIn("auth", schema["paths"]["/api/v1/auth/login"]["post"]["tags"])
+        self.assertIn("integrations", schema["paths"]["/api/v1/integrations/discord/interactions"]["post"]["tags"])
         self.assertIn("auth", schema["paths"]["/api/v1/auth/logout"]["post"]["tags"])
         self.assertIn("auth", schema["paths"]["/api/v1/auth/refresh"]["post"]["tags"])
         self.assertIn("auth", schema["paths"]["/api/v1/me"]["get"]["tags"])
@@ -2012,6 +2150,11 @@ class ApiAppTestCase(unittest.TestCase):
             "API_PORT": 8000,
             "AUTH_ENABLED": True,
             "AUTH_ADMIN_PASSWORD": "test-admin-password",
+            "AUTH_SESSION_SECRET": "test-session-secret-0123456789abcdef",
+            "DISCORD_INTERACTIONS_ENABLED": False,
+            "DISCORD_INTERACTIONS_PLUGIN_ID": "quantagent.official.source.discord_interaction_webhook",
+            "DISCORD_INTERACTIONS_PUBLIC_KEY": None,
+            "DISCORD_INTERACTIONS_RESPONSE_TEXT": "QuantAgent received your Discord interaction.",
             "AUTH_SESSION_SECRET": "test-session-secret-0123456789abcdef",
         }
         baseline.update(overrides)
