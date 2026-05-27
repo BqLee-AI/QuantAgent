@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -33,11 +34,15 @@ class ReadabilitySourcePluginContractTestCase(unittest.TestCase):
         ).scan()
         record = {item.id: item for item in records}["quantagent.official.source.readability"]
         schema_text = record.config_schema_path.read_text(encoding="utf-8")
+        schema = json.loads(schema_text)
+        properties = schema.get("properties", {})
+        required = schema.get("required", [])
 
-        self.assertIn('"url"', schema_text)
-        self.assertIn('"headers"', schema_text)
-        self.assertIn('"timeout_seconds"', schema_text)
-        self.assertIn('"min_text_length"', schema_text)
+        self.assertIn("url", properties)
+        self.assertIn("headers", properties)
+        self.assertIn("timeout_seconds", properties)
+        self.assertIn("min_text_length", properties)
+        self.assertIn("url", required)
 
 
 if __name__ == "__main__":

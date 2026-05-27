@@ -6,6 +6,7 @@
     "url": {
       "type": "string",
       "format": "uri",
+      "pattern": "^https?://",
       "minLength": 1
     },
     "headers": {

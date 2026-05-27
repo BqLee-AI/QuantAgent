@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from types import MappingProxyType
 from typing import Any
 
 
@@ -21,5 +23,9 @@ class SourceOutput:
     author: str | None = None
     published_at: datetime | None = None
     captured_at: datetime = field(default_factory=utc_now)
-    raw_payload: dict[str, Any] = field(default_factory=dict)
-    metadata: dict[str, Any] = field(default_factory=dict)
+    raw_payload: Mapping[str, Any] = field(default_factory=dict)
+    metadata: Mapping[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "raw_payload", MappingProxyType(dict(self.raw_payload)))
+        object.__setattr__(self, "metadata", MappingProxyType(dict(self.metadata)))

@@ -31,7 +31,7 @@ class ReadabilitySource:
         with urlopen(request, timeout=timeout_seconds) as response:
             body = response.read()
             content_type = response.headers.get_content_charset() or "utf-8"
-        html = body.decode(content_type, errors="replace")
+        html = _decode_html(body, content_type)
         return [_extract_source_output(html, url, min_text_length=min_text_length)]
 
 
@@ -211,8 +211,8 @@ def _coerce_headers(value: object) -> dict[str, str]:
 def _coerce_timeout(value: object) -> float:
     if value is None:
         return 10.0
-    if not isinstance(value, (int, float)) or value <= 0:
-        raise ValueError("timeout_seconds must be a positive number")
+    if not isinstance(value, (int, float)) or value <= 0 or value > 30:
+        raise ValueError("timeout_seconds must be a positive number no greater than 30")
     return float(value)
 
 
@@ -222,3 +222,10 @@ def _coerce_min_text_length(value: object) -> int:
     if not isinstance(value, int) or value < 0:
         raise ValueError("min_text_length must be a non-negative integer")
     return value
+
+
+def _decode_html(body: bytes, content_type: str) -> str:
+    try:
+        return body.decode(content_type, errors="replace")
+    except (LookupError, UnicodeError):
+        return body.decode("utf-8", errors="replace")

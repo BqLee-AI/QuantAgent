@@ -83,6 +83,25 @@ class ReadabilitySourcePluginTestCase(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Only http and https schemes are allowed"):
             self.module.plugin.fetch(None, {"url": "file:///tmp/test.html"})
 
+    def test_fetch_rejects_timeout_over_schema_limit(self) -> None:
+        with self.assertRaisesRegex(ValueError, "timeout_seconds must be a positive number no greater than 30"):
+            self.module.plugin.fetch(None, {"url": "https://example.com", "timeout_seconds": 31})
+
+    def test_fetch_falls_back_to_utf8_for_unknown_charset(self) -> None:
+        html = FIXTURE_PATH.read_text(encoding="utf-8")
+        fake_response = _FakeHTTPResponse(html, charset="x-unknown-charset")
+
+        with patch.object(self.module, "urlopen", return_value=fake_response):
+            outputs = self.module.plugin.fetch(
+                None,
+                {
+                    "url": "https://example.com/articles/storage-breakthrough",
+                },
+            )
+
+        self.assertEqual(len(outputs), 1)
+        self.assertEqual(outputs[0].title, "Markets Rally On Storage Breakthrough")
+
     def test_readme_documents_plugin_boundary(self) -> None:
         readme = (PLUGIN_ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("只提供 `source.fetch` 能力，不暴露 `tool.read_url`", readme)  # noqa: RUF001
@@ -90,14 +109,17 @@ class ReadabilitySourcePluginTestCase(unittest.TestCase):
 
 
 class _FakeHeaders:
+    def __init__(self, charset: str = "utf-8") -> None:
+        self._charset = charset
+
     def get_content_charset(self) -> str:
-        return "utf-8"
+        return self._charset
 
 
 class _FakeHTTPResponse:
-    def __init__(self, html: str) -> None:
+    def __init__(self, html: str, *, charset: str = "utf-8") -> None:
         self._body = html.encode("utf-8")
-        self.headers = _FakeHeaders()
+        self.headers = _FakeHeaders(charset=charset)
 
     def read(self) -> bytes:
         return self._body
