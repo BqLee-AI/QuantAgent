@@ -5,6 +5,7 @@ import unittest
 from urllib import error as urllib_error
 from unittest.mock import patch
 
+from . import alpaca_wallet_api_e2e_support
 from .alpaca_wallet_api_e2e_support import (
     AlpacaPaperClient,
     AlpacaPaperConfig,
@@ -121,10 +122,7 @@ class AlpacaWalletApiE2ESupportTestCase(unittest.TestCase):
         transport = UrllibAlpacaTransport()
         request_timeout = urllib_error.URLError(socket.timeout("timed out"))
 
-        with patch(
-            "apps.api.src.tests.alpaca_wallet_api_e2e_support.urlopen",
-            side_effect=request_timeout,
-        ):
+        with patch.object(alpaca_wallet_api_e2e_support, "urlopen", side_effect=request_timeout):
             with self.assertRaises(AlpacaPaperRequestError) as context:
                 transport.request(
                     "GET",
