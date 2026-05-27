@@ -21,4 +21,5 @@
 - [x] 3.1 运行 `openspec validate web-p0-mainflow-pages --type change --strict --json`。
 - [x] 3.2 人工核对 `docs/prd/08-frontend-pages-overview.md` 与本 change 的页面边界没有分叉。
 - [x] 3.3 人工核对 issue #129、#130、#131 可直接回链到本 change，而不再各自假设不同首页入口。
-- [ ] 3.4 在最终说明中列出未执行的代码验证，并说明原因是本轮仅交付 OpenSpec 文档。
+- [x] 3.4 根据 PR review 上下文收窄 `docs/prd/08-frontend-pages-overview.md` 的 OpenSpec 真源映射，只保留 Dashboard、Events、Event Detail、Approvals 和 `/` 默认入口语义。
+- [ ] 3.5 在最终说明中列出未执行的代码验证，并说明原因是本轮仅交付 OpenSpec 文档。

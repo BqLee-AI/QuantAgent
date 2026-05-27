@@ -262,9 +262,7 @@ web-p0-mainflow-pages
 
 该 change 当前承接：
 
-- Dashboard / Events / Event Detail 行为 spec。
-- ApprovalRequest / ApprovalDecision / ApprovalLink 行为 spec。
-- EventAuditTimeline 节点和 diff 摘要 spec。
-- Scoring 展示语义 spec。
-- Registry / Plugin 治理入口的非顶层 Skill / Tool / Industry 约束。
-- Model Providers / LLM Policies 治理入口、ProviderPolicy 字段和敏感信息边界。
+- Dashboard 默认首页职责与 `/` 默认入口语义。
+- `/events` 事件中心页面行为 spec。
+- `/events/:eventId` 事件详情 / 决策页行为 spec。
+- `/approvals` 作为 ApprovalRequest 人工确认工作台的行为 spec。
