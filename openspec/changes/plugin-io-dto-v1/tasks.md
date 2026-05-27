@@ -7,9 +7,9 @@
 ## 2. DTO 契约
 
 - [ ] 2.1 定义 typed DTO 与 Runtime V1 通用 `PluginInvokeRequest` / `PluginInvokeResult` 的分层关系。
-- [ ] 2.2 定义 typed DTO 真源继续沿用冻结 `dataclass` 风格，不在本轮切换到另一套唯一模型系统。
+- [ ] 2.2 定义 typed DTO 默认沿用冻结 `dataclass` 风格，但 contract 以字段语义、校验、序列化和只读行为为准。
 - [ ] 2.3 定义 typed DTO 不直接等同 ORM model、数据库对象或 core 内部 service 对象。
-- [ ] 2.4 定义 typed DTO 可序列化、可审计和脱敏的边界。
+- [ ] 2.4 定义 typed DTO 可校验、可序列化、可审计和脱敏的边界。
 
 ## 3. Source / Notification 第一版范围
 
