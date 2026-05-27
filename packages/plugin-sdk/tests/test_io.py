@@ -143,6 +143,20 @@ class PluginSdkIoDtoTestCase(unittest.TestCase):
         self.assertEqual(raised.exception.stage, "invoke")
         self.assertEqual(raised.exception.details["value_type"], "object")
 
+    def test_json_safe_validation_rejects_non_finite_numbers(self) -> None:
+        with self.assertRaises(PluginRuntimeError) as raised:
+            SourceFetchInput(metadata={"score": float("nan")})
+
+        self.assertEqual(raised.exception.code, DTO_VALIDATION_ERROR_CODE)
+        self.assertEqual(raised.exception.details["value_type"], "float")
+
+    def test_source_fetch_result_requires_items_in_mapping(self) -> None:
+        with self.assertRaises(PluginRuntimeError) as raised:
+            SourceFetchResult.from_mapping({"metadata": {}})
+
+        self.assertEqual(raised.exception.code, DTO_VALIDATION_ERROR_CODE)
+        self.assertEqual(raised.exception.details["field"], "items")
+
     def test_from_mapping_uses_structured_error_for_invalid_payload(self) -> None:
         with self.assertRaises(PluginRuntimeError) as raised:
             NotificationSendInput.from_mapping(

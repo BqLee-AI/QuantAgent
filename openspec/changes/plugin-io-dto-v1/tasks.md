@@ -22,7 +22,7 @@
 ## 4. 后续实现落点
 
 - [x] 4.1 在 `packages/plugin-sdk` 中实现 typed DTO dataclass 与必要 helper，不重写 Runtime V1 transport。
-- [ ] 4.2 如需 runtime 挂接 helper，保持 helper / adapter 层完成 typed DTO 与 mapping 的互转，不在 runtime service 中写 capability 分支。
+- [x] 4.2 如需 runtime 挂接 helper，保持 helper / adapter 层完成 typed DTO 与 mapping 的互转，不在 runtime service 中写 capability 分支。
 - [x] 4.3 为 source / notification typed DTO 增加最小 contract test 和序列化测试。
 
 ## 5. 验证
@@ -30,4 +30,4 @@
 - [x] 5.1 运行 `openspec validate plugin-io-dto-v1 --type change --strict --json`。
 - [x] 5.2 后续实现 PR 至少验证 typed DTO 可构造、可序列化、字段只读。
 - [x] 5.3 后续实现 PR 至少验证 `source.fetch` 的成功、多 item、空结果和失败场景。
-- [ ] 5.4 后续实现 PR 至少验证 `notification.send` 的成功、provider 拒收/限流 `accepted=false`、配置缺失、payload 校验失败、插件异常和 runtime 失败结构化错误场景。
+- [x] 5.4 后续实现 PR 至少验证 `notification.send` 的成功、provider 拒收/限流 `accepted=false`、配置缺失、payload 校验失败、插件异常和 runtime 失败结构化错误场景。

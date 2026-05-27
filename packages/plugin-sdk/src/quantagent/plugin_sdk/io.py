@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from types import MappingProxyType
@@ -42,8 +43,16 @@ def freeze_json_mapping(value: Mapping[str, Any] | None = None, *, stage: str = 
 
 
 def freeze_json_value(value: Any, *, stage: str = "invoke") -> JsonValue:
-    if value is None or isinstance(value, str | int | float | bool):
+    if value is None or isinstance(value, str | int | bool):
         return value
+    if isinstance(value, float):
+        if math.isfinite(value):
+            return value
+        raise dto_validation_error(
+            "Plugin DTO numbers must be finite JSON-safe values.",
+            stage=stage,
+            details={"value_type": type(value).__name__},
+        )
     if isinstance(value, Mapping):
         return freeze_json_mapping(value, stage=stage)
     if isinstance(value, list | tuple):
@@ -182,7 +191,13 @@ class SourceFetchResult:
     @classmethod
     def from_mapping(cls, payload: Mapping[str, Any], *, stage: str = "invoke") -> SourceFetchResult:
         _validate_object(payload, dto_name="SourceFetchResult", stage=stage)
-        items = payload.get("items", ())
+        if "items" not in payload:
+            raise dto_validation_error(
+                "SourceFetchResult.items is required.",
+                field_name="items",
+                stage=stage,
+            )
+        items = payload["items"]
         if not isinstance(items, list | tuple):
             raise dto_validation_error(
                 "SourceFetchResult.items must be an array of SourceItemDraft objects.",
