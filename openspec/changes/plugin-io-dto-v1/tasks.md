@@ -30,4 +30,4 @@
 - [x] 5.1 运行 `openspec validate plugin-io-dto-v1 --type change --strict --json`。
 - [x] 5.2 后续实现 PR 至少验证 typed DTO 可构造、可序列化、字段只读。
 - [x] 5.3 后续实现 PR 至少验证 `source.fetch` 的成功、多 item、空结果和失败场景。
-- [x] 5.4 后续实现 PR 至少验证 `notification.send` 的成功、provider 拒收/限流 `accepted=false`、配置缺失、payload 校验失败、插件异常和 runtime 失败结构化错误场景。
+- [ ] 5.4 后续实现 PR 至少验证 `notification.send` 的成功、provider 拒收/限流 `accepted=false`、配置缺失、payload 校验失败、插件异常和 runtime 失败结构化错误场景。

@@ -9,13 +9,7 @@ from pathlib import Path
 
 from quantagent.core.registry import PluginManifest, PluginRecord, PluginSource, PluginStatus, PluginType
 from quantagent.core.runtime import PluginRuntimeService
-from quantagent.plugin_sdk import (
-    BasePlugin,
-    NotificationSendInput,
-    NotificationSendResult,
-    PluginInvokeResult,
-    PluginRuntimeError,
-)
+from quantagent.plugin_sdk import BasePlugin, PluginInvokeResult, PluginRuntimeError
 
 
 class PlainRuntimePlugin:
@@ -390,168 +384,6 @@ class PluginRuntimeServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(invocation.error.details["path"], "[REDACTED]")
         self.assertEqual(invocation.error.details["safe"], "visible")
 
-    async def test_notification_send_success_uses_typed_dto_output_mapping(self) -> None:
-        class NotificationPlugin(BasePlugin):
-            async def invoke(self, request):
-                NotificationSendInput.from_mapping(request.input)
-                result = NotificationSendResult(
-                    accepted=True,
-                    provider_message_id="provider-1",
-                    retryable=False,
-                    metadata={"channel": "discord"},
-                )
-                return PluginInvokeResult(output=result.to_mapping())
-
-        self._install_module("test_runtime_notification_success", NotificationPlugin)
-        record = self._record(
-            entrypoint="test_runtime_notification_success:plugin",
-            plugin_type=PluginType.NOTIFICATION,
-            capabilities=("notification.send",),
-        )
-
-        invocation = await PluginRuntimeService().invoke(
-            record,
-            capability="notification.send",
-            request_id="req-notification-success",
-            input={"channel": "discord", "text": "hello", "severity": "info"},
-        )
-
-        self.assertTrue(invocation.ok)
-        self.assertEqual(invocation.result.output["accepted"], True)
-        self.assertEqual(invocation.result.output["provider_message_id"], "provider-1")
-        self.assertEqual(invocation.result.output["metadata"]["channel"], "discord")
-
-    async def test_notification_send_provider_rejection_uses_accepted_false(self) -> None:
-        class RateLimitedNotificationPlugin(BasePlugin):
-            async def invoke(self, request):
-                NotificationSendInput.from_mapping(request.input)
-                result = NotificationSendResult(
-                    accepted=False,
-                    retryable=True,
-                    metadata={"provider_status": 429},
-                )
-                return PluginInvokeResult(output=result.to_mapping())
-
-        self._install_module("test_runtime_notification_rejected", RateLimitedNotificationPlugin)
-        record = self._record(
-            entrypoint="test_runtime_notification_rejected:plugin",
-            plugin_type=PluginType.NOTIFICATION,
-            capabilities=("notification.send",),
-        )
-
-        invocation = await PluginRuntimeService().invoke(
-            record,
-            capability="notification.send",
-            request_id="req-notification-rejected",
-            input={"channel": "discord", "text": "rate limited"},
-        )
-
-        self.assertTrue(invocation.ok)
-        self.assertEqual(invocation.result.output["accepted"], False)
-        self.assertEqual(invocation.result.output["retryable"], True)
-        self.assertEqual(invocation.result.output["metadata"]["provider_status"], 429)
-
-    async def test_notification_send_missing_config_uses_structured_error(self) -> None:
-        class ConfiguredNotificationPlugin(BasePlugin):
-            async def invoke(self, request):
-                if "webhook_ref" not in self.context.config:
-                    raise PluginRuntimeError(
-                        code="PLUGIN_CONFIG_MISSING",
-                        message="Notification plugin config is missing.",
-                        stage="config",
-                    )
-                return PluginInvokeResult(output=NotificationSendResult(accepted=True).to_mapping())
-
-        self._install_module("test_runtime_notification_config", ConfiguredNotificationPlugin)
-        record = self._record(
-            entrypoint="test_runtime_notification_config:plugin",
-            plugin_type=PluginType.NOTIFICATION,
-            capabilities=("notification.send",),
-        )
-
-        invocation = await PluginRuntimeService().invoke(
-            record,
-            capability="notification.send",
-            request_id="req-notification-config",
-            input={"channel": "discord", "text": "hello"},
-        )
-
-        self.assertFalse(invocation.ok)
-        self.assertEqual(invocation.error.code, "PLUGIN_CONFIG_MISSING")
-        self.assertEqual(invocation.error.stage, "config")
-
-    async def test_notification_send_payload_validation_uses_structured_error(self) -> None:
-        class ValidatingNotificationPlugin(BasePlugin):
-            async def invoke(self, request):
-                NotificationSendInput.from_mapping(request.input)
-                return PluginInvokeResult(output=NotificationSendResult(accepted=True).to_mapping())
-
-        self._install_module("test_runtime_notification_payload", ValidatingNotificationPlugin)
-        record = self._record(
-            entrypoint="test_runtime_notification_payload:plugin",
-            plugin_type=PluginType.NOTIFICATION,
-            capabilities=("notification.send",),
-        )
-
-        invocation = await PluginRuntimeService().invoke(
-            record,
-            capability="notification.send",
-            request_id="req-notification-payload",
-            input={"channel": "discord", "text": object()},
-        )
-
-        self.assertFalse(invocation.ok)
-        self.assertEqual(invocation.error.code, "PLUGIN_DTO_VALIDATION_FAILED")
-        self.assertEqual(invocation.error.stage, "invoke")
-        self.assertEqual(invocation.error.details["field"], "text")
-
-    async def test_notification_send_plugin_exception_uses_runtime_structured_error(self) -> None:
-        class FailingNotificationPlugin(BasePlugin):
-            async def invoke(self, request):
-                raise RuntimeError("notification provider exploded")
-
-        self._install_module("test_runtime_notification_exception", FailingNotificationPlugin)
-        record = self._record(
-            entrypoint="test_runtime_notification_exception:plugin",
-            plugin_type=PluginType.NOTIFICATION,
-            capabilities=("notification.send",),
-        )
-
-        invocation = await PluginRuntimeService().invoke(
-            record,
-            capability="notification.send",
-            request_id="req-notification-exception",
-            input={"channel": "discord", "text": "hello"},
-        )
-
-        self.assertFalse(invocation.ok)
-        self.assertEqual(invocation.error.code, "PLUGIN_INVOKE_FAILED")
-        self.assertEqual(invocation.error.stage, "invoke")
-        self.assertEqual(invocation.error.details["error_type"], "RuntimeError")
-
-    async def test_notification_send_invalid_runtime_result_uses_structured_error(self) -> None:
-        class InvalidNotificationPlugin(BasePlugin):
-            async def invoke(self, request):
-                return NotificationSendResult(accepted=True).to_mapping()
-
-        self._install_module("test_runtime_notification_invalid_result", InvalidNotificationPlugin)
-        record = self._record(
-            entrypoint="test_runtime_notification_invalid_result:plugin",
-            plugin_type=PluginType.NOTIFICATION,
-            capabilities=("notification.send",),
-        )
-
-        invocation = await PluginRuntimeService().invoke(
-            record,
-            capability="notification.send",
-            request_id="req-notification-invalid",
-            input={"channel": "discord", "text": "hello"},
-        )
-
-        self.assertFalse(invocation.ok)
-        self.assertEqual(invocation.error.code, "PLUGIN_INVOKE_RESULT_INVALID")
-        self.assertEqual(invocation.error.stage, "invoke")
-
     def _install_module(self, module_name: str, plugin) -> None:
         module = types.ModuleType(module_name)
         module.plugin = plugin
@@ -563,8 +395,6 @@ class PluginRuntimeServiceTestCase(unittest.IsolatedAsyncioTestCase):
         *,
         entrypoint: str = "test_runtime_plugin:plugin",
         status: PluginStatus = PluginStatus.VALID,
-        plugin_type: PluginType = PluginType.SOURCE,
-        capabilities: tuple[str, ...] = ("source.fetch",),
     ) -> PluginRecord:
         return PluginRecord(
             id="quantagent.test.runtime",
@@ -574,10 +404,10 @@ class PluginRuntimeServiceTestCase(unittest.IsolatedAsyncioTestCase):
             manifest=PluginManifest(
                 id="quantagent.test.runtime",
                 name="Runtime Test",
-                type=plugin_type,
+                type=PluginType.SOURCE,
                 version="0.1.0",
                 entrypoint=entrypoint,
-                capabilities=capabilities,
+                capabilities=("source.fetch",),
                 config_schema="config.schema.json",
             ),
         )
