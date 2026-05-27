@@ -104,10 +104,10 @@
   {
     "account_id": "paper-main",
     "currency": "USD",
-    "total": "100000.00",
-    "available": "98000.00",
-    "locked": "2000.00",
-    "unsettled": "0.00",
+    "total": "100000.00000000",
+    "available": "98000.00000000",
+    "locked": "2000.00000000",
+    "unsettled": "0.00000000",
     "updated_at": "2026-05-20T09:30:00Z"
   }
 ]
@@ -115,7 +115,7 @@
 
 前端注意：
 
-- 金额字段是字符串化十进制数，前端不要直接按 JS `number` 做精度敏感运算
+- 当前金额字段按 wallet core 的 8 位定点语义序列化为字符串；前端不要直接按 JS `number` 做精度敏感运算
 - `available`、`locked`、`unsettled` 可以拆成余额明细
 
 ### 3. `GET /api/v1/wallet/accounts/{account_id}/positions`
@@ -131,11 +131,11 @@
     "instrument": "AAPL",
     "market": "NASDAQ",
     "side": "long",
-    "quantity": "10",
-    "sellable_quantity": "10",
-    "average_cost": "180.50",
-    "market_value": "1850.00",
-    "unrealized_pnl": "45.00",
+    "quantity": "10.00000000",
+    "sellable_quantity": "10.00000000",
+    "average_cost": "180.50000000",
+    "market_value": "1850.00000000",
+    "unrealized_pnl": "45.00000000",
     "currency": "USD",
     "updated_at": "2026-05-20T09:31:00Z"
   }
@@ -146,6 +146,7 @@
 
 - `side` 当前只有 `long`
 - `instrument + market` 可作为列表主键的一部分
+- 数量和金额字段当前都按 8 位定点字符串返回，展示层可按需要裁剪尾随 `0`
 
 ### 4. `GET /api/v1/wallet/accounts/{account_id}/ledger-entries`
 
@@ -164,7 +165,7 @@
     "account_id": "paper-main",
     "entry_type": "trade",
     "currency": "USD",
-    "amount": "-1805.00",
+    "amount": "-1805.00000000",
     "source_type": "paper_execution",
     "source_ref": "exec-001",
     "occurred_at": "2026-05-20T09:32:00Z",
@@ -198,8 +199,8 @@
     "market": "NASDAQ",
     "side": "buy",
     "order_type": "limit",
-    "quantity": "10",
-    "limit_price": "180.50",
+    "quantity": "10.00000000",
+    "limit_price": "180.50000000",
     "currency": "USD",
     "status": "filled",
     "requested_at": "2026-05-20T09:31:00Z",
@@ -229,17 +230,21 @@
     "instrument": "AAPL",
     "market": "NASDAQ",
     "side": "buy",
-    "quantity": "10",
-    "price": "180.50",
-    "gross_amount": "1805.00",
+    "quantity": "10.00000000",
+    "price": "180.50000000",
+    "gross_amount": "1805.00000000",
     "currency": "USD",
-    "fee_amount": "1.00",
+    "fee_amount": "1.00000000",
     "fee_currency": "USD",
     "executed_at": "2026-05-20T09:32:00Z",
     "created_at": "2026-05-20T09:32:01Z"
   }
 ]
 ```
+
+前端注意：
+
+- `quantity`、`price`、`gross_amount`、`fee_amount` 都应按 8 位定点字符串处理
 
 ## 常见错误
 
