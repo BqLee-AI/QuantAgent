@@ -15,12 +15,14 @@ uv sync
 APP_ENV=development uv run api
 ```
 
-API 默认监听 `127.0.0.1:8000`。鉴权默认开启（`AUTH_ENABLED=true`）；development 环境下口令使用 `.env.example` 中预设的弱默认值，也可显式设置 `AUTH_ENABLED=false` 完全关闭鉴权（此选项仅 `APP_ENV=development` 允许）。
+运行时会同时读取仓库根目录 `.env` 和 `apps/api/.env`：前者是整仓默认入口，后者只用于子包独立开发时覆盖 API 私有变量。需要子包本地覆盖时，从 `apps/api` 目录执行 `cp .env.example .env`；共享的 `DATABASE_URL`、`RUNTIME_DIR`、`LOG_LEVEL` 等继续放在仓库根目录 `.env` 或外部环境。
+
+API 默认监听 `127.0.0.1:8000`。鉴权默认开启（`AUTH_ENABLED=true`）；development 环境下口令使用代码中的弱默认值，也可显式设置 `AUTH_ENABLED=false` 完全关闭鉴权（此选项仅 `APP_ENV=development` 允许）。
 
 ### 测试
 
 ```bash
-cd apps/api && uv run python -m unittest discover -s src/tests
+cd apps/api && uv run python -m unittest discover -s src
 ```
 
 Alpaca wallet API E2E validation 也落在 `apps/api/src/tests/`，只做测试链路验证，不新增任何 Alpaca route 或 runtime adapter：
@@ -69,6 +71,8 @@ docker compose up -d db
 
 Compose 中的 API 容器通过 `API_DATABASE_URL` 连接 `db:5432`；宿主机本地工具通过 `DATABASE_URL` 连接 `localhost:15432`。
 
+Compose 中 `API_HOST` 会映射为容器内兼容变量 `HOST`，用于控制 API 进程监听地址；`API_PORT` 只控制宿主机发布端口，容器内固定监听 `8000`。
+
 如果修改了 `POSTGRES_DB`、`POSTGRES_USER` 或 `POSTGRES_PASSWORD`，需要同步调整 `API_DATABASE_URL` 和 `MIGRATION_DATABASE_URL`。
 
 ### 数据库迁移
@@ -99,7 +103,7 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 - `AUTH_ADMIN_PASSWORD`
 - `AUTH_SESSION_SECRET`（建议用 `openssl rand -hex 32` 生成）
 
-`APP_ENV=production` 时 API 会强制验证这些配置，启动时若检测到弱默认值（`AUTH_ADMIN_PASSWORD=dev-admin-password` 或 `AUTH_SESSION_SECRET=dev-session-secret-change-me`）或配置缺失，会直接报错退出。
+`APP_ENV=production` 时 API 会强制验证这些配置，启动时若检测到弱默认值（`AUTH_ADMIN_PASSWORD=12345678` 或 `AUTH_SESSION_SECRET=dev-session-secret-change-me`）或配置缺失，会直接报错退出。
 
 ## API v1 route skeleton
 
@@ -150,8 +154,11 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 - 不暴露 `WalletFacts` 前端查询 endpoint
 - 不暗示 live broker sync、真实下单、撤单、改单、换汇或资金划转能力
 
-### Auth 环境变量
+### API/Auth 环境变量
 
+- `API_HOST`：直跑 API 时的监听地址，默认 `127.0.0.1`；兼容读取历史变量名 `HOST`。在根目录 Compose 中，该变量会注入为容器内 `HOST`。
+- `API_PORT`：直跑 API 时的监听端口，默认 `8000`；兼容读取历史变量名 `PORT`。在根目录 Compose 中，该变量只表示宿主机发布端口，容器内监听端口固定为 `8000`。
+- `API_V1_PREFIX`：API v1 路由前缀，默认 `/api/v1`。
 - `AUTH_ENABLED`：是否启用鉴权，默认 `true`。
 - `AUTH_ADMIN_PASSWORD`：本地管理员登录口令；`APP_ENV=development`、`APP_ENV=test` 和 `APP_ENV=local` 默认值为 `12345678`，`staging` 和 `production` 必须显式提供。
 - `AUTH_SESSION_SECRET`：session 签名 secret；`APP_ENV=development`、`APP_ENV=test` 和 `APP_ENV=local` 可使用默认值，`staging` 和 `production` 必须显式提供。
@@ -178,5 +185,5 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 新增或调整 API v1 route 后，最小本地验证入口：
 
 ```bash
-cd apps/api && uv run python -m unittest discover -s src/tests
+cd apps/api && uv run python -m unittest discover -s src
 ```

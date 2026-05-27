@@ -410,13 +410,14 @@ class AlpacaWalletApiE2ETestCase(unittest.TestCase):
 
     def _settings(self, **overrides: object) -> Settings:
         baseline = {
+            "_env_file": None,
             "APP_ENV": "development",
             "DATABASE_URL": None,
             "RUNTIME_DIR": "runtime",
             "LOG_LEVEL": "INFO",
             "API_V1_PREFIX": "/api/v1",
-            "HOST": "127.0.0.1",
-            "PORT": 8000,
+            "API_HOST": "127.0.0.1",
+            "API_PORT": 8000,
             "AUTH_ENABLED": True,
             "AUTH_ADMIN_PASSWORD": "test-admin-password",
             "AUTH_SESSION_SECRET": "test-session-secret",

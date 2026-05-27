@@ -1,21 +1,38 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
 from quantagent.core.config.settings import Settings as CoreSettings
 
 
+_API_APP_DIR = Path(__file__).resolve().parents[4]
+_REPO_ROOT_DIR = Path(__file__).resolve().parents[6]
+_CWD = Path.cwd()
+_ENV_FILES = (
+    str(_REPO_ROOT_DIR / ".env"),
+    str(_CWD / ".env"),
+    str(_CWD / "apps/api/.env"),
+    str(_API_APP_DIR / ".env"),
+)
+
+
 class Settings(CoreSettings):
     """在通用核心配置之上补充 API 运行时配置。"""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        # 共享变量放仓库根目录 .env，API 私有变量放 apps/api/.env。
+        # 源码路径和当前工作目录都纳入候选，兼容源码开发与根目录运行。
+        env_file=_ENV_FILES,
+        extra="ignore",
+    )
 
     API_V1_PREFIX: str = "/api/v1"
-    HOST: str = "127.0.0.1"
-    PORT: int = 8000
+    API_HOST: str = Field(default="127.0.0.1", validation_alias=AliasChoices("API_HOST", "HOST"))
+    API_PORT: int = Field(default=8000, validation_alias=AliasChoices("API_PORT", "PORT"))
     AUTH_ENABLED: bool = True
     AUTH_ADMIN_PASSWORD: str | None = None
     AUTH_SESSION_SECRET: str | None = None

@@ -38,4 +38,4 @@ def run() -> None:
     """使用配置中的主机和端口启动开发服务器。"""
     import uvicorn
 
-    uvicorn.run("quantagent.api.main:app", host=settings.HOST, port=settings.PORT)
+    uvicorn.run("quantagent.api.main:app", host=settings.API_HOST, port=settings.API_PORT)

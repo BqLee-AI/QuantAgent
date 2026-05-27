@@ -95,7 +95,7 @@ apps/api/
 ### 配置
 
 - API 本地配置放在 `quantagent.api.config`；共享运行时配置或数据库配置放到 package 层。
-- `Settings` 继承 `quantagent.core.config.settings.Settings`；当前 API 只补充 `API_V1_PREFIX`、`HOST`、`PORT` 等传输层配置。新增 API 专属配置时，同步判断它应留在 API 层还是下沉到 `quantagent-core`。
+- `Settings` 继承 `quantagent.core.config.settings.Settings`；当前 API 只补充 `API_V1_PREFIX`、`API_HOST`、`API_PORT` 等传输层配置。新增 API 专属配置时，同步判断它应留在 API 层还是下沉到 `quantagent-core`。
 - 新增环境变量时更新 `apps/api/README.md`；如果 Docker 运行也依赖该变量，同步检查根目录 `docker-compose.yml` 和 `.env.example`。
 - 不要硬编码数据库地址、生产端口、secret、部署环境值、生产必需密钥、数据库 URL 或外部服务凭证；通过 Settings 和环境变量读取。
 
@@ -111,7 +111,7 @@ apps/api/
 
 - API 行为变化必须补充或更新 `src/tests/` 下的测试。
 - 新增或调整 route 时同时覆盖运行时响应和 `/openapi.json` 契约，特别是 `response_model`、`tags`、信封结构和生产环境 debug route 隐藏。
-- 按 `apps/api/README.md` 中的本地验证命令执行最小验证：`cd apps/api && uv run python -m unittest discover -s src/tests`。
+- 按 `apps/api/README.md` 中的本地验证命令执行最小验证：`cd apps/api && uv run python -m unittest discover -s src`。
 - 当前未定义额外 lint/type/format 命令；后续引入 ruff、mypy、pytest 或其他验证入口时，同步更新本节和 `apps/api/README.md`。
 - 改动 Docker、迁移或数据库连接路径时，从仓库根目录验证对应 compose/migration 流程。
 - 完成后说明改了哪些文件，以及实际跑过哪些验证；如果因为环境缺失无法验证，要明确说明缺口。

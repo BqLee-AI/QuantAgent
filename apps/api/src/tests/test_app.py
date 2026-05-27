@@ -588,11 +588,12 @@ class ApiAppTestCase(unittest.TestCase):
 
     def test_non_development_env_requires_explicit_auth_credentials(self) -> None:
         with self.assertRaisesRegex(ValueError, "AUTH_SESSION_SECRET is required when APP_ENV is not development/test/local"):
-            Settings(APP_ENV="staging", AUTH_ADMIN_PASSWORD="local-password")
+            Settings(_env_file=None, APP_ENV="staging", AUTH_ADMIN_PASSWORD="local-password")
 
     def test_production_rejects_whitespace_only_auth_credentials(self) -> None:
         with self.assertRaisesRegex(ValueError, "AUTH_ADMIN_PASSWORD is required in production"):
             Settings(
+                _env_file=None,
                 APP_ENV="production",
                 AUTH_ADMIN_PASSWORD="   ",
                 AUTH_SESSION_SECRET="prod-secret",
@@ -600,19 +601,43 @@ class ApiAppTestCase(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "AUTH_SESSION_SECRET is required in production"):
             Settings(
+                _env_file=None,
                 APP_ENV="production",
                 AUTH_ADMIN_PASSWORD="prod-password",
                 AUTH_SESSION_SECRET="   ",
             )
 
     def test_test_env_still_receives_weak_auth_defaults(self) -> None:
-        settings = Settings(APP_ENV="test")
+        settings = Settings(_env_file=None, APP_ENV="test")
         self.assertEqual(settings.AUTH_ADMIN_PASSWORD, "12345678")
         self.assertEqual(settings.AUTH_SESSION_SECRET, "dev-session-secret-change-me")
+
+    def test_api_host_and_port_use_prefixed_names(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            API_HOST="0.0.0.0",
+            API_PORT=9000,
+            AUTH_ADMIN_PASSWORD="test-admin-password",
+            AUTH_SESSION_SECRET="test-session-secret",
+        )
+        self.assertEqual(settings.API_HOST, "0.0.0.0")
+        self.assertEqual(settings.API_PORT, 9000)
+
+    def test_legacy_host_and_port_env_names_still_work(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            HOST="0.0.0.0",
+            PORT=9100,
+            AUTH_ADMIN_PASSWORD="test-admin-password",
+            AUTH_SESSION_SECRET="test-session-secret",
+        )
+        self.assertEqual(settings.API_HOST, "0.0.0.0")
+        self.assertEqual(settings.API_PORT, 9100)
 
     def test_same_site_none_requires_secure_cookie(self) -> None:
         with self.assertRaisesRegex(ValueError, "AUTH_COOKIE_SAME_SITE=none requires AUTH_COOKIE_SECURE=true"):
             Settings(
+                _env_file=None,
                 APP_ENV="development",
                 AUTH_ADMIN_PASSWORD="test-admin-password",
                 AUTH_SESSION_SECRET="test-session-secret",
@@ -1419,13 +1444,14 @@ class ApiAppTestCase(unittest.TestCase):
     def _settings(self, **overrides) -> Settings:
         """生成测试默认配置，并允许按场景覆盖个别字段。"""
         baseline = {
+            "_env_file": None,
             "APP_ENV": "development",
             "DATABASE_URL": None,
             "RUNTIME_DIR": "runtime",
             "LOG_LEVEL": "INFO",
             "API_V1_PREFIX": "/api/v1",
-            "HOST": "127.0.0.1",
-            "PORT": 8000,
+            "API_HOST": "127.0.0.1",
+            "API_PORT": 8000,
             "AUTH_ENABLED": True,
             "AUTH_ADMIN_PASSWORD": "test-admin-password",
             "AUTH_SESSION_SECRET": "test-session-secret",
