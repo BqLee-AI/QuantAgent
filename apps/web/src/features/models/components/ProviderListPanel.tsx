@@ -82,15 +82,13 @@ export function ProviderListPanel({
             const selected = selectedProviderId === provider.id;
 
             return (
-              <button
+              <div
                 key={provider.id}
                 className={
                   selected
                     ? 'rounded-md border border-blue-500 bg-blue-50 px-3 py-3 text-left shadow-sm'
                     : 'rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-left hover:border-slate-300 hover:bg-white'
                 }
-                type="button"
-                onClick={() => onSelect(provider.id)}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -113,17 +111,28 @@ export function ProviderListPanel({
                     </div>
                   </div>
 
-                  <Button
-                    isDisabled={provider.is_default || settingDefaultProviderId === provider.id}
-                    size="sm"
-                    type="button"
-                    variant="outline"
-                    onPress={() => onSetDefault(provider.id)}
-                  >
-                    {settingDefaultProviderId === provider.id ? '设置中...' : '设为默认'}
-                  </Button>
+                  <div className="flex shrink-0 flex-col gap-2">
+                    <Button
+                      isDisabled={selected}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                      onPress={() => onSelect(provider.id)}
+                    >
+                      {selected ? '已选中' : '查看'}
+                    </Button>
+                    <Button
+                      isDisabled={provider.is_default || settingDefaultProviderId === provider.id}
+                      size="sm"
+                      type="button"
+                      variant="outline"
+                      onPress={() => onSetDefault(provider.id)}
+                    >
+                      {settingDefaultProviderId === provider.id ? '设置中...' : '设为默认'}
+                    </Button>
+                  </div>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>

@@ -7,6 +7,11 @@ type AuthActor = {
   csrf_token: string;
 };
 
+type RefreshedSession = AuthActor & {
+  expires_at: number;
+  max_expires_at: number;
+};
+
 const actor: AuthActor = {
   actor_id: 'local_admin',
   actor_type: 'local_single_user',
@@ -50,6 +55,16 @@ function forbiddenEnvelope() {
   };
 }
 
+function refreshedSession(actor: AuthActor): RefreshedSession {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+
+  return {
+    ...actor,
+    expires_at: nowSeconds + 3600,
+    max_expires_at: nowSeconds + 7200,
+  };
+}
+
 async function mockAuth(
   page: Page,
   options: { actor?: AuthActor; authenticated?: boolean } = {},
@@ -90,6 +105,23 @@ async function mockAuth(
     authenticated = true;
     await route.fulfill({
       body: JSON.stringify(envelope(responseActor)),
+      contentType: 'application/json',
+      status: 200,
+    });
+  });
+
+  await page.route('**/api/v1/auth/refresh', async (route) => {
+    if (!authenticated) {
+      await route.fulfill({
+        body: JSON.stringify(unauthorized()),
+        contentType: 'application/json',
+        status: 401,
+      });
+      return;
+    }
+
+    await route.fulfill({
+      body: JSON.stringify(envelope(refreshedSession(responseActor))),
       contentType: 'application/json',
       status: 200,
     });
@@ -150,7 +182,7 @@ test('restores an existing session through /me and logs out with CSRF', async ({
   expect(auth.getLogoutCsrf()).toBe('csrf-e2e');
 });
 
-test('auth-disabled development actor enters the dashboard with a visible marker', async ({ page }) => {
+test('authenticated development actor enters the dashboard without auth-disabled marker when auth is enabled', async ({ page }) => {
   await mockAuth(page, {
     actor: developmentActor,
     authenticated: true,
@@ -158,7 +190,8 @@ test('auth-disabled development actor enters the dashboard with a visible marker
 
   await page.goto('/events');
 
-  await expect(page.getByText('开发环境已关闭鉴权')).toBeVisible();
+  await expect(page.getByText('开发环境已关闭鉴权')).toHaveCount(0);
+  await expect(page.getByText('local_dev')).toBeVisible();
   await expect(page.locator('.page-title')).toHaveText('高价值事件');
 });
 
@@ -195,6 +228,7 @@ test('root route waits for session capabilities before choosing the default entr
 
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('heading', { name: '半导体新闻流' })).toBeVisible();
+  await expect(page.getByRole('link', { name: '模型' })).toBeVisible();
 });
 
 test('forbidden API responses preserve diagnostics without leaking sensitive values', async ({ page }) => {
