@@ -99,6 +99,8 @@ DISCORD_INTERACTIONS_TEST_PRIVATE_KEY=<hex-private-key> \
 uv run python plugins/sources/discord-interaction-webhook/smoke_receive.py
 ```
 
+脚本默认使用当前 Unix 时间戳签名；只有在排查边界场景时才需要显式覆盖 `DISCORD_INTERACTIONS_TEST_TIMESTAMP`。
+
 脚本会对本地 endpoint 发送一条带官方 `Ed25519` 风格签名的请求，并打印：
 
 - `derived_public_key`：由测试私钥推导出的公钥，应该与你配置到 API 的 `DISCORD_INTERACTIONS_PUBLIC_KEY` 一致。

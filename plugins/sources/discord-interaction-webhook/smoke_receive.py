@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -64,7 +65,7 @@ def main() -> int:
     ).strip()
     private_key = os.environ.get("DISCORD_INTERACTIONS_TEST_PRIVATE_KEY", "").strip()
     timeout_text = os.environ.get("DISCORD_INTERACTIONS_TIMEOUT_SECONDS", "5").strip()
-    timestamp = os.environ.get("DISCORD_INTERACTIONS_TEST_TIMESTAMP", "1700000000").strip()
+    timestamp = os.environ.get("DISCORD_INTERACTIONS_TEST_TIMESTAMP", str(int(time.time()))).strip()
 
     if not endpoint:
         print("Missing DISCORD_INTERACTIONS_ENDPOINT_URL.")

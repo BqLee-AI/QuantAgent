@@ -1909,6 +1909,42 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["error"]["code"], "SERVICE_UNAVAILABLE")
 
+    def test_discord_interactions_endpoint_rejects_plugin_with_invalid_result_shape(self) -> None:
+        signing_key = SigningKey.generate()
+        public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
+        app = create_app(
+            self._settings(
+                DISCORD_INTERACTIONS_ENABLED=True,
+                DISCORD_INTERACTIONS_PUBLIC_KEY=public_key,
+            )
+        )
+
+        class _InvalidResultPlugin:
+            def receive_request(self, _config, _headers, _body):
+                return SimpleNamespace(ok=True, code="RECEIVED", message="ok", response="not-a-mapping")
+
+        body = b'{"type":1}'
+        timestamp = str(int(time.time()))
+        signature = signing_key.sign(timestamp.encode("utf-8") + body).signature.hex()
+
+        with patch("quantagent.api.routers.v1.discord_interactions.load_plugin_entrypoint", return_value=_InvalidResultPlugin()):
+            with patch("quantagent.api.routers.v1.discord_interactions._get_plugin_registry") as get_registry:
+                get_registry.return_value = SimpleNamespace(
+                    get_plugin=lambda _plugin_id: SimpleNamespace(status=PluginStatus.VALID)
+                )
+                with TestClient(app) as client:
+                    response = client.post(
+                        "/api/v1/integrations/discord/interactions",
+                        content=body,
+                        headers={
+                            "X-Signature-Timestamp": timestamp,
+                            "X-Signature-Ed25519": signature,
+                        },
+                    )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["error"]["code"], "SERVICE_UNAVAILABLE")
+
     def test_missing_capability_is_forbidden(self) -> None:
         reduced_capabilities = frozenset({"plugin.configure"})
         issued_session = issue_session("local_admin", self.settings, capabilities=reduced_capabilities)

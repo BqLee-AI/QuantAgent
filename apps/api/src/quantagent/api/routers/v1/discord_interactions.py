@@ -28,6 +28,13 @@ class DiscordSourcePlugin(Protocol):
     ) -> object: ...
 
 
+class DiscordReceiveResult(Protocol):
+    ok: bool
+    code: str
+    message: str
+    response: Mapping[str, Any] | None
+
+
 @router.post("/interactions")
 async def receive_discord_interaction(request: Request) -> JSONResponse:
     settings = request.app.state.settings
@@ -50,7 +57,7 @@ async def receive_discord_interaction(request: Request) -> JSONResponse:
         "timestamp_tolerance_seconds": settings.DISCORD_INTERACTIONS_TIMESTAMP_TOLERANCE_SECONDS,
     }
 
-    result = plugin.receive_request(config, headers, body)
+    result = _validate_receive_result(plugin.receive_request(config, headers, body))
     if not result.ok:
         if result.code in {"SIGNATURE_MISSING", "SIGNATURE_INVALID", "TIMESTAMP_INVALID"}:
             raise UnauthorizedError("Discord signature validation failed")
@@ -80,6 +87,20 @@ def _validate_source_plugin(plugin: object) -> DiscordSourcePlugin:
     if not callable(receive_request):
         raise ServiceUnavailableError("Configured Discord source plugin does not expose a receive_request handler")
     return plugin  # type: ignore[return-value]
+
+
+def _validate_receive_result(result: object) -> DiscordReceiveResult:
+    if not isinstance(getattr(result, "ok", None), bool):
+        raise ServiceUnavailableError("Configured Discord source plugin returned an invalid result payload")
+    if not isinstance(getattr(result, "code", None), str) or not getattr(result, "code").strip():
+        raise ServiceUnavailableError("Configured Discord source plugin returned an invalid result payload")
+    if not isinstance(getattr(result, "message", None), str) or not getattr(result, "message").strip():
+        raise ServiceUnavailableError("Configured Discord source plugin returned an invalid result payload")
+
+    response = getattr(result, "response", None)
+    if response is not None and not isinstance(response, Mapping):
+        raise ServiceUnavailableError("Configured Discord source plugin returned an invalid result payload")
+    return result  # type: ignore[return-value]
 
 
 def _get_plugin_registry(request: Request) -> PluginRegistry:
