@@ -103,6 +103,40 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(run.error_summary["details"]["nested"]["cookie"], "[REDACTED]")
         self.assertEqual(run.error_summary["details"]["safe"], "visible")
 
+    async def test_missing_plugin_records_failed_precheck_run(self) -> None:
+        registry = PluginRegistry(StaticScanner([]))
+        service = PluginSchedulingService(
+            registry=registry,
+            runtime=PluginRuntimeService(),
+            repository=self.repository,
+            clock=self.clock,
+        )
+
+        run = await service.trigger(self._request(request_id="req-missing"))
+
+        self.assertEqual(run.status, PluginRunStatus.FAILED)
+        self.assertEqual(run.error_summary["code"], "PLUGIN_NOT_FOUND")
+        self.assertEqual(run.error_summary["stage"], "schedule_precheck")
+
+    async def test_invalid_plugin_record_is_failed_before_runtime_invoke(self) -> None:
+        class NeverReachedPlugin(BasePlugin):
+            async def invoke(self, request):
+                raise AssertionError("runtime invoke should not be reached for invalid records")
+
+        self._install_module("test_scheduling_invalid_record", NeverReachedPlugin)
+        service = self._service(
+            self._record(
+                entrypoint="test_scheduling_invalid_record:plugin",
+                status=PluginStatus.INVALID,
+            )
+        )
+
+        run = await service.trigger(self._request(request_id="req-invalid-record"))
+
+        self.assertEqual(run.status, PluginRunStatus.FAILED)
+        self.assertEqual(run.error_summary["code"], "PLUGIN_RECORD_NOT_LOADABLE")
+        self.assertEqual(run.error_summary["stage"], "load")
+
     async def test_timeout_records_timeout_run(self) -> None:
         class SlowPlugin(BasePlugin):
             async def invoke(self, request):

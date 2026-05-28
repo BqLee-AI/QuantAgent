@@ -91,6 +91,7 @@ IntervalSchedulePolicy
 字段约束：
 
 - `input`、`effective_config`、`metadata`、`output_summary` 和 `error_summary` 必须是 JSON-like object，并只包含 JSON-safe values。
+- Scheduling service 不能只相信调用方已经构造好合法 DTO；即使调用方绕过 dataclass 或直接篡改字段，service 在 runtime invoke 前也要再次做 JSON-safe 校验，并把错误落成 `failed` run，而不是把宿主异常直接抛给上层。
 - `request_id` 必须由调用方或 Scheduling 在 run 创建前生成；`PluginRunRecord.request_id` 不允许为空。
 - `effective_config` 表示平台校验后的配置，不允许插件自行读取 DB 或未治理的本地配置。
 - `output_summary` 只保存可审计摘要，不在本轮承诺 RawEvent 入库或完整原始 payload 持久化。
@@ -151,6 +152,7 @@ V1 只要求 interval 调度复用同一个 trigger service，不要求本轮实
 - config 缺失或 effective_config 非 JSON-safe：run 进入 `failed`，stage 可归因到 `config`。
 - input 非 JSON-safe 或 DTO 校验失败：run 进入 `failed`，stage 可归因到 `invoke`。
 - Runtime invoke 抛异常或返回结构化 error：run 进入 `failed`，保存脱敏 error summary。
+- Runtime invoke 成功但 `stop` / cleanup 失败：run 仍进入 `failed`，因为插件生命周期没有完整收束；第一版把 cleanup error 作为本次 run 的主失败原因写入审计，而不是吞掉或仅记日志。
 - timeout：run 进入 `timeout`，保存 `timeout_ms`、stage 和 timeout error_summary。
 - 成功但空结果：run 进入 `succeeded`，output_summary 可以表达空结果，不等同失败。
 
