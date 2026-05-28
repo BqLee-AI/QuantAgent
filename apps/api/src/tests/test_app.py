@@ -1317,10 +1317,17 @@ class ApiAppTestCase(unittest.TestCase):
 
         from quantagent.api.routers.v1 import plugins as plugins_router
 
+        repo_root = next(
+            parent for parent in Path(__file__).resolve().parents if (parent / "pyproject.toml").is_file()
+        )
+        api_runtime_dir = repo_root / "apps" / "api" / "runtime"
+        api_runtime_dir.mkdir(parents=True, exist_ok=True)
+
         plugins_router._find_repo_root.cache_clear()
         self.addCleanup(plugins_router._find_repo_root.cache_clear)
 
-        response = self.client.get("/api/v1/plugins")
+        with patch("pathlib.Path.cwd", return_value=api_runtime_dir):
+            response = self.client.get("/api/v1/plugins")
         body = response.json()
 
         self.assertEqual(response.status_code, 200)

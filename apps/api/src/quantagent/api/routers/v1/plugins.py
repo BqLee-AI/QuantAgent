@@ -181,7 +181,7 @@ def _display_path(path: Path) -> str:
 
 @lru_cache(maxsize=1)
 def _find_repo_root() -> Path:
-    """定位 QuantAgent 仓库根，避免把 apps/api/runtime 误判成项目根。"""
+    """定位 QuantAgent 仓库根, 避免把 apps/api/runtime 误判成项目根。"""
     candidates: list[Path] = []
     if _SOURCE_REPO_ROOT is not None:
         candidates.append(_SOURCE_REPO_ROOT)
