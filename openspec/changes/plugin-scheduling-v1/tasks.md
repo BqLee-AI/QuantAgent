@@ -1,8 +1,8 @@
 ## 1. OpenSpec 评审
 
-- [ ] 1.1 提交 OpenSpec-only PR，只包含 `plugin-scheduling-v1` 的 proposal、design、specs、tasks 和必要说明。
-- [ ] 1.2 在 PR 说明中写清楚：本 PR 只定义 Plugin Scheduling V1 contract，不实现 core scheduling service、API、worker、数据库迁移或 Event Bus。
-- [ ] 1.3 等维护者在 OpenSpec PR 下明确评论“没问题”或批准后，再进入实现 PR。
+- [x] 1.1 提交 OpenSpec-only PR，只包含 `plugin-scheduling-v1` 的 proposal、design、specs、tasks 和必要说明。
+- [x] 1.2 在 PR 说明中写清楚：本 PR 只定义 Plugin Scheduling V1 contract，不实现 core scheduling service、API、worker、数据库迁移或 Event Bus。
+- [x] 1.3 等维护者在 OpenSpec PR 下明确评论“没问题”或批准后，再进入实现 PR。
 
 ## 2. 调度边界与模型
 
@@ -16,15 +16,15 @@
 
 - [x] 3.1 定义手动 trigger 的输入、输出、成功和失败场景。
 - [x] 3.2 定义 interval policy 的最小边界，确保 interval trigger 复用同一个 scheduling service。
-- [ ] 3.3 明确 V1 不实现完整分布式 scheduler、复杂 retry/backoff/rate limit/circuit breaker。
-- [ ] 3.4 明确 API 只能作为薄 trigger 边界，不作为长期 scheduler loop。
+- [x] 3.3 明确 V1 不实现完整分布式 scheduler、复杂 retry/backoff/rate limit/circuit breaker。
+- [x] 3.4 明确 API 只能作为薄 trigger 边界，不作为长期 scheduler loop。
 
 ## 4. 后续实现落点
 
 - [x] 4.1 在 `packages/core/src/quantagent/core/scheduling/` 中实现 scheduling models、service、repository port 和可注入 clock。
 - [x] 4.2 复用 `PluginRuntimeService.invoke`，不在 scheduling service 中重新实现插件加载、生命周期或 capability 分支。
 - [x] 4.3 实现最小内存 run repository 作为 contract test harness；如需数据库持久化，另行评估迁移边界。
-- [ ] 4.4 如需 API trigger，保持 `apps/api` router 薄层，只调用 core scheduling service。
+- [x] 4.4 本轮不实现 API trigger；如后续需要 API trigger，保持 `apps/api` router 薄层，只调用 core scheduling service。
 
 ## 5. 验证
 
