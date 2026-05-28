@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import importlib
 import inspect
 import logging
@@ -169,7 +170,8 @@ class PluginRuntimeService:
 
     async def stop_plugin(self, plugin: Any, *, plugin_id: str | None = None) -> PluginError | None:
         try:
-            await _call_async(plugin.stop())
+            # Stop is the runtime cleanup boundary; finish it even when the caller cancels invoke.
+            await _call_async_shielded(plugin.stop())
         except Exception as exc:
             return _to_plugin_error(exc, stage="stop", plugin_id=plugin_id)
         return None
@@ -231,6 +233,17 @@ async def _call_async(value: Awaitable[Any] | Any) -> Any:
     if inspect.isawaitable(value):
         return await value
     return value
+
+
+async def _call_async_shielded(value: Awaitable[Any] | Any) -> Any:
+    if not inspect.isawaitable(value):
+        return value
+    task = asyncio.ensure_future(value)
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        await task
+        raise
 
 
 def _to_plugin_error(exc: Exception, *, stage: str, plugin_id: str | None = None) -> PluginError:

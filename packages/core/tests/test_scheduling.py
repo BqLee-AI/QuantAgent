@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from quantagent.core.registry import PluginManifest, PluginRecord, PluginRegistry, PluginSource, PluginStatus, PluginType
+from quantagent.core.registry.models import PluginError
 from quantagent.core.runtime import PluginRuntimeService
 from quantagent.core.scheduling import (
     FrozenSchedulingClock,
@@ -271,6 +272,63 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(run.error_summary["code"], "PLUGIN_DTO_VALIDATION_FAILED")
         self.assertEqual(run.error_summary["stage"], "schedule_precheck")
 
+    async def test_failed_precheck_run_duration_starts_when_run_enters_running(self) -> None:
+        class ExplodingRegistry(PluginRegistry):
+            def get_plugin(inner_self, plugin_id):
+                self.clock.advance(seconds=2)
+                raise RuntimeError("registry unavailable")
+
+        service = PluginSchedulingService(
+            registry=ExplodingRegistry(StaticScanner([])),
+            runtime=PluginRuntimeService(),
+            repository=self.repository,
+            clock=self.clock,
+        )
+
+        self.clock.advance(seconds=0.25)
+        run = await service.trigger(self._request(request_id="req-duration"))
+
+        self.assertEqual(run.status, PluginRunStatus.FAILED)
+        self.assertEqual(run.error_summary["code"], "PLUGIN_SCHEDULING_FAILED")
+        self.assertEqual(run.duration_ms, 0)
+
+    async def test_error_summary_freeze_preserves_error_stage(self) -> None:
+        class BadDetailPlugin(BasePlugin):
+            async def invoke(self, request):
+                raise PluginRuntimeError(
+                    code="PLUGIN_BAD_DETAIL",
+                    message="bad detail",
+                    stage="load",
+                    details={"bad": object()},
+                )
+
+        self._install_module("test_scheduling_bad_detail", BadDetailPlugin)
+        service = self._service(self._record(entrypoint="test_scheduling_bad_detail:plugin"))
+
+        run = await service.trigger(self._request(request_id="req-bad-detail"))
+
+        self.assertEqual(run.status, PluginRunStatus.FAILED)
+        self.assertEqual(run.error_summary["code"], "PLUGIN_BAD_DETAIL")
+        self.assertEqual(run.error_summary["stage"], "load")
+        self.assertEqual(run.error_summary["details"]["bad"], "[UNSERIALIZABLE:object]")
+
+    async def test_nested_cleanup_error_summary_preserves_cleanup_stage(self) -> None:
+        summary = self._error_summary(
+            PluginError(
+                code="PLUGIN_INVOKE_FAILED_BY_TEST",
+                message="invoke failed",
+                stage="invoke",
+            ),
+            cleanup_error=PluginError(
+                code="PLUGIN_STOP_FAILED_BY_TEST",
+                message="stop failed",
+                stage="stop",
+            ),
+        )
+
+        self.assertEqual(summary["stage"], "invoke")
+        self.assertEqual(summary["details"]["cleanup_error"]["stage"], "stop")
+
     async def test_frozen_clock_requires_timezone_aware_datetime(self) -> None:
         with self.assertRaises(ValueError):
             FrozenSchedulingClock(datetime(2026, 5, 28, 8, 0))
@@ -351,6 +409,16 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
                 config_schema="config.schema.json",
             ),
         )
+
+    def _error_summary(
+        self,
+        error: PluginError,
+        *,
+        cleanup_error: PluginError | None = None,
+    ):
+        from quantagent.core.scheduling.service import _error_to_summary
+
+        return _error_to_summary(error, cleanup_error=cleanup_error)
 
 
 if __name__ == "__main__":

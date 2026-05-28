@@ -37,6 +37,7 @@ class PluginSchedulingService:
         started_monotonic = self._clock.monotonic()
 
         try:
+            # Revalidate before creating a normal run so tampered DTOs still become audited failures.
             validated_request = _revalidate_request(request)
             plugin_record = self._registry.get_plugin(validated_request.plugin_id)
             run, started_monotonic = self._start_run(validated_request, plugin_record)
@@ -78,7 +79,7 @@ class PluginSchedulingService:
             )
         except PluginRuntimeError as exc:
             if run is None:
-                run = self._start_failed_precheck_run(request)
+                run, started_monotonic = self._start_failed_precheck_run(request)
             return self._finish_run(
                 run,
                 status=PluginRunStatus.FAILED,
@@ -87,7 +88,7 @@ class PluginSchedulingService:
             )
         except Exception as exc:
             if run is None:
-                run = self._start_failed_precheck_run(request)
+                run, started_monotonic = self._start_failed_precheck_run(request)
             return self._finish_run(
                 run,
                 status=PluginRunStatus.FAILED,
@@ -133,7 +134,7 @@ class PluginSchedulingService:
             started_monotonic,
         )
 
-    def _start_failed_precheck_run(self, request: PluginTriggerRequest) -> PluginRunRecord:
+    def _start_failed_precheck_run(self, request: PluginTriggerRequest) -> tuple[PluginRunRecord, float]:
         run = PluginRunRecord(
             run_id=f"run_{uuid4().hex}",
             plugin_id=_safe_identifier(request.plugin_id, fallback="invalid-plugin-id"),
@@ -146,7 +147,8 @@ class PluginSchedulingService:
             timeout_ms=request.timeout_ms,
         )
         self._repository.create(replace(run, status=PluginRunStatus.QUEUED, started_at=None))
-        return self._repository.update(run)
+        started_monotonic = self._clock.monotonic()
+        return self._repository.update(run), started_monotonic
 
     async def _invoke_runtime(self, record: PluginRecord, request: PluginTriggerRequest) -> PluginRuntimeInvocation:
         invoke_coro = self._runtime.invoke(
@@ -272,6 +274,7 @@ def _error_to_summary(
     details = dict(_sanitize_mapping(error.details))
     if cleanup_error is not None:
         details["cleanup_error"] = _error_to_summary(cleanup_error)
+    # Preserve the source stage so DTO validation failures stay attributable to the failing boundary.
     return freeze_json_mapping(
         {
             "code": error.code,
@@ -280,7 +283,7 @@ def _error_to_summary(
             "retryable": error.retryable,
             "details": details,
         },
-        stage="invoke",
+        stage=error.stage,
     )
 
 

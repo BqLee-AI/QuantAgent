@@ -355,6 +355,29 @@ class PluginRuntimeServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(invocation.cleanup_error)
         self.assertEqual(invocation.cleanup_error.code, "PLUGIN_STOP_FAILED_BY_TEST")
 
+    async def test_cancelled_invoke_waits_for_stop_cleanup(self) -> None:
+        stopped = asyncio.Event()
+
+        class SlowPlugin(BasePlugin):
+            async def invoke(self, request):
+                await asyncio.sleep(10)
+                return PluginInvokeResult(output={"done": True})
+
+            async def stop(self):
+                await asyncio.sleep(0.02)
+                stopped.set()
+
+        self._install_module("test_runtime_cancelled_cleanup", SlowPlugin)
+        record = self._record(entrypoint="test_runtime_cancelled_cleanup:plugin")
+        task = asyncio.create_task(PluginRuntimeService().invoke(record, capability="source.fetch", request_id="req-cancel"))
+        await asyncio.sleep(0)
+
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+
+        self.assertTrue(stopped.is_set())
+
     async def test_plugin_runtime_error_message_and_details_are_sanitized(self) -> None:
         class SensitiveErrorPlugin(BasePlugin):
             async def invoke(self, request):

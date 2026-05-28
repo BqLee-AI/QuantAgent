@@ -153,7 +153,7 @@ V1 只要求 interval 调度复用同一个 trigger service，不要求本轮实
 - input 非 JSON-safe 或 DTO 校验失败：run 进入 `failed`，stage 可归因到 `invoke`。
 - Runtime invoke 抛异常或返回结构化 error：run 进入 `failed`，保存脱敏 error summary。
 - Runtime invoke 成功但 `stop` / cleanup 失败：run 仍进入 `failed`，因为插件生命周期没有完整收束；第一版把 cleanup error 作为本次 run 的主失败原因写入审计，而不是吞掉或仅记日志。
-- timeout：run 进入 `timeout`，保存 `timeout_ms`、stage 和 timeout error_summary。
+- timeout：run 进入 `timeout`，保存 `timeout_ms`、stage 和 timeout error_summary；Runtime 仍必须完成 `stop` cleanup，避免调度层取消 invoke 后泄露插件资源。
 - 成功但空结果：run 进入 `succeeded`，output_summary 可以表达空结果，不等同失败。
 
 ## 复用与不复用
