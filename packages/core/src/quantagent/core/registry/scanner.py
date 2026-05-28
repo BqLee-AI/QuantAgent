@@ -243,10 +243,10 @@ class RegistryScanner:
         return PluginRecord(
             id=manifest.id,
             source=source,
-            path=plugin_dir,
+            path=plugin_dir.resolve(),
             status=PluginStatus.VALID,
             manifest=manifest,
-            config_schema_path=config_schema_path,
+            config_schema_path=config_schema_path.resolve(),
         )
 
     def _mark_duplicate_ids(self, records: Iterable[PluginRecord]) -> list[PluginRecord]:
@@ -302,7 +302,7 @@ class RegistryScanner:
         return PluginRecord(
             id=plugin_id or _synthetic_plugin_id(source, plugin_dir, root),
             source=source,
-            path=plugin_dir,
+            path=plugin_dir.resolve(),
             status=status,
             last_error=PluginError(
                 code=code,

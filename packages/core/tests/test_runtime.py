@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import tempfile
 import types
@@ -272,6 +273,55 @@ class PluginRuntimeServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(second.result.output["context_request_id"], "req-factory-b")
         self.assertEqual(second.result.output["before_sleep"], "req-factory-b")
 
+    async def test_plugin_path_entrypoint_loads_same_module_name_in_isolation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            first_plugin_dir = root / "first"
+            second_plugin_dir = root / "second"
+            self._write_plugin_module(first_plugin_dir, origin="first")
+            self._write_plugin_module(second_plugin_dir, origin="second")
+
+            runtime = PluginRuntimeService()
+            first, second = await asyncio.gather(
+                runtime.invoke(
+                    self._record(plugin_id="quantagent.test.runtime.first", entrypoint="plugin:plugin", path=first_plugin_dir),
+                    capability="source.fetch",
+                    request_id="req-first",
+                ),
+                runtime.invoke(
+                    self._record(plugin_id="quantagent.test.runtime.second", entrypoint="plugin:plugin", path=second_plugin_dir),
+                    capability="source.fetch",
+                    request_id="req-second",
+                ),
+            )
+
+        self.assertTrue(first.ok)
+        self.assertTrue(second.ok)
+        self.assertEqual(first.result.output["origin"], "first")
+        self.assertEqual(second.result.output["origin"], "second")
+        self.assertNotIn("plugin", sys.modules)
+
+    async def test_plugin_path_entrypoint_does_not_depend_on_current_working_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            plugin_dir = root / "plugins" / "cwd-safe"
+            other_cwd = root / "other"
+            other_cwd.mkdir()
+            self._write_plugin_module(plugin_dir, origin="cwd-safe")
+            old_cwd = Path.cwd()
+            try:
+                os.chdir(other_cwd)
+                invocation = await PluginRuntimeService().invoke(
+                    self._record(entrypoint="plugin:plugin", path=plugin_dir.resolve()),
+                    capability="source.fetch",
+                    request_id="req-cwd",
+                )
+            finally:
+                os.chdir(old_cwd)
+
+        self.assertTrue(invocation.ok)
+        self.assertEqual(invocation.result.output["origin"], "cwd-safe")
+
     async def test_singleton_object_entrypoint_is_rejected_to_avoid_context_races(self) -> None:
         self._install_module("test_runtime_singleton", PlainRuntimePlugin())
         record = self._record(entrypoint="test_runtime_singleton:plugin")
@@ -413,19 +463,39 @@ class PluginRuntimeServiceTestCase(unittest.IsolatedAsyncioTestCase):
         sys.modules[module_name] = module
         self._module_names.append(module_name)
 
+    def _write_plugin_module(self, plugin_dir: Path, *, origin: str) -> None:
+        plugin_dir.mkdir(parents=True)
+        (plugin_dir / "plugin.py").write_text(
+            "\n".join(
+                [
+                    "from quantagent.plugin_sdk import BasePlugin, PluginInvokeResult",
+                    "",
+                    "class TestPlugin(BasePlugin):",
+                    "    async def invoke(self, request):",
+                    f"        return PluginInvokeResult(output={{'origin': {origin!r}, 'request_id': request.request_id}})",
+                    "",
+                    "plugin = TestPlugin",
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
     def _record(
         self,
         *,
+        plugin_id: str = "quantagent.test.runtime",
         entrypoint: str = "test_runtime_plugin:plugin",
+        path: Path | None = None,
         status: PluginStatus = PluginStatus.VALID,
     ) -> PluginRecord:
         return PluginRecord(
-            id="quantagent.test.runtime",
+            id=plugin_id,
             source=PluginSource.OFFICIAL,
-            path=Path(tempfile.gettempdir()),
+            path=path or Path(tempfile.gettempdir()),
             status=status,
             manifest=PluginManifest(
-                id="quantagent.test.runtime",
+                id=plugin_id,
                 name="Runtime Test",
                 type=PluginType.SOURCE,
                 version="0.1.0",

@@ -32,7 +32,7 @@ class PluginFoundationDemoStagesTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNotNone(record)
         self.assertEqual(record.status, PluginStatus.VALID)
-        self.assertEqual(record.path, Path("plugins/sources/placeholder-source"))
+        self.assertEqual(record.path, Path("plugins/sources/placeholder-source").resolve())
         self.assertIsNotNone(record.manifest)
         self.assertEqual(record.manifest.type, PluginType.SOURCE)
         self.assertEqual(record.manifest.entrypoint, "placeholder_source:plugin")
@@ -69,8 +69,8 @@ class PluginFoundationDemoStagesTestCase(unittest.IsolatedAsyncioTestCase):
             "阶段 2 / Runtime",
             implemented=True,
             how=(
-                "PluginRuntimeService 使用 PluginRecord.path 临时加入插件目录 import path，"
-                "按 placeholder_source:plugin 加载插件，注入 RuntimeContext 后调用 source.fetch。"
+                "PluginRuntimeService 使用 PluginRecord.path 定位插件目录里的 entrypoint 文件，"
+                "用隔离模块名加载 placeholder_source:plugin，注入 RuntimeContext 后调用 source.fetch。"
             ),
             evidence=(
                 "插件返回 SourceFetchResult DTO，external_id="

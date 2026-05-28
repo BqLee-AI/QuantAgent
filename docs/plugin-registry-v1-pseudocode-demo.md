@@ -77,8 +77,8 @@ Runtime 从 `PluginRecord` 出发加载 manifest entrypoint：
 
 ```text
 PluginRuntimeService.invoke(record, capability="source.fetch", ...)
-  -> 根据 record.path 临时加入插件目录 import path
-  -> import placeholder_source:plugin
+  -> 根据 record.path 定位插件目录里的 entrypoint 文件
+  -> 用隔离模块名加载 placeholder_source:plugin
   -> 创建插件实例
   -> 注入 RuntimeContext
   -> 调用 load/start/invoke/stop
