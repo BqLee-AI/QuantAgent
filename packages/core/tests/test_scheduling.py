@@ -240,6 +240,69 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(hasattr(context, forbidden))
         self.assertNotIn("scheduler", captured["input"])
 
+    async def test_concurrent_triggers_keep_run_state_isolated(self) -> None:
+        release = asyncio.Event()
+
+        class ConcurrentPlugin(BasePlugin):
+            async def invoke(self, request):
+                await release.wait()
+                return PluginInvokeResult(
+                    output={
+                        "request_id": request.request_id,
+                        "origin": request.metadata["origin"],
+                        "query": request.input["query"],
+                    }
+                )
+
+        self._install_module("test_scheduling_concurrent", ConcurrentPlugin)
+        service = self._service(self._record(entrypoint="test_scheduling_concurrent:plugin"))
+
+        first_task = asyncio.create_task(
+            service.trigger(
+                self._request(
+                    request_id="req-concurrent-a",
+                    input_data={"query": "rss-a"},
+                    metadata={"origin": "worker-a"},
+                )
+            )
+        )
+        second_task = asyncio.create_task(
+            service.trigger(
+                self._request(
+                    request_id="req-concurrent-b",
+                    input_data={"query": "rss-b"},
+                    metadata={"origin": "worker-b"},
+                )
+            )
+        )
+        await asyncio.sleep(0)
+        release.set()
+
+        first, second = await asyncio.gather(first_task, second_task)
+
+        self.assertNotEqual(first.run_id, second.run_id)
+        self.assertEqual(first.status, PluginRunStatus.SUCCEEDED)
+        self.assertEqual(second.status, PluginRunStatus.SUCCEEDED)
+        self.assertEqual(first.request_id, "req-concurrent-a")
+        self.assertEqual(second.request_id, "req-concurrent-b")
+        self.assertEqual(first.metadata["origin"], "worker-a")
+        self.assertEqual(second.metadata["origin"], "worker-b")
+        self.assertEqual(first.output_summary["request_id"], "req-concurrent-a")
+        self.assertEqual(second.output_summary["request_id"], "req-concurrent-b")
+        self.assertEqual(first.output_summary["origin"], "worker-a")
+        self.assertEqual(second.output_summary["origin"], "worker-b")
+        self.assertEqual(first.output_summary["query"], "rss-a")
+        self.assertEqual(second.output_summary["query"], "rss-b")
+        self.assertEqual(
+            [item.status for item in self.repository.get_history(first.run_id)],
+            [PluginRunStatus.QUEUED, PluginRunStatus.RUNNING, PluginRunStatus.SUCCEEDED],
+        )
+        self.assertEqual(
+            [item.status for item in self.repository.get_history(second.run_id)],
+            [PluginRunStatus.QUEUED, PluginRunStatus.RUNNING, PluginRunStatus.SUCCEEDED],
+        )
+        self.assertEqual({record.run_id for record in self.repository.list()}, {first.run_id, second.run_id})
+
     async def test_non_json_safe_payload_is_failed_without_runtime_invoke(self) -> None:
         class NeverReachedPlugin(BasePlugin):
             async def invoke(self, request):
