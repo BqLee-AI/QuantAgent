@@ -55,7 +55,8 @@ API logs SHALL be JSON Lines records with stable fields and stream-specific even
 #### Scenario: Access log contains required request fields
 
 - **WHEN** an HTTP request completes
-- **THEN** exactly one API access log record is emitted for that request
+- **THEN** exactly one API access log record is emitted for that request when queue degradation is not active
+- **AND** if queue degradation is active, the API still attempts to emit the access record before any configured drop, sampling, or aggregation rule is applied
 - **AND** the record includes `event`, `stream`, `service`, `env`, `instance_id`, `pid`, `request_id`, `trace_id`, `method`, `path`, `status_code`, and `duration_ms`
 - **AND** the record is valid single-line JSON
 
@@ -90,6 +91,8 @@ API file logs SHALL be grouped by stream, date, process, and time slice to suppo
 
 - **WHEN** a process opens an active log file
 - **THEN** the file name follows `{service}.{env}.{instance_id}.pid-{pid}.{stream}.{YYYYMMDDTHH}[.part-NNN].jsonl`
+- **AND** the `T` in `YYYYMMDDTHH` is a literal separator between the date and hour fields
+- **AND** a valid example file name is `api.production.pod-api-7d9c9.pid-123.access.20260528T14.jsonl`
 - **AND** separate API processes write separate active files
 - **AND** the implementation does not rely on cross-process locks for normal active file writes
 - **AND** directory date placeholders use `YYYY/MM/DD` while file hour-slice placeholders use `YYYYMMDDTHH`
