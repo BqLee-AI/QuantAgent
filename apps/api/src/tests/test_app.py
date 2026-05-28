@@ -666,8 +666,17 @@ class ApiAppTestCase(unittest.TestCase):
                 _env_file=None,
                 APP_ENV="staging",
                 AUTH_ADMIN_PASSWORD="staging-admin-password",
-                AUTH_SESSION_SECRET="dev-session-secret-0123456789abcdef",
+                AUTH_SESSION_SECRET="stage-short-secret",
             )
+
+    def test_non_dev_session_secret_allows_non_placeholder_words(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            APP_ENV="staging",
+            AUTH_ADMIN_PASSWORD="staging-admin-password",
+            AUTH_SESSION_SECRET="device-session-secret-0123456789abcdef",
+        )
+        self.assertEqual(settings.AUTH_SESSION_SECRET, "device-session-secret-0123456789abcdef")
 
     def test_test_env_still_receives_weak_auth_defaults(self) -> None:
         settings = Settings(_env_file=None, APP_ENV="test")

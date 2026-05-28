@@ -27,6 +27,11 @@ _WEAK_AUTH_PASSWORDS = _PLACEHOLDER_SECRETS | {
     "prod-password",
     "staging-password",
 }
+_WEAK_SESSION_SECRET_VALUES = _PLACEHOLDER_SECRETS | {
+    "dev-session-secret",
+    "dev-session-secret-change-me",
+    "session-secret",
+}
 _MIN_NON_DEV_AUTH_PASSWORD_LENGTH = 12
 _MIN_NON_DEV_SESSION_SECRET_LENGTH = 32
 
@@ -229,8 +234,7 @@ class Settings(CoreSettings):
                 raise ValueError("AUTH_ADMIN_PASSWORD must be at least 12 characters and not use a common weak value outside development/test/local")
             if self.AUTH_SESSION_SECRET and (
                 len(self.AUTH_SESSION_SECRET) < _MIN_NON_DEV_SESSION_SECRET_LENGTH
-                or "dev" in self.AUTH_SESSION_SECRET.lower()
-                or "change" in self.AUTH_SESSION_SECRET.lower()
+                or self.AUTH_SESSION_SECRET.lower() in _WEAK_SESSION_SECRET_VALUES
             ):
                 raise ValueError("AUTH_SESSION_SECRET must be at least 32 characters and not look like a development placeholder outside development/test/local")
 
