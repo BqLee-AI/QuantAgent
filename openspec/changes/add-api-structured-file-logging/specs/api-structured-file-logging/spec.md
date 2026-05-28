@@ -27,6 +27,7 @@ API requests SHALL bind a request context that keeps response headers, error env
 - **THEN** the API preserves that request id in the response header
 - **AND** every log record emitted inside that request context includes the same `request_id`
 - **AND** any error envelope for that request includes the same `error.request_id`
+- **AND** `get_request_id(request)` remains the public accessor and returns the same request id during the migration from `request.state` to contextvars
 
 #### Scenario: Invalid request id is replaced consistently
 
@@ -81,15 +82,17 @@ API file logs SHALL be grouped by stream, date, process, and time slice to suppo
 - **WHEN** the API writes file logs
 - **THEN** each record is routed to `LOG_DIR/{stream}/YYYY/MM/DD/`
 - **AND** the default `LOG_DIR` resolves to `RUNTIME_DIR/logs/api`
+- **AND** file management, rotation, and cleanup logic use the resolved `LOG_DIR` instead of hardcoding the repository root `runtime/` string
 - **AND** supported streams include at least `access`, `app`, `error`, `security`, and `audit`
 - **AND** route name, actor, source, status code, and event type are stored as JSON fields rather than as separate physical file names
 
 #### Scenario: Active file name includes process identity
 
 - **WHEN** a process opens an active log file
-- **THEN** the file name follows `{service}.{env}.{instance_id}.pid-{pid}.{stream}.{yyyyMMddTHH}[.part-NNN].jsonl`
+- **THEN** the file name follows `{service}.{env}.{instance_id}.pid-{pid}.{stream}.{YYYYMMDDTHH}[.part-NNN].jsonl`
 - **AND** separate API processes write separate active files
 - **AND** the implementation does not rely on cross-process locks for normal active file writes
+- **AND** directory date placeholders use `YYYY/MM/DD` while file hour-slice placeholders use `YYYYMMDDTHH`
 
 #### Scenario: Rotation uses hour and size boundaries
 
@@ -188,4 +191,4 @@ The change SHALL update documentation and tests so the logging contract is revie
 - **WHEN** automated tests validate file logging behavior
 - **THEN** they use temporary directories
 - **AND** they do not write test logs into the real `runtime/` directory
-- **AND** the API test command `cd apps/api && uv run python -m unittest discover -s src` covers the relevant behavior
+- **AND** the API test command `cd apps/api && uv run python -m unittest discover -s src/tests` covers the relevant behavior

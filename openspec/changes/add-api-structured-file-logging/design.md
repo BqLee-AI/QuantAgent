@@ -13,7 +13,7 @@
 - `apps/api/src/quantagent/api/auth/audit.py` 与 auth 相关模块：actor 审计上下文和安全事件。
 - `apps/api/README.md`、根 `.env.example`、`apps/api/.env.example`：日志配置说明。
 
-配置默认值应遵循现有 `Settings` 模型：共享 `RUNTIME_DIR` 仍由 `quantagent-core` 提供，API 专属日志配置留在 `quantagent.api.config.Settings`。`LOG_DIR` 默认解析为 `RUNTIME_DIR / "logs/api"`；只有显式配置 `LOG_DIR` 时才覆盖该默认路径。
+配置默认值应遵循现有 `Settings` 模型：共享 `RUNTIME_DIR` 仍由 `quantagent-core` 提供，API 专属日志配置留在 `quantagent.api.config.settings.Settings`。`LOG_DIR` 默认解析为 `RUNTIME_DIR / "logs/api"`；只有显式配置 `LOG_DIR` 时才覆盖该默认路径。
 
 ## Goals / Non-Goals
 
@@ -60,10 +60,11 @@
 - 接受合法 `X-Request-ID`，不合法或缺失时生成新值。
 - 优先从 W3C `traceparent` 解析 trace id，其次读取合法 `X-Trace-ID`，仍无则生成本地 trace id。
 - 在请求进入时绑定 contextvars，在响应或异常完成后清理上下文。
+- 过渡期内同时写入 contextvars 和 `request.state.request_id`，保证现有 `get_request_id(request)` 调用路径、响应 header、access log 和错误 envelope 一致。
 - 回写 `X-Request-ID` 和 `X-Trace-ID` 响应 header。
 - 输出一条 `http.request.completed` access log。
 
-异常处理器读取同一上下文，把 `request_id` 和 `trace_id` 写入错误 envelope，避免 header、错误体和日志不一致。
+`get_request_id(request)` 保持请求标识的公共 accessor。实现时应让它优先读取 contextvars 中的 request id；没有 contextvars 时回退到 `request.state.request_id`；两者都缺失时按现有规则规范化请求头并写回 `request.state.request_id`。异常处理器读取同一上下文，把 `request_id` 和 `trace_id` 写入错误 envelope，避免 header、错误体和日志不一致。
 
 ### 3. Stream 分类和文件布局
 
@@ -88,7 +89,7 @@ stream 固定为：
 文件名：
 
 ```text
-{service}.{env}.{instance_id}.pid-{pid}.{stream}.{yyyyMMddTHH}[.part-NNN].jsonl
+{service}.{env}.{instance_id}.pid-{pid}.{stream}.{YYYYMMDDTHH}[.part-NNN].jsonl
 ```
 
 示例：
@@ -99,6 +100,8 @@ api.production.pod-api-7d9c9.pid-123.access.20260528T14.part-002.jsonl
 ```
 
 `instance_id` 由 `LOG_INSTANCE_ID` 配置提供；未配置时可使用主机名或本地兜底值。多进程通过 `pid` 隔离活跃文件，不使用跨进程锁写同一个文件。
+
+占位符统一使用大写时间格式：目录为 `YYYY/MM/DD`，文件小时分片为 `YYYYMMDDTHH`。实现和测试都应按该格式解释，不再使用小写 `yyyy` 变体。
 
 当前活跃文件的判定不依赖全局软链接。实现可以选择提供 `current/` 软链接或 marker 帮助人工排查，但它不是阶段 1 的验收要求；如果提供，必须保证软链接或 marker 不成为 writer 的状态真源。
 
