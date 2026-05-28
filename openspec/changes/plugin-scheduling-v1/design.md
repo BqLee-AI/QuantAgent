@@ -58,7 +58,7 @@ API 只负责 HTTP 参数、认证、响应 envelope 和调用 core scheduling s
 PluginTriggerRequest
   plugin_id: string
   capability: string
-  request_id: string | null
+  request_id: string
   trigger_type: "manual" | "interval"
   input: object
   effective_config: object
@@ -76,6 +76,7 @@ PluginRunRecord
   started_at: string | null
   finished_at: string | null
   duration_ms: integer | null
+  timeout_ms: integer | null
   output_summary: object
   error_summary: object | null
   metadata: object
@@ -90,6 +91,7 @@ IntervalSchedulePolicy
 字段约束：
 
 - `input`、`effective_config`、`metadata`、`output_summary` 和 `error_summary` 必须是 JSON-like object，并只包含 JSON-safe values。
+- `request_id` 必须由调用方或 Scheduling 在 run 创建前生成；`PluginRunRecord.request_id` 不允许为空。
 - `effective_config` 表示平台校验后的配置，不允许插件自行读取 DB 或未治理的本地配置。
 - `output_summary` 只保存可审计摘要，不在本轮承诺 RawEvent 入库或完整原始 payload 持久化。
 - `error_summary` 不得泄露 secret、token、cookie、完整本地路径或原始 stack trace。
@@ -122,7 +124,7 @@ queued
 ```text
 API / test harness / worker
   -> PluginSchedulingService.trigger(request)
-  -> RegistryService 查找有效 PluginRecord
+  -> PluginRegistry 查找有效 PluginRecord
   -> 创建 queued run
   -> 标记 running
   -> PluginRuntimeService.invoke(record, capability, request_id, config=effective_config, input=input, metadata=metadata)
@@ -149,7 +151,7 @@ V1 只要求 interval 调度复用同一个 trigger service，不要求本轮实
 - config 缺失或 effective_config 非 JSON-safe：run 进入 `failed`，stage 可归因到 `config`。
 - input 非 JSON-safe 或 DTO 校验失败：run 进入 `failed`，stage 可归因到 `invoke`。
 - Runtime invoke 抛异常或返回结构化 error：run 进入 `failed`，保存脱敏 error summary。
-- timeout：run 进入 `timeout`，保存 timeout_ms 和 stage。
+- timeout：run 进入 `timeout`，保存 `timeout_ms`、stage 和 timeout error_summary。
 - 成功但空结果：run 进入 `succeeded`，output_summary 可以表达空结果，不等同失败。
 
 ## 复用与不复用
@@ -174,9 +176,9 @@ OpenSpec-only PR：
 
 后续实现 PR 最小验证：
 
-- 手动 trigger 成功 run：状态从 running 到 succeeded，保存 duration 和 output_summary。
+- 手动 trigger 成功 run：状态从 running 到 succeeded，保存 duration_ms 和 output_summary。
 - Runtime 结构化失败 run：状态 failed，保存脱敏 error_summary。
-- timeout run：状态 timeout，保存 timeout_ms 和 finished_at。
+- timeout run：状态 timeout，保存 timeout_ms、finished_at 和 duration_ms。
 - 空结果 run：状态 succeeded 且 output_summary 表达空集合。
 - interval policy：计算下一次 due run 或构造 interval trigger request。
 - 插件不自调度：测试或 review 确认实现不向 plugin SDK 暴露 scheduler / DB / Event Bus。

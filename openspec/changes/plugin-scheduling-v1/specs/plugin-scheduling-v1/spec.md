@@ -52,6 +52,7 @@ Plugin Scheduling V1 SHALL create an auditable run record for every triggered pl
 - **AND** run 记录包含 `trigger_type`
 - **AND** run 记录包含 `status`
 - **AND** run 记录包含 `started_at`、`finished_at` 和 `duration_ms`
+- **AND** run 记录可以包含 `timeout_ms`
 - **AND** run 记录可以包含 `output_summary`、`error_summary` 和 `metadata`
 
 #### Scenario: run 状态有最小状态机
@@ -82,6 +83,7 @@ Plugin Scheduling V1 SHALL preserve structured Runtime errors and store sanitize
 #### Scenario: timeout 进入 timeout run
 - **WHEN** Runtime invoke 超过 trigger request 的 `timeout_ms`
 - **THEN** Scheduling 将 run 标记为 `timeout`
+- **AND** run 记录可以保存 `timeout_ms`
 - **AND** `error_summary` 记录 timeout 语义
 - **AND** run 记录包含 `finished_at` 和 `duration_ms`
 

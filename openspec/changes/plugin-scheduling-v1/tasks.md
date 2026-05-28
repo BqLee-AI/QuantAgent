@@ -8,7 +8,7 @@
 
 - [ ] 2.1 定义 Scheduling V1 与 Registry、Runtime V1、Plugin IO DTO V1 的分层关系。
 - [ ] 2.2 定义 `PluginTriggerRequest` 的最小字段：`plugin_id`、`capability`、`request_id`、`trigger_type`、`input`、`effective_config`、`metadata`、`timeout_ms`。
-- [ ] 2.3 定义 `PluginRunRecord` 的最小字段：`run_id`、`plugin_id`、`plugin_version`、`capability`、`request_id`、`trigger_type`、`status`、时间字段、duration、summary 和 metadata。
+- [ ] 2.3 定义 `PluginRunRecord` 的最小字段：`run_id`、`plugin_id`、`plugin_version`、`capability`、`request_id`、`trigger_type`、`status`、`started_at`、`finished_at`、`duration_ms`、`timeout_ms`、`output_summary`、`error_summary` 和 `metadata`。
 - [ ] 2.4 定义 run 状态机：`queued`、`running`、`succeeded`、`failed`、`timeout`、`cancelled`。
 - [ ] 2.5 定义 JSON-safe、脱敏、不可暴露宿主内部对象的字段边界。
 
@@ -29,8 +29,8 @@
 ## 5. 验证
 
 - [ ] 5.1 运行 `openspec validate plugin-scheduling-v1 --type change --strict --json`。
-- [ ] 5.2 后续实现 PR 至少验证手动 trigger 成功 run：状态、时间字段、duration 和 output_summary。
+- [ ] 5.2 后续实现 PR 至少验证手动 trigger 成功 run：状态、时间字段、duration_ms 和 output_summary。
 - [ ] 5.3 后续实现 PR 至少验证 Runtime 结构化失败 run：`failed` 状态和脱敏 error_summary。
-- [ ] 5.4 后续实现 PR 至少验证 timeout run：`timeout` 状态、timeout error_summary、finished_at 和 duration。
+- [ ] 5.4 后续实现 PR 至少验证 timeout run：`timeout` 状态、timeout_ms、timeout error_summary、finished_at 和 duration_ms。
 - [ ] 5.5 后续实现 PR 至少验证空结果 run：`succeeded` 状态与空 output_summary 可区分。
 - [ ] 5.6 后续实现 PR 至少验证 interval policy 构造 `trigger_type=interval` 的 trigger request。

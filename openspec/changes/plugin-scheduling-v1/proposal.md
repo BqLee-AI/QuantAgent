@@ -8,7 +8,7 @@ Issue #141 要解决的是插件底座从“能被 Runtime 调用”推进到“
 
 - Runtime V1 只负责单次加载、生命周期和统一 invoke，不负责手动 trigger、interval 调度或 run 状态记录。
 - Source design 已明确 pull source 必须由统一 Scheduler 管理，但 SourceBinding / Scheduler 的完整实现还不是本轮范围。
-- 系统缺少 `PluginRun` / `PluginScheduleRequest` 级别的最小状态和错误语义，后续 source、notification、worker 和 API 很难用同一套 harness 验证。
+- 系统缺少 `PluginRun` / `PluginTriggerRequest` 级别的最小状态和错误语义，后续 source、notification、worker 和 API 很难用同一套 harness 验证。
 
 ## 本轮目标
 
