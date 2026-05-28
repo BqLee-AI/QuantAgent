@@ -79,6 +79,34 @@ class PluginEntrypointLoaderTestCase(unittest.TestCase):
         with self.assertRaises(PluginEntrypointLoadError):
             load_plugin_entrypoint(record)
 
+    def test_rejects_entrypoint_outside_plugin_directory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            official_root = root / "plugins"
+            plugin_dir = official_root / "sources" / "escape"
+            plugin_dir.mkdir(parents=True)
+            (root / "outside.py").write_text("plugin = {'escaped': True}\n", encoding="utf-8")
+            (plugin_dir / "plugin.yaml").write_text(
+                (
+                    "id: quantagent.official.source.escape\n"
+                    "name: Escape Plugin\n"
+                    "type: source\n"
+                    "version: 0.1.0\n"
+                    "entrypoint: ...outside:plugin\n"
+                    "capabilities:\n"
+                    "  - source.receive\n"
+                    "config_schema: config.schema.json\n"
+                ),
+                encoding="utf-8",
+            )
+            (plugin_dir / "config.schema.json").write_text('{"type":"object"}', encoding="utf-8")
+            registry = PluginRegistry(RegistryScanner(official_root=official_root, runtime_root=root / "runtime"))
+            record = registry.get_plugin("quantagent.official.source.escape")
+
+        assert record is not None
+        with self.assertRaises(PluginEntrypointLoadError):
+            load_plugin_entrypoint(record)
+
 
 if __name__ == "__main__":
     unittest.main()

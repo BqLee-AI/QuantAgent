@@ -176,6 +176,7 @@ class Settings(CoreSettings):
     DISCORD_INTERACTIONS_PLUGIN_ID: str = "quantagent.official.source.discord_interaction_webhook"
     DISCORD_INTERACTIONS_PUBLIC_KEY: str | None = None
     DISCORD_INTERACTIONS_RESPONSE_TEXT: str = "QuantAgent received your Discord interaction."
+    DISCORD_INTERACTIONS_TIMESTAMP_TOLERANCE_SECONDS: int = Field(default=300, ge=0)
 
     @field_validator("AUTH_COOKIE_SAME_SITE", mode="before")
     @classmethod

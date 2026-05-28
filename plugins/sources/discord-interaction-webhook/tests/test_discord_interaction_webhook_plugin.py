@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+import time
 import unittest
 
 from nacl.encoding import HexEncoder
@@ -37,7 +38,7 @@ class DiscordInteractionWebhookPluginTestCase(unittest.TestCase):
             "channel_allowlist": ["channel-1"],
         }
         self.body = FIXTURE_PATH.read_bytes()
-        self.timestamp = "1700000000"
+        self.timestamp = str(int(time.time()))
         self.headers = {
             "X-Signature-Timestamp": self.timestamp,
             "X-Signature-Ed25519": self._sign(self.body),
@@ -101,6 +102,31 @@ class DiscordInteractionWebhookPluginTestCase(unittest.TestCase):
 
         self.assertFalse(result.ok)
         self.assertEqual(result.code, "SIGNATURE_INVALID")
+
+    def test_receive_request_rejects_invalid_timestamp_header(self) -> None:
+        result = self.plugin.receive_request(
+            self.config,
+            {**self.headers, "X-Signature-Timestamp": "not-a-timestamp"},
+            self.body,
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "TIMESTAMP_INVALID")
+
+    def test_receive_request_rejects_stale_timestamp(self) -> None:
+        stale_timestamp = "1"
+        headers = {
+            "X-Signature-Timestamp": stale_timestamp,
+            "X-Signature-Ed25519": self.signing_key.sign(stale_timestamp.encode("utf-8") + self.body).signature.hex(),
+        }
+        result = self.plugin.receive_request(
+            self.config,
+            headers,
+            self.body,
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "TIMESTAMP_INVALID")
 
     def test_receive_request_rejects_missing_public_key_config(self) -> None:
         result = self.plugin.receive_request({}, self.headers, self.body)

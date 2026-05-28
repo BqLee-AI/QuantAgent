@@ -20,8 +20,8 @@ def load_plugin_entrypoint(record: PluginRecord) -> object:
         raise PluginEntrypointLoadError("Plugin entrypoint must use module:attribute syntax.")
 
     plugin_dir = record.path.resolve()
-    module_path = plugin_dir.joinpath(*module_name.strip().split(".")).with_suffix(".py")
-    if not module_path.is_file():
+    module_path = _find_plugin_module_file(module_name.strip(), plugin_dir=plugin_dir)
+    if module_path is None:
         raise PluginEntrypointLoadError("Plugin entrypoint module file was not found.")
 
     spec_name = f"quantagent_plugin_{record.id.replace('.', '_')}"
@@ -39,3 +39,24 @@ def load_plugin_entrypoint(record: PluginRecord) -> object:
     if not hasattr(module, attribute_name.strip()):
         raise PluginEntrypointLoadError("Plugin entrypoint attribute was not found.")
     return getattr(module, attribute_name.strip())
+
+
+def _find_plugin_module_file(module_name: str, *, plugin_dir: Path) -> Path | None:
+    module_parts = module_name.split(".")
+    if not module_parts or any(not part or part == ".." for part in module_parts):
+        return None
+
+    module_root = plugin_dir.joinpath(*module_parts)
+    candidates = (module_root.with_suffix(".py"), module_root / "__init__.py")
+    for candidate in candidates:
+        if candidate.is_file() and _is_path_inside_root(candidate, plugin_dir):
+            return candidate
+    return None
+
+
+def _is_path_inside_root(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True

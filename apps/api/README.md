@@ -28,6 +28,7 @@ DISCORD_INTERACTIONS_ENABLED=true
 DISCORD_INTERACTIONS_PLUGIN_ID=quantagent.official.source.discord_interaction_webhook
 DISCORD_INTERACTIONS_PUBLIC_KEY=<discord application public key>
 DISCORD_INTERACTIONS_RESPONSE_TEXT=QuantAgent received your Discord interaction.
+DISCORD_INTERACTIONS_TIMESTAMP_TOLERANCE_SECONDS=300
 ```
 
 启用后会开放公开 endpoint：

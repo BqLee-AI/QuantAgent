@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import time
 from typing import Any, Mapping
 
 from nacl.exceptions import BadSignatureError
@@ -64,6 +65,24 @@ class DiscordInteractionWebhookSourcePlugin:
                 ok=False,
                 code="SIGNATURE_MISSING",
                 message="Missing required Discord signature headers.",
+            )
+
+        timestamp_seconds = _parse_timestamp(timestamp)
+        if timestamp_seconds is None:
+            return ReceiveResult(
+                ok=False,
+                code="TIMESTAMP_INVALID",
+                message="Discord signature timestamp is invalid.",
+            )
+
+        if not is_timestamp_fresh(
+            timestamp_seconds,
+            tolerance_seconds=_resolve_timestamp_tolerance(config),
+        ):
+            return ReceiveResult(
+                ok=False,
+                code="TIMESTAMP_INVALID",
+                message="Discord signature timestamp is outside the accepted tolerance window.",
             )
 
         if not verify_discord_request(body, timestamp, signature, public_key):
@@ -171,6 +190,16 @@ def verify_discord_request(body: bytes, timestamp: str, signature: str, public_k
     return True
 
 
+def is_timestamp_fresh(
+    timestamp_seconds: int,
+    *,
+    tolerance_seconds: int,
+    current_time_seconds: int | None = None,
+) -> bool:
+    now = int(current_time_seconds if current_time_seconds is not None else time.time())
+    return abs(now - timestamp_seconds) <= tolerance_seconds
+
+
 def _resolve_public_key(config: Mapping[str, Any], secrets: Mapping[str, str] | None) -> str | None:
     public_key = _optional_str(config.get("public_key"))
     if public_key is not None:
@@ -183,6 +212,21 @@ def _resolve_public_key(config: Mapping[str, Any], secrets: Mapping[str, str] | 
         return None
     stripped = value.strip()
     return stripped or None
+
+
+def _resolve_timestamp_tolerance(config: Mapping[str, Any]) -> int:
+    raw_value = config.get("timestamp_tolerance_seconds", 300)
+    try:
+        return max(int(raw_value), 0)
+    except (TypeError, ValueError):
+        return 300
+
+
+def _parse_timestamp(value: str) -> int | None:
+    try:
+        return int(value)
+    except ValueError:
+        return None
 
 
 def _get_header(headers: Mapping[str, str], name: str) -> str | None:

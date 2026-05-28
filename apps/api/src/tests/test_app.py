@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import tempfile
+import time
 import unittest
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -42,7 +43,7 @@ from quantagent.api.routers.v1.register import (
 from quantagent.core.db.base import Base
 from quantagent.core.model_config import FixedModelCallClient, ModelConfigCrypto, ModelTokenUsage
 from quantagent.core.model_config.service import ModelCallResult
-from quantagent.core.registry import PluginRegistry, RegistryScanner
+from quantagent.core.registry import PluginRegistry, PluginStatus, RegistryScanner
 from quantagent.core.wallet import (
     AccountMode,
     CashBalanceSnapshot,
@@ -1741,7 +1742,7 @@ class ApiAppTestCase(unittest.TestCase):
                 "/api/v1/integrations/discord/interactions",
                 content=b'{"type":1}',
                 headers={
-                    "X-Signature-Timestamp": "1700000000",
+                    "X-Signature-Timestamp": str(int(time.time())),
                     "X-Signature-Ed25519": "00",
                 },
             )
@@ -1760,7 +1761,7 @@ class ApiAppTestCase(unittest.TestCase):
             )
         )
         body = b'{"type":1}'
-        timestamp = "1700000000"
+        timestamp = str(int(time.time()))
         signature = signing_key.sign(timestamp.encode("utf-8") + body).signature.hex()
 
         with TestClient(app) as client:
@@ -1802,7 +1803,7 @@ class ApiAppTestCase(unittest.TestCase):
                 },
             }
         ).encode("utf-8")
-        timestamp = "1700000000"
+        timestamp = str(int(time.time()))
         signature = signing_key.sign(timestamp.encode("utf-8") + body).signature.hex()
 
         with TestClient(app) as client:
@@ -1837,7 +1838,7 @@ class ApiAppTestCase(unittest.TestCase):
             )
         )
         body = b'{"type":3}'
-        timestamp = "1700000000"
+        timestamp = str(int(time.time()))
         signature = signing_key.sign(timestamp.encode("utf-8") + body).signature.hex()
 
         with TestClient(app) as client:
@@ -1852,6 +1853,61 @@ class ApiAppTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"], "UNSUPPORTED_EVENT_TYPE")
+
+    def test_discord_interactions_endpoint_rejects_stale_timestamp(self) -> None:
+        signing_key = SigningKey.generate()
+        public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
+        app = create_app(
+            self._settings(
+                DISCORD_INTERACTIONS_ENABLED=True,
+                DISCORD_INTERACTIONS_PUBLIC_KEY=public_key,
+            )
+        )
+        body = b'{"type":1}'
+        timestamp = "1"
+        signature = signing_key.sign(timestamp.encode("utf-8") + body).signature.hex()
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/integrations/discord/interactions",
+                content=body,
+                headers={
+                    "X-Signature-Timestamp": timestamp,
+                    "X-Signature-Ed25519": signature,
+                },
+            )
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"]["code"], "UNAUTHORIZED")
+
+    def test_discord_interactions_endpoint_rejects_plugin_without_receive_handler(self) -> None:
+        app = create_app(
+            self._settings(
+                DISCORD_INTERACTIONS_ENABLED=True,
+                DISCORD_INTERACTIONS_PUBLIC_KEY="a" * 64,
+            )
+        )
+
+        class _InvalidPlugin:
+            pass
+
+        with patch("quantagent.api.routers.v1.discord_interactions.load_plugin_entrypoint", return_value=_InvalidPlugin()):
+            with patch("quantagent.api.routers.v1.discord_interactions._get_plugin_registry") as get_registry:
+                get_registry.return_value = SimpleNamespace(
+                    get_plugin=lambda _plugin_id: SimpleNamespace(status=PluginStatus.VALID)
+                )
+                with TestClient(app) as client:
+                    response = client.post(
+                        "/api/v1/integrations/discord/interactions",
+                        content=b'{"type":1}',
+                        headers={
+                            "X-Signature-Timestamp": str(int(time.time())),
+                            "X-Signature-Ed25519": "00",
+                        },
+                    )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["error"]["code"], "SERVICE_UNAVAILABLE")
 
     def test_missing_capability_is_forbidden(self) -> None:
         reduced_capabilities = frozenset({"plugin.configure"})
@@ -2155,7 +2211,7 @@ class ApiAppTestCase(unittest.TestCase):
             "DISCORD_INTERACTIONS_PLUGIN_ID": "quantagent.official.source.discord_interaction_webhook",
             "DISCORD_INTERACTIONS_PUBLIC_KEY": None,
             "DISCORD_INTERACTIONS_RESPONSE_TEXT": "QuantAgent received your Discord interaction.",
-            "AUTH_SESSION_SECRET": "test-session-secret-0123456789abcdef",
+            "DISCORD_INTERACTIONS_TIMESTAMP_TOLERANCE_SECONDS": 300,
         }
         baseline.update(overrides)
         return Settings(**baseline)

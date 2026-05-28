@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Any, Mapping, Protocol
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -16,6 +17,15 @@ from quantagent.core.registry import (
 
 
 router = APIRouter(prefix="/integrations/discord", tags=["integrations"])
+
+
+class DiscordSourcePlugin(Protocol):
+    def receive_request(
+        self,
+        config: Mapping[str, Any],
+        headers: Mapping[str, str],
+        body: bytes,
+    ) -> object: ...
 
 
 @router.post("/interactions")
@@ -37,6 +47,7 @@ async def receive_discord_interaction(request: Request) -> JSONResponse:
     config = {
         "public_key": public_key,
         "response_text": settings.DISCORD_INTERACTIONS_RESPONSE_TEXT,
+        "timestamp_tolerance_seconds": settings.DISCORD_INTERACTIONS_TIMESTAMP_TOLERANCE_SECONDS,
     }
 
     result = plugin.receive_request(config, headers, body)
@@ -50,7 +61,7 @@ async def receive_discord_interaction(request: Request) -> JSONResponse:
     return JSONResponse(status_code=200, content=result.response)
 
 
-def _load_source_plugin(request: Request, plugin_id: str) -> object:
+def _load_source_plugin(request: Request, plugin_id: str) -> DiscordSourcePlugin:
     registry = _get_plugin_registry(request)
     record = registry.get_plugin(plugin_id)
     if record is None:
@@ -58,9 +69,17 @@ def _load_source_plugin(request: Request, plugin_id: str) -> object:
     if record.status != PluginStatus.VALID:
         raise ServiceUnavailableError("Configured Discord source plugin is not valid")
     try:
-        return load_plugin_entrypoint(record)
+        plugin = load_plugin_entrypoint(record)
     except PluginEntrypointLoadError as exc:
         raise ServiceUnavailableError("Configured Discord source plugin could not be loaded") from exc
+    return _validate_source_plugin(plugin)
+
+
+def _validate_source_plugin(plugin: object) -> DiscordSourcePlugin:
+    receive_request = getattr(plugin, "receive_request", None)
+    if not callable(receive_request):
+        raise ServiceUnavailableError("Configured Discord source plugin does not expose a receive_request handler")
+    return plugin  # type: ignore[return-value]
 
 
 def _get_plugin_registry(request: Request) -> PluginRegistry:
