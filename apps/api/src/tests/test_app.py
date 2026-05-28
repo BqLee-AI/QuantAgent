@@ -647,7 +647,7 @@ class ApiAppTestCase(unittest.TestCase):
             Settings(
                 _env_file=None,
                 APP_ENV="production",
-                AUTH_ADMIN_PASSWORD="prod-password",
+                AUTH_ADMIN_PASSWORD="short-prod",
                 AUTH_SESSION_SECRET="production-session-secret-0123456789abcdef",
                 AUTH_COOKIE_SECURE=True,
             )
