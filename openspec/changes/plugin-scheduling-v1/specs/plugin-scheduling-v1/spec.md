@@ -53,7 +53,8 @@ Plugin Scheduling V1 SHALL create an auditable run record for every triggered pl
 - **AND** run 记录包含 `status`
 - **AND** run 记录包含 `started_at`、`finished_at` 和 `duration_ms`
 - **AND** run 记录可以包含 `timeout_ms`
-- **AND** run 记录可以包含 `output_summary`、`error_summary` 和 `metadata`
+- **AND** run 记录包含 `output_summary`（可为空 object）和 `metadata`
+- **AND** run 记录可以包含 `error_summary`
 
 #### Scenario: run 状态有最小状态机
 - **WHEN** 调度层处理一次 run
