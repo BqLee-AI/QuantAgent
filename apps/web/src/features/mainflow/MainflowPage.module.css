@@ -1,0 +1,705 @@
+.page {
+  display: grid;
+  gap: 20px;
+}
+
+.panel,
+.listCard,
+.stateCard {
+  border: 1px solid var(--qa-color-hairline);
+  border-radius: var(--qa-radius-lg);
+  background: var(--qa-color-canvas);
+}
+
+.metricLabel,
+.sectionEyebrow,
+.itemMeta,
+.pill,
+.supportListLabel {
+  margin: 0;
+  color: var(--qa-color-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sectionTitle,
+.listTitle {
+  margin: 0;
+  color: var(--qa-color-ink);
+  overflow-wrap: anywhere;
+}
+
+.sectionCopy,
+.itemBody,
+.detailText,
+.emptyCopy {
+  margin: 0;
+  color: var(--qa-color-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.sectionGrid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
+}
+
+.stack {
+  display: grid;
+  gap: 16px;
+}
+
+.panel,
+.listCard,
+.stateCard {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sectionTitle {
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+.sectionCopy {
+  max-width: 62ch;
+}
+
+.actionRow,
+.tagRow,
+.listMeta,
+.detailMeta,
+.detailActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.actionLink,
+.secondaryLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.actionLink {
+  background: var(--qa-color-primary);
+  color: var(--qa-color-on-primary);
+}
+
+.secondaryLink {
+  border: 1px solid var(--qa-color-hairline-strong);
+  color: var(--qa-color-ink);
+}
+
+.list {
+  display: grid;
+  gap: 12px;
+}
+
+.listCard {
+  gap: 12px;
+}
+
+.listTitle {
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.dashboardShell {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1.05fr);
+  grid-template-areas:
+    "hero wallet"
+    "metrics wallet"
+    "feed approvals"
+    "feed health";
+  align-items: start;
+}
+
+.newsHeaderMain,
+.newsFeed,
+.sidePanel,
+.sideStack {
+  display: grid;
+}
+
+.newsHeader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--qa-color-hairline);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top left, rgb(16 185 129 / 0.08), transparent 28%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.98), rgb(248 250 252 / 0.96));
+}
+
+.dashboardHero {
+  grid-area: hero;
+}
+
+.dashboardMetrics {
+  grid-area: metrics;
+}
+
+.dashboardFeed {
+  grid-area: feed;
+}
+
+.dashboardWallet {
+  grid-area: wallet;
+}
+
+.dashboardApprovals {
+  grid-area: approvals;
+}
+
+.dashboardHealth {
+  grid-area: health;
+}
+
+.newsHeaderMain {
+  gap: 6px;
+}
+
+.newsKicker,
+.feedEyebrow,
+.sideEyebrow,
+.metricTileLabel {
+  margin: 0;
+  color: rgb(5 150 105);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.newsHeroTitle,
+.feedTitle,
+.sideTitle {
+  margin: 0;
+  color: var(--qa-color-ink);
+}
+
+.newsHeroTitle {
+  font-size: 30px;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.newsHeroCopy,
+.metricTileTrend {
+  margin: 0;
+  color: var(--qa-color-muted);
+}
+
+.newsHeroCopy {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.newsHeaderActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.metricsStrip {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+
+.metricTile {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--qa-color-hairline);
+  border-radius: 14px;
+  background: rgb(248 250 252 / 0.72);
+}
+
+.metricTileValue {
+  margin: 0;
+  color: var(--qa-color-ink);
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.metricTileTrend {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.newsFeed {
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--qa-color-hairline);
+  border-radius: 18px;
+  background: rgb(255 255 255 / 0.9);
+}
+
+.feedHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feedTitle {
+  font-size: 18px;
+  line-height: 1.25;
+}
+
+.feedList {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.sidePanel {
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--qa-color-hairline);
+  border-radius: 16px;
+  background: rgb(255 255 255 / 0.94);
+}
+
+.sidePanelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sideTitle {
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.sideStack {
+  gap: 8px;
+}
+
+.compactPanel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--qa-color-hairline);
+  border-radius: 12px;
+  background: rgb(248 250 252 / 0.72);
+}
+
+.eventCard {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  gap: 12px;
+  padding: 12px 12px 10px;
+  border: 1px solid var(--qa-color-hairline);
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.98), rgb(248 250 252 / 0.96)),
+    var(--qa-color-canvas);
+}
+
+.eventCardTopline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.eventCardBody,
+.eventHeadlineBlock,
+.eventFooterMeta,
+.walletMetricCard {
+  display: grid;
+  gap: 6px;
+}
+
+.feedList > .eventCard:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.compactTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.signalTag,
+.contextTag,
+.impactTag,
+.microTag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.signalTag {
+  background: rgb(59 130 246 / 0.12);
+  color: rgb(29 78 216);
+}
+
+.contextTag {
+  background: rgb(15 23 42 / 0.06);
+  color: var(--qa-color-muted-strong);
+}
+
+.impactTag {
+  background: rgb(220 38 38 / 0.1);
+  color: rgb(153 27 27);
+}
+
+.microTag {
+  background: rgb(148 163 184 / 0.12);
+  color: rgb(51 65 85);
+}
+
+.eventTitle {
+  margin: 0;
+  color: var(--qa-color-ink);
+  font-size: 16px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.eventTime,
+.eventActionHint,
+.walletMetricLabel,
+.walletMetricDetail,
+.walletBarLabel,
+.walletBarValue {
+  margin: 0;
+}
+
+.eventTime {
+  color: var(--qa-color-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.eventSummary {
+  margin: 0;
+  color: var(--qa-color-body);
+  font-size: 13px;
+  line-height: 1.55;
+  min-height: calc(1.55em * 4);
+}
+
+.eventActionHint {
+  color: var(--qa-color-muted-strong);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.walletMetricGrid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+}
+
+.walletMetricCard {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--qa-color-surface-soft);
+  border: 1px solid rgb(15 23 42 / 0.06);
+}
+
+.walletMetricLabel {
+  color: var(--qa-color-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.walletMetricValue,
+.walletMetricValueNegative,
+.walletMetricValuePositive {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.walletMetricValue {
+  color: var(--qa-color-ink);
+}
+
+.walletMetricValueNegative {
+  color: var(--qa-color-trading-down);
+}
+
+.walletMetricValuePositive {
+  color: var(--qa-color-trading-up);
+}
+
+.walletMetricDetail {
+  color: var(--qa-color-muted-strong);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.walletChart {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  align-items: end;
+  min-height: 148px;
+  padding: 8px 8px 4px;
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgb(248 250 252 / 0.75), rgb(241 245 249 / 0.95));
+  border: 1px solid rgb(148 163 184 / 0.14);
+}
+
+.walletBarColumn {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+}
+
+.walletBarValue {
+  color: var(--qa-color-muted-strong);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.walletBarTrack {
+  display: flex;
+  align-items: end;
+  justify-content: center;
+  width: 100%;
+  min-height: 88px;
+}
+
+.walletBarPositive,
+.walletBarNegative {
+  width: min(100%, 24px);
+  border-radius: 8px 8px 4px 4px;
+}
+
+.walletBarPositive {
+  background: linear-gradient(180deg, rgb(16 185 129), rgb(5 150 105));
+}
+
+.walletBarNegative {
+  background: linear-gradient(180deg, rgb(251 113 133), rgb(220 38 38));
+}
+
+.walletBarLabel {
+  color: var(--qa-color-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--qa-color-surface);
+  color: var(--qa-color-muted-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.detailGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.92fr);
+  gap: 18px;
+}
+
+.detailSection {
+  display: grid;
+  gap: 12px;
+}
+
+.detailList,
+.supportList {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.timelineItem {
+  display: grid;
+  gap: 6px;
+  padding-left: 14px;
+  border-left: 2px solid var(--qa-color-hairline-strong);
+}
+
+.emptyState {
+  display: grid;
+  gap: 10px;
+  min-height: 180px;
+  place-items: center;
+  text-align: center;
+  border: 1px dashed var(--qa-color-hairline-strong);
+  border-radius: 12px;
+  padding: 20px;
+  background: var(--qa-color-surface);
+}
+
+@media (max-width: 1080px) {
+  .sectionGrid,
+  .detailGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1280px) {
+  .dashboardShell {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.92fr);
+    grid-template-areas:
+      "hero hero"
+      "metrics wallet"
+      "feed wallet"
+      "feed approvals"
+      "health approvals";
+  }
+
+  .newsHeader {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .newsHeaderActions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboardShell {
+    gap: 12px;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "hero"
+      "metrics"
+      "wallet"
+      "feed"
+      "approvals"
+      "health";
+  }
+
+  .panelHeader {
+    flex-direction: column;
+  }
+
+  .newsHeader {
+    padding: 14px;
+  }
+
+  .feedHeader,
+  .sidePanelHeader {
+    flex-direction: column;
+  }
+
+  .feedList {
+    grid-template-columns: 1fr;
+  }
+
+  .newsHeroTitle {
+    font-size: 24px;
+  }
+
+  .eventCardTopline {
+    flex-direction: column;
+  }
+
+  .feedList > .eventCard:last-child:nth-child(odd) {
+    grid-column: auto;
+  }
+
+  .newsHeaderActions a {
+    flex: 1 1 calc(50% - 4px);
+  }
+
+  .metricTileValue {
+    font-size: 22px;
+  }
+
+  .walletChart {
+    min-height: 132px;
+    padding: 10px 6px 6px;
+    gap: 6px;
+  }
+
+  .walletBarTrack {
+    min-height: 76px;
+  }
+}
+
+@media (max-width: 560px) {
+  .newsHeroTitle {
+    font-size: 22px;
+  }
+
+  .feedTitle,
+  .sideTitle {
+    font-size: 17px;
+  }
+
+  .newsHeaderActions a {
+    flex-basis: 100%;
+  }
+
+  .metricsStrip {
+    grid-template-columns: 1fr;
+  }
+
+  .eventCard,
+  .compactPanel,
+  .sidePanel {
+    padding: 12px;
+  }
+
+  .actionLink,
+  .secondaryLink {
+    width: 100%;
+  }
+
+  .walletMetricGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .walletChart {
+    grid-template-columns: repeat(5, minmax(44px, 1fr));
+  }
+}
