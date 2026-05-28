@@ -1310,7 +1310,25 @@ class ApiAppTestCase(unittest.TestCase):
         schema_response = self.client.get("/api/v1/plugins/quantagent.official.source.placeholder/config-schema")
         schema_body = schema_response.json()
         self.assertEqual(schema_response.status_code, 200)
-        self.assertEqual(schema_body["data"]["title"], "Placeholder Source Plugin Config")
+        self.assertEqual(schema_body["data"]["title"], "Demo Placeholder Source Plugin Config")
+
+    def test_plugin_list_uses_repo_root_even_when_api_runtime_directory_exists(self) -> None:
+        self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+
+        from quantagent.api.routers.v1 import plugins as plugins_router
+
+        plugins_router._find_repo_root.cache_clear()
+        self.addCleanup(plugins_router._find_repo_root.cache_clear)
+
+        response = self.client.get("/api/v1/plugins")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["code"], 0)
+        self.assertIn(
+            "quantagent.official.source.placeholder",
+            {plugin["id"] for plugin in body["data"]},
+        )
 
     def test_plugin_detail_unknown_id_uses_not_found_envelope(self) -> None:
         self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})

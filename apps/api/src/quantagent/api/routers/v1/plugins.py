@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Request
 
 from quantagent.api.auth import CurrentActor, require_csrf
+from quantagent.api.config.settings import _SOURCE_REPO_ROOT
 from quantagent.api.http.errors import BadRequestError, NotFoundError
 from quantagent.api.http.responses import ApiResponse
 from quantagent.api.schemas.plugins import (
@@ -180,9 +181,20 @@ def _display_path(path: Path) -> str:
 
 @lru_cache(maxsize=1)
 def _find_repo_root() -> Path:
-    """定位包含 plugins/ 或 runtime/ 的项目根，兼容源码运行和镜像运行。"""
-    candidates = [Path.cwd(), *Path(__file__).resolve().parents]
+    """定位 QuantAgent 仓库根，避免把 apps/api/runtime 误判成项目根。"""
+    candidates: list[Path] = []
+    if _SOURCE_REPO_ROOT is not None:
+        candidates.append(_SOURCE_REPO_ROOT)
+    candidates.extend([Path.cwd(), *Path(__file__).resolve().parents])
     for candidate in candidates:
-        if (candidate / "plugins").exists() or (candidate / "runtime").exists():
+        if _is_repo_root_candidate(candidate):
             return candidate
     return _REPO_ROOT
+
+
+def _is_repo_root_candidate(candidate: Path) -> bool:
+    return (
+        (candidate / "pyproject.toml").is_file()
+        and (candidate / "apps" / "api").is_dir()
+        and (candidate / "plugins").is_dir()
+    )
