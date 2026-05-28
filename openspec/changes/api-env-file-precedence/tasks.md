@@ -52,8 +52,8 @@ Critical path: `B0 -> B1 -> B2 -> R1 -> P1/P2/P3 -> M1 -> V1/V2/V3 -> R2`. `B1` 
 
 - [x] `P3` Align Docker Compose boundary.
   - Inputs: `design.md` decision 4 and current `docker-compose.yml`.
-  - Outputs: `api.environment` keeps only container network/startup variables such as `HOST` and `PORT`; API application settings are no longer hard-injected from root `.env`; container-reachable database URL has a documented dotenv or external environment path.
-  - Write boundary: `docker-compose.yml` and root `.env.example` only.
+  - Outputs: Compose overrides the image default command with explicit Uvicorn host/port arguments and does not define `api.environment`; API application settings are no longer hard-injected from root `.env`; container-reachable database URL has a documented dotenv or external environment path.
+  - Write boundary: `Dockerfile`, `docker-compose.yml` and root `.env.example` only.
   - Dependencies: `R1`.
   - Parallel eligibility: yes; Compose changes are isolated from API Python code but must merge through `M1`.
   - Validation: `docker compose config` at `V2`, plus manual check that `api.environment` does not include `APP_ENV`、`DATABASE_URL`、`RUNTIME_DIR`、`LOG_LEVEL`、`AUTH_*`、`API_*` hard injections.

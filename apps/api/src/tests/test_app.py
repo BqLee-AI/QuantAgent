@@ -568,20 +568,20 @@ class ApiAppTestCase(unittest.TestCase):
             self._settings(
                 APP_ENV="production",
                 AUTH_ENABLED=False,
-                AUTH_ADMIN_PASSWORD="prod-password",
-                AUTH_SESSION_SECRET="prod-secret",
+                AUTH_ADMIN_PASSWORD="prod-admin-password",
+                AUTH_SESSION_SECRET="production-session-secret-0123456789abcdef",
             )
 
     def test_production_login_uses_secure_cookie(self) -> None:
         production_app = create_app(
             self._settings(
                 APP_ENV="production",
-                AUTH_ADMIN_PASSWORD="prod-password",
-                AUTH_SESSION_SECRET="prod-secret",
+                AUTH_ADMIN_PASSWORD="prod-admin-password",
+                AUTH_SESSION_SECRET="production-session-secret-0123456789abcdef",
             )
         )
         with TestClient(production_app) as client:
-            response = client.post("/api/v1/auth/login", json={"password": "prod-password"})
+            response = client.post("/api/v1/auth/login", json={"password": "prod-admin-password"})
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("Secure", response.headers["set-cookie"])
@@ -597,14 +597,14 @@ class ApiAppTestCase(unittest.TestCase):
                 _env_file=None,
                 APP_ENV="production",
                 AUTH_ADMIN_PASSWORD="   ",
-                AUTH_SESSION_SECRET="prod-secret",
+                AUTH_SESSION_SECRET="prod-session-secret-0123456789abcdef",
             )
 
         with self.assertRaisesRegex(ValueError, "AUTH_SESSION_SECRET is required in production"):
             Settings(
                 _env_file=None,
                 APP_ENV="production",
-                AUTH_ADMIN_PASSWORD="prod-password",
+                AUTH_ADMIN_PASSWORD="prod-admin-password",
                 AUTH_SESSION_SECRET="   ",
             )
 
@@ -614,14 +614,14 @@ class ApiAppTestCase(unittest.TestCase):
                 _env_file=None,
                 APP_ENV="staging",
                 AUTH_ADMIN_PASSWORD="change-me",
-                AUTH_SESSION_SECRET="staging-secret",
+                AUTH_SESSION_SECRET="staging-session-secret-0123456789abcdef",
             )
 
         with self.assertRaisesRegex(ValueError, "AUTH_SESSION_SECRET must not use a placeholder"):
             Settings(
                 _env_file=None,
                 APP_ENV="production",
-                AUTH_ADMIN_PASSWORD="prod-password",
+                AUTH_ADMIN_PASSWORD="prod-admin-password",
                 AUTH_SESSION_SECRET="change-me",
                 AUTH_COOKIE_SECURE=True,
             )
@@ -631,7 +631,42 @@ class ApiAppTestCase(unittest.TestCase):
                 _env_file=None,
                 APP_ENV="staging",
                 AUTH_ADMIN_PASSWORD="12345678",
-                AUTH_SESSION_SECRET="staging-secret",
+                AUTH_SESSION_SECRET="staging-session-secret-0123456789abcdef",
+            )
+
+    def test_staging_and_production_reject_weak_auth_credentials(self) -> None:
+        with self.assertRaisesRegex(ValueError, "AUTH_ADMIN_PASSWORD must be at least 12 characters"):
+            Settings(
+                _env_file=None,
+                APP_ENV="staging",
+                AUTH_ADMIN_PASSWORD="short",
+                AUTH_SESSION_SECRET="staging-session-secret-0123456789abcdef",
+            )
+
+        with self.assertRaisesRegex(ValueError, "AUTH_ADMIN_PASSWORD must be at least 12 characters"):
+            Settings(
+                _env_file=None,
+                APP_ENV="production",
+                AUTH_ADMIN_PASSWORD="prod-password",
+                AUTH_SESSION_SECRET="production-session-secret-0123456789abcdef",
+                AUTH_COOKIE_SECURE=True,
+            )
+
+        with self.assertRaisesRegex(ValueError, "AUTH_SESSION_SECRET must be at least 32 characters"):
+            Settings(
+                _env_file=None,
+                APP_ENV="production",
+                AUTH_ADMIN_PASSWORD="prod-admin-password",
+                AUTH_SESSION_SECRET="too-short-secret",
+                AUTH_COOKIE_SECURE=True,
+            )
+
+        with self.assertRaisesRegex(ValueError, "AUTH_SESSION_SECRET must be at least 32 characters"):
+            Settings(
+                _env_file=None,
+                APP_ENV="staging",
+                AUTH_ADMIN_PASSWORD="staging-admin-password",
+                AUTH_SESSION_SECRET="dev-session-secret-0123456789abcdef",
             )
 
     def test_test_env_still_receives_weak_auth_defaults(self) -> None:
@@ -741,7 +776,7 @@ class ApiAppTestCase(unittest.TestCase):
             api_dir.mkdir(parents=True)
             (api_dir / ".env.local").write_text("APP_ENV=staging\n", encoding="utf-8")
             (api_dir / ".env.staging").write_text(
-                "LOG_LEVEL=WARNING\nAUTH_ADMIN_PASSWORD=staging-password\nAUTH_SESSION_SECRET=staging-secret\n",
+                "LOG_LEVEL=WARNING\nAUTH_ADMIN_PASSWORD=staging-admin-password\nAUTH_SESSION_SECRET=staging-session-secret-0123456789abcdef\n",
                 encoding="utf-8",
             )
 
@@ -757,7 +792,7 @@ class ApiAppTestCase(unittest.TestCase):
             api_dir = workspace / "apps/api"
             api_dir.mkdir(parents=True)
             (api_dir / ".env.staging").write_text(
-                "API_HOST=127.0.0.1\nAUTH_ADMIN_PASSWORD=staging-password\nAUTH_SESSION_SECRET=staging-secret\n",
+                "API_HOST=127.0.0.1\nAUTH_ADMIN_PASSWORD=staging-admin-password\nAUTH_SESSION_SECRET=staging-session-secret-0123456789abcdef\n",
                 encoding="utf-8",
             )
             (api_dir / ".env.staging.local").write_text("API_HOST=0.0.0.0\n", encoding="utf-8")
@@ -1598,7 +1633,7 @@ class ApiAppTestCase(unittest.TestCase):
             "API_PORT": 8000,
             "AUTH_ENABLED": True,
             "AUTH_ADMIN_PASSWORD": "test-admin-password",
-            "AUTH_SESSION_SECRET": "test-session-secret",
+            "AUTH_SESSION_SECRET": "test-session-secret-0123456789abcdef",
         }
         baseline.update(overrides)
         return Settings(**baseline)

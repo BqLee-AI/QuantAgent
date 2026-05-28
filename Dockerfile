@@ -39,4 +39,4 @@ USER quantagent
 
 EXPOSE 8000
 
-CMD ["uvicorn", "quantagent.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "APP_ENV=${APP_ENV:-production} exec uvicorn quantagent.api.main:app --host 0.0.0.0 --port 8000"]

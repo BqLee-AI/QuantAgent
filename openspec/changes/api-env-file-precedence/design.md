@@ -112,7 +112,7 @@ Compose 路径需要避免根 `.env` 通过 `environment:` 覆盖 API dotenv。�
 
 具体约束：
 
-- `api.environment` 可以保留 `HOST=0.0.0.0`、`PORT=8000` 这类容器网络入口必需变量。
+- Compose 可以通过 `command` 或等价启动参数固定容器网络入口，避免把 `HOST`、`PORT` 注入为 API Settings 可见的真实环境变量。
 - `api.environment` 不应继续硬注入 `APP_ENV`、`DATABASE_URL`、`RUNTIME_DIR`、`LOG_LEVEL`、`AUTH_*`、`API_*` 等 API 应用配置。
 - 容器侧 `DATABASE_URL` 仍必须有清晰入口，推荐通过 `apps/api/.env` 或 `apps/api/.env.<APP_ENV>` 的容器专用值提供，例如指向 `db:5432`；宿主机直跑继续可在根 `.env` 或 API dotenv 中使用 `localhost:15432`。
 - 如果某个部署环境必须用真实进程环境变量覆盖 dotenv，应在 README 和 PR 说明中明确它是有意的最高优先级覆盖，而不是 Compose 根 `.env` 的隐式反向覆盖。

@@ -19,6 +19,16 @@ _PLACEHOLDER_SECRETS = {
     "dev-session-secret-change-me",
     "please-change-me",
 }
+_WEAK_AUTH_PASSWORDS = _PLACEHOLDER_SECRETS | {
+    "admin",
+    "admin123",
+    "password",
+    "password123",
+    "prod-password",
+    "staging-password",
+}
+_MIN_NON_DEV_AUTH_PASSWORD_LENGTH = 12
+_MIN_NON_DEV_SESSION_SECRET_LENGTH = 32
 
 
 def _dedupe_paths(paths: list[Path]) -> tuple[Path, ...]:
@@ -212,6 +222,17 @@ class Settings(CoreSettings):
                 raise ValueError("AUTH_ADMIN_PASSWORD must not use a placeholder value outside development/test/local")
             if self.AUTH_SESSION_SECRET and self.AUTH_SESSION_SECRET.lower() in _PLACEHOLDER_SECRETS:
                 raise ValueError("AUTH_SESSION_SECRET must not use a placeholder value outside development/test/local")
+            if self.AUTH_ADMIN_PASSWORD and (
+                len(self.AUTH_ADMIN_PASSWORD) < _MIN_NON_DEV_AUTH_PASSWORD_LENGTH
+                or self.AUTH_ADMIN_PASSWORD.lower() in _WEAK_AUTH_PASSWORDS
+            ):
+                raise ValueError("AUTH_ADMIN_PASSWORD must be at least 12 characters and not use a common weak value outside development/test/local")
+            if self.AUTH_SESSION_SECRET and (
+                len(self.AUTH_SESSION_SECRET) < _MIN_NON_DEV_SESSION_SECRET_LENGTH
+                or "dev" in self.AUTH_SESSION_SECRET.lower()
+                or "change" in self.AUTH_SESSION_SECRET.lower()
+            ):
+                raise ValueError("AUTH_SESSION_SECRET must be at least 32 characters and not look like a development placeholder outside development/test/local")
 
         return self
 

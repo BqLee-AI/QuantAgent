@@ -111,7 +111,7 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 - `AUTH_ADMIN_PASSWORD`
 - `AUTH_SESSION_SECRET`（建议用 `openssl rand -hex 32` 生成）
 
-`APP_ENV=production` 时 API 会强制验证这些配置，启动时若检测到弱默认值（`AUTH_ADMIN_PASSWORD=12345678` 或 `AUTH_SESSION_SECRET=dev-session-secret-change-me`）或配置缺失，会直接报错退出。
+`APP_ENV=production` 时 API 会强制验证这些配置，启动时若检测到弱默认值（`AUTH_ADMIN_PASSWORD=12345678` 或 `AUTH_SESSION_SECRET=dev-session-secret-change-me`）、短口令、短 session secret 或配置缺失，会直接报错退出。
 
 ## API v1 route skeleton
 
