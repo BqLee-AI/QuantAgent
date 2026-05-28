@@ -67,11 +67,19 @@ API logs SHALL be JSON Lines records with stable fields and stream-specific even
 - **AND** the client receives a generic 500 envelope
 - **AND** neither the log record nor the response exposes traceback text, secrets, cookie values, or database connection strings
 
-#### Scenario: Security and audit events are separated
+#### Scenario: Handled service failures emit error records
 
-- **WHEN** auth failure, CSRF failure, unauthorized access, forbidden access, protected write, or high-risk action context is logged
-- **THEN** security events are written to the `security` stream
-- **AND** audit event logs are written to the `audit` stream
+- **WHEN** DB readiness, DB session creation, or another handled service dependency failure is converted to a typed error response
+- **THEN** an error stream record is emitted with `event`, `request_id`, `trace_id`, `component`, `failure_type`, and safe error metadata
+- **AND** the error record identifies the handled failure path without exposing database connection strings, SQL parameters, secrets, or traceback text
+
+#### Scenario: Security and audit events are emitted to required streams
+
+- **WHEN** auth failure, CSRF failure, unauthorized access, or forbidden access occurs
+- **THEN** a security event record is emitted to the `security` stream
+- **AND** the record includes `event`, `request_id`, `trace_id`, `actor_type` when known, and safe failure metadata
+- **WHEN** a protected write or high-risk action context occurs
+- **THEN** an audit event record is emitted to the `audit` stream
 - **AND** the `audit` stream is not treated as the future append-only database `audit_logs` business audit source
 
 ### Requirement: File Stream Layout And Rotation
