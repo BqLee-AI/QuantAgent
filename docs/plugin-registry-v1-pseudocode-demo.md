@@ -1,262 +1,207 @@
-# Plugin Registry V1 伪代码使用示例
+# 插件底座 Demo：从 Registry 到 Scheduling
 
-本文用接近自然语言的伪代码说明 Plugin Registry V1 的使用方式，帮助 reviewer、维护者和后续插件作者理解 V1 的能力边界。
+本文说明当前第一版插件底座如何工作，并用 `plugins/sources/placeholder-source` 这个最小可运行参考插件串起完整链路。
 
-所有 `/api/v1/plugins*` 接口都挂在 protected router 下，调用前需要先登录并携带 session cookie；`POST /api/v1/plugins/actions/rescan` 还需要携带 `X-CSRF-Token`。
-
-## 1. 准备插件目录
-
-官方插件放在 `plugins/`，运行时插件放在 `runtime/plugins/`。
+这个 demo 不是生产 RSS 插件，也不是后续 source 插件的业务模板。它的作用是让维护者和后续插件作者能看清：
 
 ```text
-plugins/
-  sources/
-    rss-source/
-      plugin.yaml
-      config.schema.json
+plugin.yaml -> Registry -> Runtime -> Scheduling -> PluginRunRecord
 ```
 
-`plugin.yaml` 是 V1 的插件登记真源：
+它证明的是“插件可以被发现、加载、调用、审计”，不证明“RSS 已经可用”或“事件主链路已经完成”。
+
+## 1. Demo 插件在哪里
+
+```text
+plugins/sources/placeholder-source/
+  plugin.yaml
+  config.schema.json
+  placeholder_source.py
+  README.md
+```
+
+`plugins/` 是官方随代码分发插件目录。这里的 placeholder 插件会被 Registry 当作官方插件扫描出来，但它只用于本地冒烟验证和开发参照，不承载真实业务数据源。
+
+## 2. Manifest 是登记真源
+
+`plugin.yaml` 描述插件身份、能力和入口：
 
 ```yaml
-id: quantagent.official.source.rss
-name: RSS Source
+id: quantagent.official.source.placeholder
+name: Demo Placeholder Source
 type: source
 version: 0.1.0
-entrypoint: rss_source:plugin
+entrypoint: placeholder_source:plugin
+description: Minimal runnable source plugin used to validate the plugin foundation.
 capabilities:
   - source.fetch
 config_schema: config.schema.json
 ```
 
-`config.schema.json` 描述插件配置形态：
+关键点：
 
-```json
-{
-  "type": "object",
-  "properties": {
-    "feed_url": {
-      "type": "string"
-    }
-  },
-  "required": ["feed_url"]
-}
-```
+- `id` 是全局插件 ID。
+- `type: source` 表示它是数据源插件。
+- `capabilities` 声明它能响应 `source.fetch`。
+- `entrypoint` 指向插件目录里的 Python class/factory。
+- `config_schema` 只描述配置形态，不保存用户配置值。
 
-## 2. 查询插件列表
+## 3. Registry 负责发现和校验
+
+Registry 不猜测插件用途，只扫描目录里的 `plugin.yaml`：
 
 ```text
-GET /api/v1/plugins
-Cookie: quantagent_session=...
-```
-
-V1 内部流程：
-
-```text
-校验登录态
-  -> 获取 PluginRegistry
-  -> 如果还没有扫描过，调用 RegistryScanner.scan()
+RegistryScanner.scan()
   -> 扫描 plugins/ 和 runtime/plugins/
-  -> 找到所有 plugin.yaml
-  -> 读取 YAML
+  -> 找到 plugin.yaml
   -> 校验必填字段、type、capabilities 和 config.schema.json
-  -> 生成 PluginRecord
-  -> API 把 PluginRecord 转成 PluginRecordResponse
-  -> 返回 ApiResponse envelope
+  -> 返回 PluginRecord
 ```
 
-返回关键字段示意：
-
-```json
-{
-  "code": 0,
-  "data": [
-    {
-      "id": "quantagent.official.source.rss",
-      "source": "official",
-      "status": "valid",
-      "manifest": {
-        "type": "source",
-        "capabilities": ["source.fetch"]
-      },
-      "last_error": null
-    }
-  ],
-  "error": null
-}
-```
-
-## 3. 查询单个插件
+对 placeholder 插件，Registry 会得到：
 
 ```text
-GET /api/v1/plugins/quantagent.official.source.rss
-Cookie: quantagent_session=...
+PluginRecord
+  id = quantagent.official.source.placeholder
+  source = official
+  status = valid
+  path = plugins/sources/placeholder-source
+  manifest.capabilities = ("source.fetch",)
 ```
 
-V1 内部流程：
+Registry V1 的 API 查询仍然只负责展示和诊断插件登记信息，不负责业务调度。
+
+## 4. Runtime 负责加载和调用插件
+
+Runtime 从 `PluginRecord` 出发加载 manifest entrypoint：
 
 ```text
-校验登录态
-  -> API 收到 plugin_id
-  -> PluginRegistry.get_plugin(plugin_id)
-  -> 找到则返回该 PluginRecord
-  -> 找不到则返回 404 envelope
+PluginRuntimeService.invoke(record, capability="source.fetch", ...)
+  -> 根据 record.path 临时加入插件目录 import path
+  -> import placeholder_source:plugin
+  -> 创建插件实例
+  -> 注入 RuntimeContext
+  -> 调用 load/start/invoke/stop
+  -> 返回 PluginRuntimeInvocation
 ```
 
-## 4. 查询配置 schema
+插件代码只读取平台传入的 `input` / `config` / `context`，并返回标准 output：
+
+```python
+query = request.input.get("query") or self.context.config.get("query") or "placeholder"
+output = SourceFetchResult(...)
+return PluginInvokeResult(output=output.to_mapping())
+```
+
+RuntimeContext 是受控上下文，默认不暴露 DB session、scheduler、Event Bus 或内部 service。
+
+这条边界很重要：插件只交回能力产物，平台侧持久化、调度、审计和事件分发不能下放给插件自行处理。
+
+## 5. Scheduling 负责编排和审计
+
+Scheduling 在 Runtime 之上统一触发插件能力并记录 run：
 
 ```text
-GET /api/v1/plugins/quantagent.official.source.rss/config-schema
-Cookie: quantagent_session=...
+PluginSchedulingService.trigger(request)
+  -> 二次校验 PluginTriggerRequest
+  -> Registry.get_plugin(plugin_id)
+  -> 创建 queued run
+  -> 标记 running
+  -> Runtime.invoke(...)
+  -> 写入 succeeded / failed / timeout
+  -> 返回 PluginRunRecord
 ```
 
-V1 内部流程：
+对 placeholder 插件，最小请求可以是：
 
 ```text
-校验登录态
-  -> 找到插件记录
-  -> 确认插件有可用 config_schema_path
-  -> 读取 config.schema.json
-  -> 返回 JSON Schema
+PluginTriggerRequest
+  plugin_id = quantagent.official.source.placeholder
+  capability = source.fetch
+  request_id = req-placeholder-smoke
+  trigger_type = manual
+  input = {"query": "rss"}
+  effective_config = {}
+  metadata = {"origin": "foundation-smoke"}
 ```
 
-成功返回关键字段示意：
-
-```json
-{
-  "code": 0,
-  "data": {
-    "type": "object",
-    "properties": {
-      "feed_url": {
-        "type": "string"
-      }
-    },
-    "required": ["feed_url"]
-  },
-  "error": null
-}
-```
-
-如果插件存在但 manifest 或 schema 非法，返回 400 envelope，而不是假装插件不存在。`details.plugin.last_error` 当前只返回脱敏摘要字段：
-
-```json
-{
-  "code": 40000,
-  "data": null,
-  "msg": "Plugin config schema is not available",
-  "error": {
-    "code": "BAD_REQUEST",
-    "details": {
-      "plugin": {
-        "id": "quantagent.official.source.bad",
-        "status": "invalid",
-        "last_error": {
-          "code": "PLUGIN_CONFIG_SCHEMA_NOT_FOUND",
-          "stage": "validate",
-          "retryable": false
-        }
-      }
-    },
-    "retryable": false
-  }
-}
-```
-
-## 5. 重新扫描插件
+成功后会得到：
 
 ```text
-POST /api/v1/plugins/actions/rescan
-Cookie: quantagent_session=...
-X-CSRF-Token: <csrf_token>
+PluginRunRecord
+  status = succeeded
+  plugin_id = quantagent.official.source.placeholder
+  request_id = req-placeholder-smoke
+  metadata.origin = foundation-smoke
+  output_summary.items[0].external_id = placeholder:rss
 ```
 
-V1 内部流程：
+`output_summary` 是审计摘要，不等于后续业务入库。RawEvent 入库、去重和 Event Bus 发布属于后端 ingestion/pipeline 层，不属于这个 demo。
+
+## 6. 本地验证命令
+
+从仓库根目录运行插件底座相关测试：
+
+```bash
+PYTHONPATH=packages/core/src:packages/plugin-sdk/src python -m unittest packages.core.tests.test_scheduling packages.core.tests.test_runtime packages.core.tests.test_registry
+```
+
+其中 `packages/core/tests/test_scheduling.py` 的 `test_official_placeholder_plugin_runs_through_foundation` 覆盖完整 demo 链路：
 
 ```text
-校验登录态
-  -> 校验 CSRF
-  -> PluginRegistry.rescan()
-  -> RegistryScanner 重新扫描 plugins/ 和 runtime/plugins/
-  -> 返回扫描摘要和最新插件列表
+真实 plugins/ 目录
+  -> RegistryScanner
+  -> PluginRegistry
+  -> PluginSchedulingService.trigger
+  -> PluginRuntimeService.invoke
+  -> placeholder_source:plugin
+  -> PluginRunRecord history
 ```
 
-返回关键字段示意，`summary.total` 应与 `plugins` 列表一致：
+这个测试不需要数据库、API、Web、worker 或网络。
 
-```json
-{
-  "code": 0,
-  "data": {
-    "summary": {
-      "total": 1,
-      "valid": 1,
-      "invalid": 0,
-      "failed": 0
-    },
-    "plugins": [
-      {
-        "id": "quantagent.official.source.rss",
-        "source": "official",
-        "status": "valid"
-      }
-    ]
-  },
-  "error": null
-}
+如果只想看 demo 覆盖的单个用例，可以运行：
+
+```bash
+PYTHONPATH=packages/core/src:packages/plugin-sdk/src python -m unittest packages.core.tests.test_scheduling.PluginSchedulingServiceTestCase.test_official_placeholder_plugin_runs_through_foundation
 ```
 
-## 6. 坏插件不会拖垮整体扫描
+这个单测会扫描真实 `plugins/` 目录，但使用一个不存在的 `runtime/` 测试目录，避免把本机私有插件混进验证结果。
 
-如果某个插件声明了未知 type：
+## 7. 这个 Demo 不做什么
 
-```yaml
-id: quantagent.official.source.bad
-name: Bad Plugin
-type: unknown_type
-version: 0.1.0
-entrypoint: bad:plugin
-capabilities:
-  - source.fetch
-config_schema: config.schema.json
-```
-
-V1 不会让 `GET /api/v1/plugins` 整体 500，而是只把这个插件标记为 `invalid`：
-
-```json
-{
-  "id": "quantagent.official.source.bad",
-  "source": "official",
-  "status": "invalid",
-  "manifest": null,
-  "last_error": {
-    "code": "PLUGIN_TYPE_UNKNOWN",
-    "stage": "validate",
-    "retryable": false
-  }
-}
-```
-
-## 7. V1 明确不做什么
-
-V1 只做：
+这个 demo 有意不做：
 
 ```text
-发现 plugin.yaml
-校验 manifest
-校验 config.schema.json
-返回 PluginRecord
-暴露查询和 rescan API
+真实 RSS 抓取
+RawEvent / SourceItem 入库
+Event Bus 发布
+SourceBinding 管理
+worker/scheduler loop
+后台轮询
+交易、审批或策略判断
 ```
 
-V1 不做：
+后续如果要实现 `RSS -> 入库 -> Event Bus -> 分析 -> 通知/审批/交易`，应在后端 ingestion、pipeline、worker、approval 和 broker 边界继续推进，而不是让 source 插件直接持有数据库或内部 service。
+
+换句话说，真实 RSS 插件后续只应该负责抓取和标准化 RSS item；平台接收 `SourceFetchResult` 之后，再由后端 service/repository/event bus 完成入库、去重和事件流转。
+
+## 8. 插件作者可以照着做什么
+
+新插件最小结构：
 
 ```text
-import entrypoint
-实例化插件
-启动插件
-安装插件依赖
-热重载插件代码
-注册 ToolRegistry
-创建 SourceBinding
-执行真实交易
+my-plugin/
+  plugin.yaml
+  config.schema.json
+  my_plugin.py
 ```
+
+实现原则：
+
+- 用 `plugin.yaml` 声明 ID、类型、能力和 entrypoint。
+- 用 `config.schema.json` 声明配置契约。
+- 插件类可以继承 `BasePlugin`，但 Runtime 只要求满足协议。
+- `source.fetch` 插件返回 `SourceFetchResult` 形状。
+- 插件只返回 DTO，不直接写 DB、不发 Event Bus、不自己跑 while loop。
+- 需要真实外部请求、依赖、secret 或 rate limit 时，在具体插件 issue / OpenSpec 中单独说明，不塞进这个 placeholder demo。

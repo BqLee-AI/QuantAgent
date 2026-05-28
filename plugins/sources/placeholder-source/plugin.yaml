@@ -1,9 +1,9 @@
 id: quantagent.official.source.placeholder
-name: Placeholder Source
+name: Demo Placeholder Source
 type: source
 version: 0.1.0
 entrypoint: placeholder_source:plugin
-description: Placeholder source plugin.
+description: Minimal runnable source plugin used to validate the plugin foundation.
 capabilities:
   - source.fetch
 config_schema: config.schema.json

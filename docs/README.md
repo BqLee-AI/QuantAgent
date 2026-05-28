@@ -4,7 +4,7 @@
 
 ## 开发示例
 
-- [Plugin Registry V1 伪代码使用示例](plugin-registry-v1-pseudocode-demo.md)
+- [插件底座 Demo：从 Registry 到 Scheduling](plugin-registry-v1-pseudocode-demo.md)
 
 ## 设计文档索引
 

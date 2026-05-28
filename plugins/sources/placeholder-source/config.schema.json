@@ -1,7 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Placeholder Source Plugin Config",
+  "title": "Demo Placeholder Source Plugin Config",
   "type": "object",
-  "properties": {},
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Default query used when source.fetch input omits query."
+    }
+  },
   "additionalProperties": false
 }
