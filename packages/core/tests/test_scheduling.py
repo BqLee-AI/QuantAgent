@@ -203,7 +203,7 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
             capability="source.fetch",
             request_id="req-interval",
             effective_config={"enabled": True},
-            input={"cursor": "next"},
+            input_payload={"cursor": "next"},
             metadata={"source": "policy"},
         )
 
@@ -227,7 +227,7 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
         run = await service.trigger(
             self._request(
                 request_id="req-context",
-                input={"query": "rss"},
+                input_data={"query": "rss"},
                 effective_config={"enabled": True},
                 metadata={"origin": "test"},
             )
@@ -255,6 +255,46 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(run.error_summary["code"], "PLUGIN_DTO_VALIDATION_FAILED")
         self.assertEqual(run.error_summary["stage"], "invoke")
 
+    async def test_non_json_safe_metadata_is_failed_without_escaping(self) -> None:
+        class NeverReachedPlugin(BasePlugin):
+            async def invoke(self, request):
+                raise AssertionError("runtime invoke should not be reached for invalid metadata")
+
+        self._install_module("test_scheduling_invalid_metadata", NeverReachedPlugin)
+        service = self._service(self._record(entrypoint="test_scheduling_invalid_metadata:plugin"))
+        request = self._request(request_id="req-invalid-metadata")
+        object.__setattr__(request, "metadata", {"scheduler": object()})
+
+        run = await service.trigger(request)
+
+        self.assertEqual(run.status, PluginRunStatus.FAILED)
+        self.assertEqual(run.error_summary["code"], "PLUGIN_DTO_VALIDATION_FAILED")
+        self.assertEqual(run.error_summary["stage"], "schedule_precheck")
+
+    async def test_frozen_clock_requires_timezone_aware_datetime(self) -> None:
+        with self.assertRaises(ValueError):
+            FrozenSchedulingClock(datetime(2026, 5, 28, 8, 0))
+
+    async def test_identifier_fields_raise_value_error_for_non_strings(self) -> None:
+        with self.assertRaises(ValueError):
+            PluginTriggerRequest(
+                plugin_id=object(),  # type: ignore[arg-type]
+                capability="source.fetch",
+                request_id="req-bad-id",
+                trigger_type=PluginTriggerType.MANUAL,
+            )
+
+    async def test_tampered_identifier_is_failed_without_escaping(self) -> None:
+        request = self._request(request_id="req-tampered-id")
+        object.__setattr__(request, "plugin_id", object())
+        service = self._service(self._record(entrypoint="missing_module:plugin"))
+
+        run = await service.trigger(request)
+
+        self.assertEqual(run.status, PluginRunStatus.FAILED)
+        self.assertEqual(run.plugin_id, "invalid-plugin-id")
+        self.assertEqual(run.error_summary["code"], "PLUGIN_SCHEDULING_FAILED")
+
     def _service(self, record: PluginRecord) -> PluginSchedulingService:
         registry = PluginRegistry(StaticScanner([record]))
         return PluginSchedulingService(
@@ -268,7 +308,7 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self,
         *,
         request_id: str,
-        input: dict[str, object] | None = None,
+        input_data: dict[str, object] | None = None,
         effective_config: dict[str, object] | None = None,
         metadata: dict[str, object] | None = None,
         timeout_ms: int | None = None,
@@ -278,7 +318,7 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
             capability="source.fetch",
             request_id=request_id,
             trigger_type=PluginTriggerType.MANUAL,
-            input=input or {},
+            input=input_data or {},
             effective_config=effective_config or {"enabled": True},
             metadata=metadata or {},
             timeout_ms=timeout_ms,

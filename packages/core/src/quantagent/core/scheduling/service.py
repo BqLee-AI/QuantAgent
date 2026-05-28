@@ -33,33 +33,13 @@ class PluginSchedulingService:
         self._clock = clock or SystemSchedulingClock()
 
     async def trigger(self, request: PluginTriggerRequest) -> PluginRunRecord:
-        plugin_record = self._registry.get_plugin(request.plugin_id)
-        run = self._repository.create(
-            PluginRunRecord(
-                run_id=f"run_{uuid4().hex}",
-                plugin_id=request.plugin_id,
-                plugin_version=_plugin_version(plugin_record),
-                capability=request.capability,
-                request_id=request.request_id,
-                trigger_type=request.trigger_type,
-                status=PluginRunStatus.QUEUED,
-                timeout_ms=request.timeout_ms,
-                metadata=request.metadata,
-            )
-        )
-
-        started_at = self._clock.now()
+        run: PluginRunRecord | None = None
         started_monotonic = self._clock.monotonic()
-        run = self._repository.update(
-            replace(
-                run,
-                status=PluginRunStatus.RUNNING,
-                started_at=started_at,
-            )
-        )
 
         try:
             validated_request = _revalidate_request(request)
+            plugin_record = self._registry.get_plugin(validated_request.plugin_id)
+            run, started_monotonic = self._start_run(validated_request, plugin_record)
             precheck_error = _precheck_plugin(plugin_record, capability=validated_request.capability)
             if precheck_error is not None:
                 return self._finish_run(run, status=PluginRunStatus.FAILED, error_summary=_error_to_summary(precheck_error), started_monotonic=started_monotonic)
@@ -84,7 +64,7 @@ class PluginSchedulingService:
             )
         except asyncio.TimeoutError:
             return self._finish_run(
-                run,
+                _ensure_run(run),
                 status=PluginRunStatus.TIMEOUT,
                 error_summary=_error_to_summary(
                     PluginError(
@@ -97,6 +77,8 @@ class PluginSchedulingService:
                 started_monotonic=started_monotonic,
             )
         except PluginRuntimeError as exc:
+            if run is None:
+                run = self._start_failed_precheck_run(request)
             return self._finish_run(
                 run,
                 status=PluginRunStatus.FAILED,
@@ -104,6 +86,8 @@ class PluginSchedulingService:
                 started_monotonic=started_monotonic,
             )
         except Exception as exc:
+            if run is None:
+                run = self._start_failed_precheck_run(request)
             return self._finish_run(
                 run,
                 status=PluginRunStatus.FAILED,
@@ -117,6 +101,52 @@ class PluginSchedulingService:
                 ),
                 started_monotonic=started_monotonic,
             )
+
+    def _start_run(
+        self,
+        request: PluginTriggerRequest,
+        plugin_record: PluginRecord | None,
+    ) -> tuple[PluginRunRecord, float]:
+        run = self._repository.create(
+            PluginRunRecord(
+                run_id=f"run_{uuid4().hex}",
+                plugin_id=request.plugin_id,
+                plugin_version=_plugin_version(plugin_record),
+                capability=request.capability,
+                request_id=request.request_id,
+                trigger_type=request.trigger_type,
+                status=PluginRunStatus.QUEUED,
+                timeout_ms=request.timeout_ms,
+                metadata=request.metadata,
+            )
+        )
+
+        started_monotonic = self._clock.monotonic()
+        return (
+            self._repository.update(
+                replace(
+                    run,
+                    status=PluginRunStatus.RUNNING,
+                    started_at=self._clock.now(),
+                )
+            ),
+            started_monotonic,
+        )
+
+    def _start_failed_precheck_run(self, request: PluginTriggerRequest) -> PluginRunRecord:
+        run = PluginRunRecord(
+            run_id=f"run_{uuid4().hex}",
+            plugin_id=_safe_identifier(request.plugin_id, fallback="invalid-plugin-id"),
+            plugin_version=None,
+            capability=_safe_identifier(request.capability, fallback="invalid-capability"),
+            request_id=_safe_identifier(request.request_id, fallback="invalid-request-id"),
+            trigger_type=request.trigger_type,
+            status=PluginRunStatus.RUNNING,
+            started_at=self._clock.now(),
+            timeout_ms=request.timeout_ms,
+        )
+        self._repository.create(replace(run, status=PluginRunStatus.QUEUED, started_at=None))
+        return self._repository.update(run)
 
     async def _invoke_runtime(self, record: PluginRecord, request: PluginTriggerRequest) -> PluginRuntimeInvocation:
         invoke_coro = self._runtime.invoke(
@@ -155,6 +185,18 @@ def _plugin_version(record: PluginRecord | None) -> str | None:
     if record is None or record.manifest is None:
         return None
     return record.manifest.version
+
+
+def _ensure_run(run: PluginRunRecord | None) -> PluginRunRecord:
+    if run is None:
+        raise RuntimeError("Scheduling run must exist before timeout handling.")
+    return run
+
+
+def _safe_identifier(value: Any, *, fallback: str) -> str:
+    if isinstance(value, str) and value.strip():
+        return value
+    return fallback
 
 
 def _revalidate_request(request: PluginTriggerRequest) -> PluginTriggerRequest:

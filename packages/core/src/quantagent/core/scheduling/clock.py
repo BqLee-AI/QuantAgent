@@ -26,6 +26,10 @@ class FrozenSchedulingClock:
     current_time: datetime
     current_monotonic: float = 0.0
 
+    def __post_init__(self) -> None:
+        if self.current_time.tzinfo is None or self.current_time.utcoffset() is None:
+            raise ValueError("current_time must be timezone-aware.")
+
     def now(self) -> datetime:
         return self.current_time
 

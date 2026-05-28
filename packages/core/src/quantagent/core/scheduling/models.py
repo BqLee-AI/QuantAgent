@@ -104,7 +104,7 @@ class IntervalSchedulePolicy:
         capability: str,
         request_id: str,
         effective_config: Mapping[str, object] | None = None,
-        input: Mapping[str, object] | None = None,
+        input_payload: Mapping[str, object] | None = None,
         metadata: Mapping[str, object] | None = None,
         timeout_ms: int | None = None,
     ) -> PluginTriggerRequest:
@@ -115,7 +115,7 @@ class IntervalSchedulePolicy:
             capability=capability,
             request_id=request_id,
             trigger_type=PluginTriggerType.INTERVAL,
-            input=input or {},
+            input=input_payload or {},
             effective_config=effective_config or {},
             metadata=merged_metadata,
             timeout_ms=timeout_ms,
@@ -123,5 +123,5 @@ class IntervalSchedulePolicy:
 
 
 def _require_non_empty(field_name: str, value: str) -> None:
-    if not value.strip():
-        raise ValueError(f"{field_name} must not be empty.")
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string.")
