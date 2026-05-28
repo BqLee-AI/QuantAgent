@@ -11,6 +11,7 @@ import type {
 import { providerPresets } from '../provider-presets';
 
 interface ProviderEditorFormProps {
+  canManageModels: boolean;
   isCreating: boolean;
   isLoading: boolean;
   isSaving: boolean;
@@ -28,6 +29,7 @@ interface ProviderEditorFormProps {
 }
 
 export function ProviderEditorForm({
+  canManageModels,
   isCreating,
   isLoading,
   isSaving,
@@ -68,18 +70,6 @@ export function ProviderEditorForm({
     setIsDefault(provider.is_default);
   }, [provider, selectedPresetId]);
 
-  useEffect(() => {
-    if (!isCreating) {
-      return;
-    }
-    const preset = providerPresets.find((item) => item.id === selectedPresetId);
-    if (!preset) {
-      return;
-    }
-    setName(preset.draft.name);
-    setBaseUrl(preset.draft.base_url ?? '');
-  }, [isCreating, selectedPresetId]);
-
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -99,8 +89,13 @@ export function ProviderEditorForm({
     onSave(baseInput);
   }
 
-  const canSave = Boolean(name.trim()) && !isSaving;
-  const canTest = !isCreating && provider?.key_status === 'configured' && provider.model_count > 0 && !isTesting;
+  const canSave = Boolean(name.trim()) && (isCreating || canManageModels) && !isSaving;
+  const canTest =
+    canManageModels &&
+    !isCreating &&
+    provider?.key_status === 'configured' &&
+    provider.model_count > 0 &&
+    !isTesting;
   const providerModels = useMemo(() => provider?.models ?? [], [provider]);
 
   return (
@@ -195,6 +190,7 @@ export function ProviderEditorForm({
             <p className="mt-1 text-sm text-slate-500">每个 provider 下可以维护多个模型，并选择一个全局默认模型。</p>
           </div>
           <ProviderModelManager
+            isDisabled={!canManageModels}
             models={providerModels}
             onCreateModel={onCreateModel}
             onDeleteModel={onDeleteModel}
@@ -207,11 +203,13 @@ export function ProviderEditorForm({
 }
 
 function ProviderModelManager({
+  isDisabled,
   models,
   onCreateModel,
   onDeleteModel,
   onUpdateModel,
 }: {
+  isDisabled: boolean;
   models: ModelProviderModel[];
   onCreateModel: (input: SaveProviderModelInput) => void;
   onDeleteModel: (modelId: number) => void;
@@ -226,7 +224,7 @@ function ProviderModelManager({
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm font-medium text-slate-950">新增模型</span>
           <Button
-            isDisabled={!newModelName.trim()}
+            isDisabled={isDisabled || !newModelName.trim()}
             size="sm"
             type="button"
             variant="primary"
@@ -268,6 +266,7 @@ function ProviderModelManager({
           {models.map((model) => (
             <ProviderModelRow
               key={model.id}
+              isDisabled={isDisabled}
               model={model}
               onDelete={() => onDeleteModel(model.id)}
               onSave={(input) => onUpdateModel(model.id, input)}
@@ -280,10 +279,12 @@ function ProviderModelManager({
 }
 
 function ProviderModelRow({
+  isDisabled,
   model,
   onDelete,
   onSave,
 }: {
+  isDisabled: boolean;
   model: ModelProviderModel;
   onDelete: () => void;
   onSave: (input: SaveProviderModelInput) => void;
@@ -308,7 +309,7 @@ function ProviderModelRow({
           {model.is_global_default ? <Chip color="accent" size="sm" variant="soft">全局默认</Chip> : null}
           {model.supports_vision ? <Chip color="accent" size="sm" variant="soft">多模态</Chip> : null}
         </div>
-        <Button size="sm" type="button" variant="danger-soft" onPress={onDelete}>
+        <Button isDisabled={isDisabled} size="sm" type="button" variant="danger-soft" onPress={onDelete}>
           删除
         </Button>
       </div>
@@ -328,6 +329,7 @@ function ProviderModelRow({
 
       <div className="mt-3 flex justify-end">
         <Button
+          isDisabled={isDisabled || !modelName.trim()}
           size="sm"
           type="button"
           variant="outline"

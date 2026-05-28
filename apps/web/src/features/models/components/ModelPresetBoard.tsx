@@ -45,6 +45,7 @@ export function ModelPresetBoard({
           <ModelPresetCard
             key={preset.preset_key}
             candidateModels={candidateModels}
+            isDisabled={updatingPresetKey !== null}
             isSaving={updatingPresetKey === preset.preset_key}
             preset={preset}
             onSave={onSavePreset}
@@ -57,11 +58,13 @@ export function ModelPresetBoard({
 
 function ModelPresetCard({
   candidateModels,
+  isDisabled,
   isSaving,
   preset,
   onSave,
 }: {
   candidateModels: Array<ModelProviderModel & { providerName: string }>;
+  isDisabled: boolean;
   isSaving: boolean;
   preset: ModelPresetBinding;
   onSave: (presetKey: ModelPresetBinding['preset_key'], primaryModelId: number | null, fallbackModelId: number | null) => void;
@@ -87,12 +90,14 @@ function ModelPresetCard({
 
       <div className="grid gap-3">
         <ModelSelectRow
+          isDisabled={isDisabled}
           label="主模型"
           models={availableModels}
           selectedModelId={preset.primary_model?.id ?? null}
           onSelect={(modelId) => onSave(preset.preset_key, modelId, preset.fallback_model?.id ?? null)}
         />
         <ModelSelectRow
+          isDisabled={isDisabled}
           label="Fallback"
           models={availableModels}
           selectedModelId={preset.fallback_model?.id ?? null}
@@ -113,11 +118,13 @@ function ModelPresetCard({
 }
 
 function ModelSelectRow({
+  isDisabled,
   label,
   models,
   selectedModelId,
   onSelect,
 }: {
+  isDisabled: boolean;
   label: string;
   models: Array<ModelProviderModel & { providerName: string }>;
   selectedModelId: number | null;
@@ -133,8 +140,14 @@ function ModelSelectRow({
               ? 'rounded-md border border-blue-500 bg-blue-50 px-3 py-2 text-left text-sm text-slate-950'
               : 'rounded-md border border-slate-200 bg-white px-3 py-2 text-left text-sm text-slate-600 hover:border-slate-300'
           }
+          disabled={isDisabled}
           type="button"
-          onClick={() => onSelect(null)}
+          onClick={() => {
+            if (isDisabled) {
+              return;
+            }
+            onSelect(null);
+          }}
         >
           不设置
         </button>
@@ -146,8 +159,14 @@ function ModelSelectRow({
                 ? 'rounded-md border border-blue-500 bg-blue-50 px-3 py-2 text-left'
                 : 'rounded-md border border-slate-200 bg-white px-3 py-2 text-left hover:border-slate-300'
             }
+            disabled={isDisabled}
             type="button"
-            onClick={() => onSelect(model.id)}
+            onClick={() => {
+              if (isDisabled) {
+                return;
+              }
+              onSelect(model.id);
+            }}
           >
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">

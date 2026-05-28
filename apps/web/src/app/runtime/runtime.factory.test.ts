@@ -23,6 +23,8 @@ describe("createAppRuntime", () => {
     expect(runtime.apiClient).toBeDefined();
     expect(runtime.apis.auth).toBeDefined();
     expect(runtime.apis.plugins).toBeDefined();
+    expect(runtime.apis.modelProviders).toBeDefined();
+    expect(runtime.apis.plugins).toBeDefined();
     expect(runtime.realtime).toEqual({
       client: null,
       status: "disabled",

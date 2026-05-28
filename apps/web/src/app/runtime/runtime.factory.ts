@@ -2,6 +2,7 @@ import { createApiClient } from "@/shared/api";
 import { PluginConfigApi } from "@/features/plugins";
 import { AuthApi } from "@/shared/auth/api";
 import type { RuntimeConfig } from "@/shared/config";
+import { ModelProviderApi } from "@/features/models/api";
 
 import type { AppRuntime, AuthRuntimeBridge } from "./runtime.types";
 
@@ -27,6 +28,7 @@ export function createAppRuntime({
     apis: {
       auth: new AuthApi(apiClient),
       plugins: new PluginConfigApi(apiClient),
+      modelProviders: new ModelProviderApi(apiClient),
     },
     realtime: {
       client: null,

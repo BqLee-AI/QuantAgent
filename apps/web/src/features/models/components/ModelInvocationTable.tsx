@@ -33,13 +33,13 @@ export function ModelInvocationTable({
       <Table.Content>
         <Table.Header>
           <Table.Column>时间</Table.Column>
-          <Table.Column>Provider</Table.Column>
-          <Table.Column>Model</Table.Column>
-          <Table.Column>Status</Table.Column>
-          <Table.Column>Prompt</Table.Column>
-          <Table.Column>Completion</Table.Column>
-          <Table.Column>Total</Table.Column>
-          <Table.Column>Request ID</Table.Column>
+          <Table.Column>供应商</Table.Column>
+          <Table.Column>模型</Table.Column>
+          <Table.Column>状态</Table.Column>
+          <Table.Column>Prompt tokens</Table.Column>
+          <Table.Column>Completion tokens</Table.Column>
+          <Table.Column>Total tokens</Table.Column>
+          <Table.Column>请求 ID</Table.Column>
         </Table.Header>
         <Table.Body items={invocations}>
           {(item) => (
