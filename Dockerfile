@@ -24,6 +24,7 @@ FROM python:3.12-slim-bookworm AS runtime
 WORKDIR /app
 
 ENV PATH="/opt/venv/bin:$PATH" \
+    APP_ENV=production \
     HOST=0.0.0.0 \
     PORT=8000 \
     PYTHONUNBUFFERED=1

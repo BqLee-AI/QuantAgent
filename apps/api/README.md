@@ -77,6 +77,10 @@ Compose 不再把根 `.env` 中的 API 应用配置硬注入为 API 进程环境
 
 Compose 仅保留容器网络入口变量 `HOST` 和 `PORT`，默认值分别为 `0.0.0.0` 和 `8000`，同时允许外部环境或 CI 覆盖；根 `.env` 中的 `API_BIND_HOST`、`API_PORT` 只控制宿主机发布地址和端口，容器内默认监听 `8000`。
 
+为了避免首次启动时因为缺少 `apps/api/.env` 而退回到镜像默认值，Compose 仍提供最小安全回退：`APP_ENV`、`DATABASE_URL`、`RUNTIME_DIR`、`LOG_LEVEL` 会从根 `.env` 或外部环境注入容器；`apps/api/.env*` 挂载仍然保留，但现在用于 API 私有覆盖和多环境文件矩阵，而不是唯一配置来源。
+
+`./apps/api:/app/apps/api` 挂载主要用于让容器内可见 API dotenv 覆盖文件；`./runtime:/app/runtime` 挂载前请确认宿主机 `runtime/` 目录已存在，避免 Docker 创建 root-owned 空目录影响后续写入。
+
 如果修改了 `POSTGRES_DB`、`POSTGRES_USER` 或 `POSTGRES_PASSWORD`，需要同步调整 `apps/api/.env*` 中给 API 容器使用的 `DATABASE_URL` 和根 `.env` 中给迁移服务使用的 `MIGRATION_DATABASE_URL`。
 
 ### 数据库迁移

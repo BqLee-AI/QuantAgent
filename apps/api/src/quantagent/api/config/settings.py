@@ -10,9 +10,7 @@ from pydantic_settings import SettingsConfigDict
 
 from quantagent.core.config.settings import Settings as CoreSettings
 
-
-_API_APP_DIR = Path(__file__).resolve().parents[4]
-_REPO_ROOT_DIR = Path(__file__).resolve().parents[6]
+_SETTINGS_FILE = Path(__file__).resolve()
 _CWD = Path.cwd()
 _PLACEHOLDER_SECRETS = {
     "12345678",
@@ -27,10 +25,27 @@ def _dedupe_paths(paths: list[Path]) -> tuple[Path, ...]:
     return tuple(dict.fromkeys(paths))
 
 
-def _resolve_env_roots(*, cwd: Path, repo_root_dir: Path, api_app_dir: Path) -> tuple[Path, Path]:
-    source_api_dir = repo_root_dir / "apps/api"
-    if source_api_dir == api_app_dir:
-        return repo_root_dir, api_app_dir
+def _discover_source_layout(*, source_file: Path = _SETTINGS_FILE) -> tuple[Path | None, Path | None]:
+    for parent in source_file.parents:
+        api_dir = parent / "apps/api"
+        if api_dir.is_dir() and (parent / "pyproject.toml").is_file():
+            return parent, api_dir
+    return None, None
+
+
+_SOURCE_REPO_ROOT, _SOURCE_API_APP_DIR = _discover_source_layout()
+
+
+def _resolve_env_roots(
+    *,
+    cwd: Path,
+    source_repo_root: Path | None = _SOURCE_REPO_ROOT,
+    source_api_app_dir: Path | None = _SOURCE_API_APP_DIR,
+) -> tuple[Path | None, Path | None]:
+    if source_repo_root is not None and source_api_app_dir is not None:
+        source_api_dir = source_repo_root / "apps/api"
+        if source_api_dir == source_api_app_dir:
+            return source_repo_root, source_api_app_dir
 
     cwd_api_dir = cwd / "apps/api"
     if cwd_api_dir.is_dir():
@@ -39,28 +54,37 @@ def _resolve_env_roots(*, cwd: Path, repo_root_dir: Path, api_app_dir: Path) -> 
     if cwd.name == "api" and cwd.parent.name == "apps":
         return cwd.parents[1], cwd
 
-    if source_api_dir.is_dir():
-        return repo_root_dir, source_api_dir
+    if source_repo_root is not None and source_api_app_dir is not None:
+        return source_repo_root, source_api_app_dir
 
-    return repo_root_dir, api_app_dir
+    return None, None
 
 
-def _base_env_files(*, cwd: Path = _CWD, repo_root_dir: Path = _REPO_ROOT_DIR, api_app_dir: Path = _API_APP_DIR) -> tuple[Path, ...]:
+def _base_env_files(
+    *,
+    cwd: Path = _CWD,
+    source_repo_root: Path | None = _SOURCE_REPO_ROOT,
+    source_api_app_dir: Path | None = _SOURCE_API_APP_DIR,
+) -> tuple[Path, ...]:
     candidates: list[Path] = []
-    repo_root_dir, api_app_dir = _resolve_env_roots(cwd=cwd, repo_root_dir=repo_root_dir, api_app_dir=api_app_dir)
-    root_env = repo_root_dir / ".env"
-    repo_api_dir = repo_root_dir / "apps/api"
-    api_env = api_app_dir / ".env"
-    api_local_env = api_app_dir / ".env.local"
+    repo_root_dir, api_app_dir = _resolve_env_roots(
+        cwd=cwd,
+        source_repo_root=source_repo_root,
+        source_api_app_dir=source_api_app_dir,
+    )
+    root_env = repo_root_dir / ".env" if repo_root_dir is not None else None
+    api_env = api_app_dir / ".env" if api_app_dir is not None else None
+    api_local_env = api_app_dir / ".env.local" if api_app_dir is not None else None
 
-    if repo_api_dir == api_app_dir:
+    if root_env is not None:
         candidates.append(root_env)
 
     cwd_env = cwd / ".env"
     if cwd_env not in {root_env, api_env}:
         candidates.append(cwd_env)
 
-    candidates.extend((api_env, api_local_env))
+    if api_env is not None and api_local_env is not None:
+        candidates.extend((api_env, api_local_env))
     return _dedupe_paths(candidates)
 
 
@@ -79,16 +103,24 @@ def _build_env_file_paths(
     *,
     app_env: str | None = None,
     cwd: Path = _CWD,
-    repo_root_dir: Path = _REPO_ROOT_DIR,
-    api_app_dir: Path = _API_APP_DIR,
+    source_repo_root: Path | None = _SOURCE_REPO_ROOT,
+    source_api_app_dir: Path | None = _SOURCE_API_APP_DIR,
 ) -> tuple[Path, ...]:
-    repo_root_dir, api_app_dir = _resolve_env_roots(cwd=cwd, repo_root_dir=repo_root_dir, api_app_dir=api_app_dir)
-    base_files = _base_env_files(cwd=cwd, repo_root_dir=repo_root_dir, api_app_dir=api_app_dir)
+    repo_root_dir, api_app_dir = _resolve_env_roots(
+        cwd=cwd,
+        source_repo_root=source_repo_root,
+        source_api_app_dir=source_api_app_dir,
+    )
+    base_files = _base_env_files(
+        cwd=cwd,
+        source_repo_root=source_repo_root,
+        source_api_app_dir=source_api_app_dir,
+    )
     # APP_ENV controls which API-specific dotenv gets loaded; process env wins,
     # then base dotenv layers decide before environment-specific files are appended.
     selected_env = (app_env or _resolve_app_env_from_files(base_files) or "").strip()
     candidates = list(base_files)
-    if selected_env:
+    if selected_env and api_app_dir is not None:
         candidates.extend((api_app_dir / f".env.{selected_env}", api_app_dir / f".env.{selected_env}.local"))
     return _dedupe_paths(candidates)
 

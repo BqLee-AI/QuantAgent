@@ -695,7 +695,7 @@ class ApiAppTestCase(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            env_files = _build_env_file_paths(cwd=workspace, repo_root_dir=workspace, api_app_dir=api_dir)
+            env_files = _build_env_file_paths(cwd=workspace, source_repo_root=workspace, source_api_app_dir=api_dir)
             with patch.dict(os.environ, {"DATABASE_URL": "", "APP_ENV": ""}, clear=False):
                 os.environ.pop("DATABASE_URL", None)
                 os.environ.pop("APP_ENV", None)
@@ -710,7 +710,7 @@ class ApiAppTestCase(unittest.TestCase):
             api_dir.mkdir(parents=True)
             (workspace / ".env").write_text("LOG_LEVEL=INFO\n", encoding="utf-8")
             (api_dir / ".env").write_text("LOG_LEVEL=DEBUG\n", encoding="utf-8")
-            env_files = _build_env_file_paths(cwd=workspace, repo_root_dir=workspace, api_app_dir=api_dir)
+            env_files = _build_env_file_paths(cwd=workspace, source_repo_root=workspace, source_api_app_dir=api_dir)
 
             with patch.dict(os.environ, {"LOG_LEVEL": "ERROR"}, clear=False):
                 settings = Settings(_env_file=tuple(str(path) for path in env_files))
@@ -725,7 +725,7 @@ class ApiAppTestCase(unittest.TestCase):
             (api_dir / ".env").write_text("AUTH_ENABLED=true\n", encoding="utf-8")
             (api_dir / ".env.test").write_text("AUTH_ENABLED=false\n", encoding="utf-8")
             (api_dir / ".env.production").write_text("AUTH_ENABLED=true\nLOG_LEVEL=ERROR\n", encoding="utf-8")
-            env_files = _build_env_file_paths(app_env="test", cwd=workspace, repo_root_dir=workspace, api_app_dir=api_dir)
+            env_files = _build_env_file_paths(app_env="test", cwd=workspace, source_repo_root=workspace, source_api_app_dir=api_dir)
 
             settings = Settings(_env_file=tuple(str(path) for path in env_files), APP_ENV="test")
 
@@ -745,7 +745,7 @@ class ApiAppTestCase(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            env_files = _build_env_file_paths(cwd=workspace, repo_root_dir=workspace, api_app_dir=api_dir)
+            env_files = _build_env_file_paths(cwd=workspace, source_repo_root=workspace, source_api_app_dir=api_dir)
             settings = Settings(_env_file=tuple(str(path) for path in env_files))
 
         self.assertEqual(settings.APP_ENV, "staging")
@@ -762,10 +762,21 @@ class ApiAppTestCase(unittest.TestCase):
             )
             (api_dir / ".env.staging.local").write_text("API_HOST=0.0.0.0\n", encoding="utf-8")
 
-            env_files = _build_env_file_paths(app_env="staging", cwd=workspace, repo_root_dir=workspace, api_app_dir=api_dir)
+            env_files = _build_env_file_paths(app_env="staging", cwd=workspace, source_repo_root=workspace, source_api_app_dir=api_dir)
             settings = Settings(_env_file=tuple(str(path) for path in env_files), APP_ENV="staging")
 
         self.assertEqual(settings.API_HOST, "0.0.0.0")
+
+    def test_env_file_paths_do_not_assume_repo_root_when_source_layout_is_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            env_files = _build_env_file_paths(
+                cwd=workspace,
+                source_repo_root=None,
+                source_api_app_dir=None,
+            )
+
+        self.assertEqual(env_files, (workspace / ".env",))
 
     def test_same_site_none_requires_secure_cookie(self) -> None:
         with self.assertRaisesRegex(ValueError, "AUTH_COOKIE_SAME_SITE=none requires AUTH_COOKIE_SECURE=true"):
