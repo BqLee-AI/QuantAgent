@@ -10,7 +10,6 @@ from pathlib import Path
 
 from quantagent.core.registry import PluginManifest, PluginRecord, PluginRegistry, PluginSource, PluginStatus, PluginType
 from quantagent.core.registry.models import PluginError
-from quantagent.core.registry.scanner import RegistryScanner
 from quantagent.core.runtime import PluginRuntimeService
 from quantagent.core.scheduling import (
     FrozenSchedulingClock,
@@ -303,49 +302,6 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
             [PluginRunStatus.QUEUED, PluginRunStatus.RUNNING, PluginRunStatus.SUCCEEDED],
         )
         self.assertEqual({record.run_id for record in self.repository.list()}, {first.run_id, second.run_id})
-
-    async def test_official_placeholder_plugin_runs_through_foundation(self) -> None:
-        registry = PluginRegistry(
-            RegistryScanner(
-                official_root=Path("plugins"),
-                runtime_root=Path("runtime/plugin-foundation-smoke-missing"),
-            )
-        )
-        service = PluginSchedulingService(
-            registry=registry,
-            runtime=PluginRuntimeService(),
-            repository=self.repository,
-            clock=self.clock,
-        )
-
-        record = registry.get_plugin("quantagent.official.source.placeholder")
-        self.assertIsNotNone(record)
-        self.assertEqual(record.status, PluginStatus.VALID)
-        self.assertEqual(record.manifest.capabilities, ("source.fetch",))
-
-        run = await service.trigger(
-            PluginTriggerRequest(
-                plugin_id="quantagent.official.source.placeholder",
-                capability="source.fetch",
-                request_id="req-placeholder-smoke",
-                trigger_type=PluginTriggerType.MANUAL,
-                input={"query": "rss"},
-                effective_config={},
-                metadata={"origin": "foundation-smoke"},
-            )
-        )
-
-        self.assertEqual(run.status, PluginRunStatus.SUCCEEDED)
-        self.assertEqual(run.plugin_id, "quantagent.official.source.placeholder")
-        self.assertEqual(run.metadata["origin"], "foundation-smoke")
-        self.assertEqual(run.output_summary["items"][0]["external_id"], "placeholder:rss")
-        self.assertEqual(run.output_summary["items"][0]["metadata"]["plugin_id"], "quantagent.official.source.placeholder")
-        self.assertEqual(run.output_summary["items"][0]["metadata"]["request_id"], "req-placeholder-smoke")
-        self.assertEqual(run.output_summary["metadata"]["source"], "placeholder")
-        self.assertEqual(
-            [item.status for item in self.repository.get_history(run.run_id)],
-            [PluginRunStatus.QUEUED, PluginRunStatus.RUNNING, PluginRunStatus.SUCCEEDED],
-        )
 
     async def test_non_json_safe_payload_is_failed_without_runtime_invoke(self) -> None:
         class NeverReachedPlugin(BasePlugin):

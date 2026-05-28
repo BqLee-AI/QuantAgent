@@ -73,11 +73,13 @@ SourceBinding
 从仓库根目录运行完整插件底座相关测试：
 
 ```bash
-PYTHONPATH=packages/core/src:packages/plugin-sdk/src python -m unittest packages.core.tests.test_scheduling packages.core.tests.test_runtime packages.core.tests.test_registry
+PYTHONPATH=packages/core/src:packages/plugin-sdk/src python -m unittest packages.core.tests.test_plugin_foundation_demo packages.core.tests.test_scheduling packages.core.tests.test_runtime packages.core.tests.test_registry
 ```
 
 只运行这个 demo 的冒烟用例：
 
 ```bash
-PYTHONPATH=packages/core/src:packages/plugin-sdk/src python -m unittest packages.core.tests.test_scheduling.PluginSchedulingServiceTestCase.test_official_placeholder_plugin_runs_through_foundation
+PYTHONPATH=packages/core/src:packages/plugin-sdk/src python -m unittest packages.core.tests.test_plugin_foundation_demo
 ```
+
+这个命令会打印中文阶段日志，展示 Registry、Runtime、Scheduling 分别验证了什么能力，以及哪些能力仍不属于这个 demo。

@@ -143,15 +143,16 @@ PluginRunRecord
 从仓库根目录运行插件底座相关测试：
 
 ```bash
-PYTHONPATH=packages/core/src:packages/plugin-sdk/src python -m unittest packages.core.tests.test_scheduling packages.core.tests.test_runtime packages.core.tests.test_registry
+PYTHONPATH=packages/core/src:packages/plugin-sdk/src python -m unittest packages.core.tests.test_plugin_foundation_demo packages.core.tests.test_scheduling packages.core.tests.test_runtime packages.core.tests.test_registry
 ```
 
-其中 `packages/core/tests/test_scheduling.py` 的 `test_official_placeholder_plugin_runs_through_foundation` 覆盖完整 demo 链路：
+其中 `packages/core/tests/test_plugin_foundation_demo.py` 用三个小测试展示 demo 链路：
 
 ```text
 真实 plugins/ 目录
   -> RegistryScanner
   -> PluginRegistry
+  -> PluginRecord
   -> PluginSchedulingService.trigger
   -> PluginRuntimeService.invoke
   -> placeholder_source:plugin
@@ -160,13 +161,13 @@ PYTHONPATH=packages/core/src:packages/plugin-sdk/src python -m unittest packages
 
 这个测试不需要数据库、API、Web、worker 或网络。
 
-如果只想看 demo 覆盖的单个用例，可以运行：
+如果只想看 demo 的分阶段小测试，可以运行：
 
 ```bash
-PYTHONPATH=packages/core/src:packages/plugin-sdk/src python -m unittest packages.core.tests.test_scheduling.PluginSchedulingServiceTestCase.test_official_placeholder_plugin_runs_through_foundation
+PYTHONPATH=packages/core/src:packages/plugin-sdk/src python -m unittest packages.core.tests.test_plugin_foundation_demo
 ```
 
-这个单测会扫描真实 `plugins/` 目录，但使用一个不存在的 `runtime/` 测试目录，避免把本机私有插件混进验证结果。
+这个测试会扫描真实 `plugins/` 目录，但使用一个不存在的 `runtime/` 测试目录，避免把本机私有插件混进验证结果。测试运行时会用中文打印每个阶段“是否实现、怎么实现、验证结果和边界说明”，方便 reviewer 跟着输出理解当前插件底座能力。
 
 ## 7. 这个 Demo 不做什么
 
