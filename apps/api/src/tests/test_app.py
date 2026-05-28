@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import UTC, datetime
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -24,7 +25,7 @@ from quantagent.api.auth import (
     require_csrf,
 )
 from quantagent.api.auth.session import SESSION_V2, _deserialize_session, _issue_v1_session, _serialize_session
-from quantagent.api.config.settings import Settings
+from quantagent.api.config.settings import Settings, _build_env_file_paths
 from quantagent.api.db import get_db_session
 from quantagent.api.http.errors import ServiceUnavailableError
 from quantagent.api.main import create_app
@@ -607,6 +608,24 @@ class ApiAppTestCase(unittest.TestCase):
                 AUTH_SESSION_SECRET="   ",
             )
 
+    def test_staging_and_production_reject_placeholder_auth_credentials(self) -> None:
+        with self.assertRaisesRegex(ValueError, "AUTH_ADMIN_PASSWORD must not use a placeholder"):
+            Settings(
+                _env_file=None,
+                APP_ENV="staging",
+                AUTH_ADMIN_PASSWORD="change-me",
+                AUTH_SESSION_SECRET="staging-secret",
+            )
+
+        with self.assertRaisesRegex(ValueError, "AUTH_SESSION_SECRET must not use a placeholder"):
+            Settings(
+                _env_file=None,
+                APP_ENV="production",
+                AUTH_ADMIN_PASSWORD="prod-password",
+                AUTH_SESSION_SECRET="change-me",
+                AUTH_COOKIE_SECURE=True,
+            )
+
     def test_test_env_still_receives_weak_auth_defaults(self) -> None:
         settings = Settings(_env_file=None, APP_ENV="test")
         self.assertEqual(settings.AUTH_ADMIN_PASSWORD, "12345678")
@@ -653,6 +672,92 @@ class ApiAppTestCase(unittest.TestCase):
             settings = Settings(_env_file=None)
         self.assertEqual(settings.API_HOST, "0.0.0.0")
         self.assertEqual(settings.API_PORT, 9300)
+
+    def test_api_dotenv_overrides_duplicate_root_variable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            api_dir = workspace / "apps/api"
+            api_dir.mkdir(parents=True)
+            (workspace / ".env").write_text(
+                "DATABASE_URL=postgresql+psycopg://root:root@localhost:15432/rootdb\n",
+                encoding="utf-8",
+            )
+            (api_dir / ".env").write_text(
+                "DATABASE_URL=postgresql+psycopg://api:api@localhost:15432/apidb\n",
+                encoding="utf-8",
+            )
+
+            env_files = _build_env_file_paths(cwd=workspace, repo_root_dir=workspace, api_app_dir=api_dir)
+            with patch.dict(os.environ, {"DATABASE_URL": "", "APP_ENV": ""}, clear=False):
+                os.environ.pop("DATABASE_URL", None)
+                os.environ.pop("APP_ENV", None)
+                settings = Settings(_env_file=tuple(str(path) for path in env_files))
+
+        self.assertEqual(settings.DATABASE_URL, "postgresql+psycopg://api:api@localhost:15432/apidb")
+
+    def test_process_environment_overrides_api_dotenv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            api_dir = workspace / "apps/api"
+            api_dir.mkdir(parents=True)
+            (workspace / ".env").write_text("LOG_LEVEL=INFO\n", encoding="utf-8")
+            (api_dir / ".env").write_text("LOG_LEVEL=DEBUG\n", encoding="utf-8")
+            env_files = _build_env_file_paths(cwd=workspace, repo_root_dir=workspace, api_app_dir=api_dir)
+
+            with patch.dict(os.environ, {"LOG_LEVEL": "ERROR"}, clear=False):
+                settings = Settings(_env_file=tuple(str(path) for path in env_files))
+
+        self.assertEqual(settings.LOG_LEVEL, "ERROR")
+
+    def test_app_env_selects_only_matching_api_environment_dotenv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            api_dir = workspace / "apps/api"
+            api_dir.mkdir(parents=True)
+            (api_dir / ".env").write_text("AUTH_ENABLED=true\n", encoding="utf-8")
+            (api_dir / ".env.test").write_text("AUTH_ENABLED=false\n", encoding="utf-8")
+            (api_dir / ".env.production").write_text("AUTH_ENABLED=true\nLOG_LEVEL=ERROR\n", encoding="utf-8")
+            env_files = _build_env_file_paths(app_env="test", cwd=workspace, repo_root_dir=workspace, api_app_dir=api_dir)
+
+            settings = Settings(_env_file=tuple(str(path) for path in env_files), APP_ENV="test")
+
+        self.assertFalse(settings.AUTH_ENABLED)
+        self.assertEqual(settings.LOG_LEVEL, "INFO")
+        self.assertIn(api_dir / ".env.test", env_files)
+        self.assertNotIn(api_dir / ".env.production", env_files)
+
+    def test_api_local_dotenv_can_select_environment_specific_dotenv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            api_dir = workspace / "apps/api"
+            api_dir.mkdir(parents=True)
+            (api_dir / ".env.local").write_text("APP_ENV=staging\n", encoding="utf-8")
+            (api_dir / ".env.staging").write_text(
+                "LOG_LEVEL=WARNING\nAUTH_ADMIN_PASSWORD=staging-password\nAUTH_SESSION_SECRET=staging-secret\n",
+                encoding="utf-8",
+            )
+
+            env_files = _build_env_file_paths(cwd=workspace, repo_root_dir=workspace, api_app_dir=api_dir)
+            settings = Settings(_env_file=tuple(str(path) for path in env_files))
+
+        self.assertEqual(settings.APP_ENV, "staging")
+        self.assertEqual(settings.LOG_LEVEL, "WARNING")
+
+    def test_selected_environment_local_dotenv_wins(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            api_dir = workspace / "apps/api"
+            api_dir.mkdir(parents=True)
+            (api_dir / ".env.staging").write_text(
+                "API_HOST=127.0.0.1\nAUTH_ADMIN_PASSWORD=staging-password\nAUTH_SESSION_SECRET=staging-secret\n",
+                encoding="utf-8",
+            )
+            (api_dir / ".env.staging.local").write_text("API_HOST=0.0.0.0\n", encoding="utf-8")
+
+            env_files = _build_env_file_paths(app_env="staging", cwd=workspace, repo_root_dir=workspace, api_app_dir=api_dir)
+            settings = Settings(_env_file=tuple(str(path) for path in env_files), APP_ENV="staging")
+
+        self.assertEqual(settings.API_HOST, "0.0.0.0")
 
     def test_same_site_none_requires_secure_cookie(self) -> None:
         with self.assertRaisesRegex(ValueError, "AUTH_COOKIE_SAME_SITE=none requires AUTH_COOKIE_SECURE=true"):

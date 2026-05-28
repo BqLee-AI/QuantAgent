@@ -15,9 +15,11 @@ uv sync
 APP_ENV=development uv run api
 ```
 
-运行时会同时读取仓库根目录 `.env` 和 `apps/api/.env`：前者是整仓默认入口，后者只用于子包独立开发时覆盖 API 私有变量。需要子包本地覆盖时，从 `apps/api` 目录执行 `cp .env.example .env`；共享的 `DATABASE_URL`、`RUNTIME_DIR`、`LOG_LEVEL` 等继续放在仓库根目录 `.env` 或外部环境。
+API dotenv 文件按从低到高读取：仓库根目录 `.env`、当前工作目录 `.env`、`apps/api/.env`、`apps/api/.env.local`、`apps/api/.env.<APP_ENV>`、`apps/api/.env.<APP_ENV>.local`。重复变量允许存在，API 目录下的文件会覆盖根 `.env`；真实进程环境变量仍是最高优先级，适合 CI/CD secret、部署 secret 和临时强制覆盖。
 
-API 默认监听 `127.0.0.1:8000`。鉴权默认开启（`AUTH_ENABLED=true`）；development 环境下口令使用代码中的弱默认值，也可显式设置 `AUTH_ENABLED=false` 完全关闭鉴权（此选项仅 `APP_ENV=development` 允许）。
+`APP_ENV` 先从真实环境变量读取；如果没有，再由根 `.env`、`apps/api/.env`、`apps/api/.env.local` 这几个基础层决定，用于选择对应的 `apps/api/.env.<APP_ENV>` 和 `.local` 文件。协作模板使用 `.example` 后缀，真实 `.env*` 文件不要提交。
+
+API 默认监听 `127.0.0.1:8000`。鉴权默认开启（`AUTH_ENABLED=true`）；development、test、local 环境下口令可使用代码中的弱默认值，也可显式设置 `AUTH_ENABLED=false` 完全关闭鉴权；staging 和 production 必须提供安全口令和 session secret。
 
 ### 测试
 
@@ -56,6 +58,8 @@ uv run python -m unittest src/tests/test_alpaca_wallet_api_e2e.py
 
 ```bash
 cp .env.example .env          # 首次配置，按需修改变量
+cp apps/api/.env.example apps/api/.env
+# Docker Compose 中将 apps/api/.env 的 DATABASE_URL 改为 db:5432，并将 RUNTIME_DIR 改为 /app/runtime。
 docker compose up -d db
 docker compose --profile migration run --rm migrate
 docker compose up --build api
@@ -69,11 +73,11 @@ docker compose up -d db
 
 `db` 容器内端口为 `5432`，宿主机默认绑定 `127.0.0.1:15432`，可通过 `.env` 中的 `DB_HOST` 和 `DB_PORT` 调整。
 
-Compose 中的 API 容器通过 `API_DATABASE_URL` 连接 `db:5432`；宿主机本地工具通过 `DATABASE_URL` 连接 `localhost:15432`。
+Compose 不再把根 `.env` 中的 API 应用配置硬注入为 API 进程环境变量。API 容器同样通过 `apps/api/.env` 或选中的 `apps/api/.env.<APP_ENV>` 读取 `DATABASE_URL`、`RUNTIME_DIR`、`LOG_LEVEL`、`AUTH_*` 等配置；容器侧数据库 URL 应使用 `db:5432`，宿主机直跑可使用 `localhost:15432`。
 
-Compose 中 `API_HOST` 会映射为容器内兼容变量 `HOST`，用于控制 API 进程监听地址；`API_PORT` 只控制宿主机发布端口，容器内固定监听 `8000`。
+Compose 仅保留容器网络入口变量 `HOST=0.0.0.0` 和 `PORT=8000`；根 `.env` 中的 `API_BIND_HOST`、`API_PORT` 只控制宿主机发布地址和端口，容器内固定监听 `8000`。
 
-如果修改了 `POSTGRES_DB`、`POSTGRES_USER` 或 `POSTGRES_PASSWORD`，需要同步调整 `API_DATABASE_URL` 和 `MIGRATION_DATABASE_URL`。
+如果修改了 `POSTGRES_DB`、`POSTGRES_USER` 或 `POSTGRES_PASSWORD`，需要同步调整 `apps/api/.env*` 中给 API 容器使用的 `DATABASE_URL` 和根 `.env` 中给迁移服务使用的 `MIGRATION_DATABASE_URL`。
 
 ### 数据库迁移
 
@@ -96,10 +100,10 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 
 ### 生产注意事项
 
-仓库本地 Compose 默认值仅用于本地开发，不等同生产安全部署。生产环境启动前，至少在 `.env` 中替换以下变量为安全值：
+仓库本地 Compose 默认值仅用于本地开发，不等同生产安全部署。生产环境启动前，至少在 API dotenv、真实进程环境变量、CI/deployment secret 或未来 Secret Manager 中提供以下安全值：
 
 - `APP_ENV=production`
-- `POSTGRES_PASSWORD`
+- 数据库账号、密码和 `DATABASE_URL`
 - `AUTH_ADMIN_PASSWORD`
 - `AUTH_SESSION_SECRET`（建议用 `openssl rand -hex 32` 生成）
 
@@ -134,7 +138,7 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 - `/api/v1/me` 不再作为主要 refresh 入口；仅在识别旧 v1 cookie 时执行一次兼容升级。
 - 非 production 的 `/api/v1/debug/*` 仍会注册到 OpenAPI，但默认按 protected route 处理，不加入 public allowlist。
 - Cookie 默认 `HttpOnly` 且 `SameSite=Lax`；`APP_ENV=production` 下要求 `Secure=true`。
-- `AUTH_ENABLED=false` 仅允许 `APP_ENV=development`；此时依赖会返回 `local_dev` actor，避免下游审计上下文为空。
+- `AUTH_ENABLED=false` 仅允许 `APP_ENV=development`、`APP_ENV=test` 或 `APP_ENV=local`；此时依赖会返回 `local_dev` actor，避免下游审计上下文为空。
 - Cookie Session 写操作通过 `X-CSRF-Token` header 做 CSRF 校验；login 豁免，refresh/logout 和受保护写操作不豁免。
 - `quantagent.api.routers.v1.register` 中的 `STANDARD_API_V1_ROUTER_REGISTRATIONS` 与 registration helper 是 public/protected 真源；README、OpenAPI 或 route-level ad hoc dependency 只用于说明与补充，不替代该边界。
 
@@ -156,7 +160,11 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 
 ### API/Auth 环境变量
 
-- `API_HOST`：直跑 API 时的监听地址，默认 `127.0.0.1`；兼容读取历史变量名 `HOST`。在根目录 Compose 中，该变量会注入为容器内 `HOST`。
+- `APP_ENV`：选择 API 运行环境，并决定是否追加读取 `apps/api/.env.<APP_ENV>` 和 `apps/api/.env.<APP_ENV>.local`。
+- `DATABASE_URL`：API 数据库连接串；容器内应指向 `db:5432`，宿主机直跑通常指向 `localhost:15432`。
+- `RUNTIME_DIR`：API 运行时目录，容器内通常为 `/app/runtime`，宿主机直跑通常为 `./runtime`。
+- `LOG_LEVEL`：应用日志级别，例如 `DEBUG`、`INFO`、`WARNING`、`ERROR`。
+- `API_HOST`：直跑 API 时的监听地址，默认 `127.0.0.1`；兼容读取历史变量名 `HOST`。Compose 中不从根 `.env` 注入该变量，容器内固定使用 `HOST=0.0.0.0`。
 - `API_PORT`：直跑 API 时的监听端口，默认 `8000`；兼容读取历史变量名 `PORT`。在根目录 Compose 中，该变量只表示宿主机发布端口，容器内监听端口固定为 `8000`。
 - `API_V1_PREFIX`：API v1 路由前缀，默认 `/api/v1`。
 - `AUTH_ENABLED`：是否启用鉴权，默认 `true`。

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Literal
 
+from dotenv import dotenv_values
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import SettingsConfigDict
 
@@ -12,22 +14,85 @@ from quantagent.core.config.settings import Settings as CoreSettings
 _API_APP_DIR = Path(__file__).resolve().parents[4]
 _REPO_ROOT_DIR = Path(__file__).resolve().parents[6]
 _CWD = Path.cwd()
+_PLACEHOLDER_SECRETS = {"change-me", "changeme", "please-change-me"}
+
+
+def _dedupe_paths(paths: list[Path]) -> tuple[Path, ...]:
+    return tuple(dict.fromkeys(paths))
+
+
+def _resolve_env_roots(*, cwd: Path, repo_root_dir: Path, api_app_dir: Path) -> tuple[Path, Path]:
+    source_api_dir = repo_root_dir / "apps/api"
+    if source_api_dir == api_app_dir:
+        return repo_root_dir, api_app_dir
+
+    cwd_api_dir = cwd / "apps/api"
+    if cwd_api_dir.is_dir():
+        return cwd, cwd_api_dir
+
+    if cwd.name == "api" and cwd.parent.name == "apps":
+        return cwd.parents[1], cwd
+
+    if source_api_dir.is_dir():
+        return repo_root_dir, source_api_dir
+
+    return repo_root_dir, api_app_dir
+
+
+def _base_env_files(*, cwd: Path = _CWD, repo_root_dir: Path = _REPO_ROOT_DIR, api_app_dir: Path = _API_APP_DIR) -> tuple[Path, ...]:
+    candidates: list[Path] = []
+    repo_root_dir, api_app_dir = _resolve_env_roots(cwd=cwd, repo_root_dir=repo_root_dir, api_app_dir=api_app_dir)
+    root_env = repo_root_dir / ".env"
+    repo_api_dir = repo_root_dir / "apps/api"
+    api_env = api_app_dir / ".env"
+    api_local_env = api_app_dir / ".env.local"
+
+    if repo_api_dir == api_app_dir:
+        candidates.append(root_env)
+
+    cwd_env = cwd / ".env"
+    if cwd_env not in {root_env, api_env}:
+        candidates.append(cwd_env)
+
+    candidates.extend((api_env, api_local_env))
+    return _dedupe_paths(candidates)
+
+
+def _resolve_app_env_from_files(env_files: tuple[Path, ...]) -> str | None:
+    app_env: str | None = None
+    for env_file in env_files:
+        if not env_file.is_file():
+            continue
+        value = dotenv_values(env_file).get("APP_ENV")
+        if value:
+            app_env = str(value).strip()
+    return app_env or None
+
+
+def _build_env_file_paths(
+    *,
+    app_env: str | None = None,
+    cwd: Path = _CWD,
+    repo_root_dir: Path = _REPO_ROOT_DIR,
+    api_app_dir: Path = _API_APP_DIR,
+) -> tuple[Path, ...]:
+    repo_root_dir, api_app_dir = _resolve_env_roots(cwd=cwd, repo_root_dir=repo_root_dir, api_app_dir=api_app_dir)
+    base_files = _base_env_files(cwd=cwd, repo_root_dir=repo_root_dir, api_app_dir=api_app_dir)
+    # APP_ENV controls which API-specific dotenv gets loaded; process env wins,
+    # then base dotenv layers decide before environment-specific files are appended.
+    selected_env = (app_env or _resolve_app_env_from_files(base_files) or "").strip()
+    candidates = list(base_files)
+    if selected_env:
+        candidates.extend((api_app_dir / f".env.{selected_env}", api_app_dir / f".env.{selected_env}.local"))
+    return _dedupe_paths(candidates)
 
 
 def _build_env_files() -> tuple[str, ...]:
-    candidates = []
-    repo_api_dir = _REPO_ROOT_DIR / "apps/api"
-    if repo_api_dir == _API_APP_DIR:
-        candidates.extend((_REPO_ROOT_DIR / ".env", repo_api_dir / ".env"))
-
-    cwd_env = _CWD / ".env"
-    if cwd_env not in {_REPO_ROOT_DIR / ".env", _API_APP_DIR / ".env"}:
-        candidates.append(cwd_env)
-
-    candidates.append(_API_APP_DIR / ".env")
-    return tuple(str(path) for path in dict.fromkeys(candidates))
+    return tuple(str(path) for path in _build_env_file_paths(app_env=os.environ.get("APP_ENV")))
 
 
+# Default settings are built at import time so process-level APP_ENV can select
+# the right dotenv matrix before the shared singleton below is created.
 _ENV_FILES = _build_env_files()
 
 
@@ -35,8 +100,8 @@ class Settings(CoreSettings):
     """在通用核心配置之上补充 API 运行时配置。"""
 
     model_config = SettingsConfigDict(
-        # 共享变量放仓库根目录 .env，API 私有变量放 apps/api/.env。
-        # 源码路径和当前工作目录都纳入候选，兼容源码开发与根目录运行。
+        # API dotenv uses root defaults first, then API-specific and
+        # environment-specific files; process environment still wins.
         env_file=_ENV_FILES,
         extra="ignore",
     )
@@ -75,10 +140,10 @@ class Settings(CoreSettings):
         if self.AUTH_COOKIE_SAME_SITE == "none" and not self.AUTH_COOKIE_SECURE:
             raise ValueError("AUTH_COOKIE_SAME_SITE=none requires AUTH_COOKIE_SECURE=true")
 
-        if not self.AUTH_ENABLED and environment != "development":
-            raise ValueError("AUTH_ENABLED=false is only allowed when APP_ENV=development")
-
         is_dev_or_test = environment in {"development", "test", "local"}
+
+        if not self.AUTH_ENABLED and not is_dev_or_test:
+            raise ValueError("AUTH_ENABLED=false is only allowed when APP_ENV is development/test/local")
 
         if not self.AUTH_ADMIN_PASSWORD:
             if is_dev_or_test:
@@ -103,6 +168,12 @@ class Settings(CoreSettings):
                 raise ValueError("Production must not use the development auth password default")
             if self.AUTH_SESSION_SECRET == "dev-session-secret-change-me":
                 raise ValueError("Production must not use the development session secret default")
+
+        if not is_dev_or_test:
+            if self.AUTH_ADMIN_PASSWORD and self.AUTH_ADMIN_PASSWORD.lower() in _PLACEHOLDER_SECRETS:
+                raise ValueError("AUTH_ADMIN_PASSWORD must not use a placeholder value outside development/test/local")
+            if self.AUTH_SESSION_SECRET and self.AUTH_SESSION_SECRET.lower() in _PLACEHOLDER_SECRETS:
+                raise ValueError("AUTH_SESSION_SECRET must not use a placeholder value outside development/test/local")
 
         return self
 
