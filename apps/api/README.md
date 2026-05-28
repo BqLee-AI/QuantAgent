@@ -75,7 +75,7 @@ docker compose up -d db
 
 Compose 不再把根 `.env` 中的 API 应用配置硬注入为 API 进程环境变量。API 容器同样通过 `apps/api/.env` 或选中的 `apps/api/.env.<APP_ENV>` 读取 `DATABASE_URL`、`RUNTIME_DIR`、`LOG_LEVEL`、`AUTH_*` 等配置；容器侧数据库 URL 应使用 `db:5432`，宿主机直跑可使用 `localhost:15432`。
 
-Compose 仅保留容器网络入口变量 `HOST=0.0.0.0` 和 `PORT=8000`；根 `.env` 中的 `API_BIND_HOST`、`API_PORT` 只控制宿主机发布地址和端口，容器内固定监听 `8000`。
+Compose 仅保留容器网络入口变量 `HOST` 和 `PORT`，默认值分别为 `0.0.0.0` 和 `8000`，同时允许外部环境或 CI 覆盖；根 `.env` 中的 `API_BIND_HOST`、`API_PORT` 只控制宿主机发布地址和端口，容器内默认监听 `8000`。
 
 如果修改了 `POSTGRES_DB`、`POSTGRES_USER` 或 `POSTGRES_PASSWORD`，需要同步调整 `apps/api/.env*` 中给 API 容器使用的 `DATABASE_URL` 和根 `.env` 中给迁移服务使用的 `MIGRATION_DATABASE_URL`。
 

@@ -14,7 +14,13 @@ from quantagent.core.config.settings import Settings as CoreSettings
 _API_APP_DIR = Path(__file__).resolve().parents[4]
 _REPO_ROOT_DIR = Path(__file__).resolve().parents[6]
 _CWD = Path.cwd()
-_PLACEHOLDER_SECRETS = {"change-me", "changeme", "please-change-me"}
+_PLACEHOLDER_SECRETS = {
+    "12345678",
+    "change-me",
+    "changeme",
+    "dev-session-secret-change-me",
+    "please-change-me",
+}
 
 
 def _dedupe_paths(paths: list[Path]) -> tuple[Path, ...]:

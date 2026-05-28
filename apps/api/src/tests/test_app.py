@@ -626,6 +626,14 @@ class ApiAppTestCase(unittest.TestCase):
                 AUTH_COOKIE_SECURE=True,
             )
 
+        with self.assertRaisesRegex(ValueError, "AUTH_ADMIN_PASSWORD must not use a placeholder"):
+            Settings(
+                _env_file=None,
+                APP_ENV="staging",
+                AUTH_ADMIN_PASSWORD="12345678",
+                AUTH_SESSION_SECRET="staging-secret",
+            )
+
     def test_test_env_still_receives_weak_auth_defaults(self) -> None:
         settings = Settings(_env_file=None, APP_ENV="test")
         self.assertEqual(settings.AUTH_ADMIN_PASSWORD, "12345678")

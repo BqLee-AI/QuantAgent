@@ -6,8 +6,8 @@ services:
       target: runtime
     image: quantagent-api:local
     environment:
-      HOST: 0.0.0.0
-      PORT: 8000
+      HOST: ${HOST:-0.0.0.0}
+      PORT: ${PORT:-8000}
     ports:
       - "${API_BIND_HOST:-127.0.0.1}:${API_PORT:-8000}:8000"
     volumes:
