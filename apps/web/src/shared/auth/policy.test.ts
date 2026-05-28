@@ -13,6 +13,7 @@ import {
   getDefaultWorkspaceEntry,
   getNavVisibility,
   listVisibleNavItems,
+  resolveWorkspaceRoutePath,
 } from './policy'
 
 describe('capability policy', () => {
@@ -38,6 +39,7 @@ describe('capability policy', () => {
     const capabilities = new Set<string>([RUNTIME_INSPECT_CAPABILITY, APPROVAL_APPROVE_CAPABILITY])
 
     expect(listVisibleNavItems(capabilities).map((item) => item.to)).toEqual([
+      '/',
       '/events',
       '/runtime',
       '/approvals',
@@ -50,7 +52,13 @@ describe('capability policy', () => {
   it('chooses the first visible workspace entry as the default route', () => {
     const capabilities = new Set<string>([SECRET_MANAGE_CAPABILITY])
 
-    expect(getDefaultWorkspaceEntry(capabilities)).toBe('/settings')
+    expect(getDefaultWorkspaceEntry(capabilities)).toBe('/')
+  })
+
+  it('maps nested workspace routes back to their guarded family path', () => {
+    expect(resolveWorkspaceRoutePath('/events/event-1')).toBe('/events')
+    expect(resolveWorkspaceRoutePath('/approvals/ap-1')).toBe('/approvals')
+    expect(resolveWorkspaceRoutePath('/approval-link/token')).toBeNull()
   })
 
   it('returns disabled-with-reason for forbidden actions', () => {

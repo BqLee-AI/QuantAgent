@@ -7,8 +7,8 @@ import { MainLayout } from '../../../app/layouts/MainLayout'
 import {
   canAccessWorkspaceRoute,
   getDefaultWorkspaceEntry,
+  resolveWorkspaceRoutePath,
   type WorkspaceRoutePath,
-  WORKSPACE_ROUTE_POLICY,
   useAuth,
 } from '../../../shared/auth'
 
@@ -28,14 +28,15 @@ export const Route = createFileRoute('/_app/(workspace)')({
 
     if (context.auth?.status === 'authenticated') {
       const pathname = location.pathname as string
+      const guardedRoute = resolveWorkspaceRoutePath(pathname)
 
-      if (!(pathname in WORKSPACE_ROUTE_POLICY)) {
+      if (!guardedRoute) {
         return
       }
 
       const result = canAccessWorkspaceRoute(
         context.capabilities,
-        pathname as WorkspaceRoutePath,
+        guardedRoute as WorkspaceRoutePath,
       )
 
       if (!result.allowed) {
@@ -78,7 +79,7 @@ function AppRoute() {
         <ForbiddenPage
           details={auth.forbidden}
           onReturnToEntry={() => {
-            const defaultEntry = getDefaultWorkspaceEntry(auth.capabilities) ?? '/events'
+            const defaultEntry = getDefaultWorkspaceEntry(auth.capabilities) ?? '/'
             void navigate({ to: defaultEntry })
           }}
         />

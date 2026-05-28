@@ -10,6 +10,7 @@ import {
 } from './capabilities'
 
 export type WorkspaceRoutePath =
+  | '/'
   | '/approvals'
   | '/events'
   | '/industries'
@@ -41,6 +42,7 @@ export interface ActionPolicyResult {
 const DEFAULT_FORBIDDEN_REASON = '当前账号没有执行该操作的权限。'
 
 export const WORKSPACE_ROUTE_POLICY: Record<WorkspaceRoutePath, readonly Capability[]> = {
+  '/': [],
   '/approvals': [APPROVAL_APPROVE_CAPABILITY, APPROVAL_AMEND_CAPABILITY],
   '/events': [RUNTIME_INSPECT_CAPABILITY],
   '/industries': [RUNTIME_INSPECT_CAPABILITY],
@@ -52,6 +54,7 @@ export const WORKSPACE_ROUTE_POLICY: Record<WorkspaceRoutePath, readonly Capabil
 }
 
 export const NAV_POLICY: readonly NavPolicyEntry[] = [
+  { label: 'Dashboard', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/'], to: '/' },
   { label: '事件', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/events'], to: '/events' },
   { label: '运行态', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/runtime'], to: '/runtime' },
   { label: '审批', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/approvals'], to: '/approvals' },
@@ -75,7 +78,32 @@ export function hasAnyCapability(
   capabilities: ReadonlySet<string>,
   requiredAnyOf: readonly Capability[],
 ): boolean {
+  if (requiredAnyOf.length === 0) {
+    return true
+  }
+
   return requiredAnyOf.some((capability) => capabilities.has(capability))
+}
+
+export function resolveWorkspaceRoutePath(pathname: string): WorkspaceRoutePath | null {
+  if (pathname === '/') {
+    return '/'
+  }
+
+  const families: readonly WorkspaceRoutePath[] = [
+    '/events',
+    '/approvals',
+    '/runtime',
+    '/plugins',
+    '/skills',
+    '/tools',
+    '/industries',
+    '/settings',
+  ]
+
+  const matchedFamily = families.find((family) => pathname === family || pathname.startsWith(`${family}/`))
+
+  return matchedFamily ?? null
 }
 
 export function checkCapabilities(

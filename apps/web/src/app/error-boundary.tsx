@@ -19,7 +19,7 @@ interface AppErrorBoundaryState {
 const DEFAULT_ERROR_SUMMARY = '应用遇到错误。'
 const DEFAULT_RUNTIME_TITLE = 'QuantAgent 遇到错误'
 const DEFAULT_STARTUP_TITLE = 'QuantAgent 启动失败'
-const DEFAULT_ENTRY_PATH = '/events'
+const DEFAULT_ENTRY_PATH = '/'
 
 function normalizeSummary(value: string | undefined): string {
   const summary = value?.split(/\r?\n/, 1)[0]?.trim() ?? ''

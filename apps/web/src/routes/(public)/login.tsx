@@ -109,7 +109,7 @@ function SignInPage() {
 
 function normalizeRedirect(value: string | undefined): string {
   if (!value || !value.startsWith('/') || value.startsWith('//') || value === '/login') {
-    return '/events'
+    return '/'
   }
 
   return value

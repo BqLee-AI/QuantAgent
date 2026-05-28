@@ -4,8 +4,10 @@ import { listVisibleNavItems, useAuth } from '../../shared/auth'
 
 const routeLabels = new Map<string, string>([
   ['events', '事件'],
+  ['audit', '审计时间线'],
   ['runtime', '运行态'],
   ['approvals', '审批'],
+  ['approval-link', '一次性授权'],
   ['plugins', '插件'],
   ['skills', '技能'],
   ['tools', '工具'],
@@ -34,7 +36,7 @@ export function MainLayout({ children }: PropsWithChildren) {
               to={item.to}
               className="app-nav-link"
               activeProps={{ className: 'app-nav-link app-nav-link-active' }}
-              activeOptions={{ exact: false }}
+              activeOptions={{ exact: item.to === '/' }}
             >
               {item.label}
             </Link>
@@ -74,17 +76,51 @@ export function MainLayout({ children }: PropsWithChildren) {
 }
 
 function getBreadcrumbs(pathname: string) {
-  const segments = pathname.split('/').filter(Boolean)
-
-  if (segments.length === 0) {
-    return [{ label: '事件', path: '/events' }]
+  if (pathname === '/') {
+    return [{ label: 'Dashboard', path: '/' }]
   }
+
+  if (pathname.startsWith('/approval-link/')) {
+    return [
+      { label: '一次性授权', path: '/approval-link' },
+      { label: '授权详情', path: pathname },
+    ]
+  }
+
+  if (pathname.startsWith('/events/')) {
+    const segments = pathname.split('/').filter(Boolean)
+
+    if (segments[2] === 'audit') {
+      return [
+        { label: 'Dashboard', path: '/' },
+        { label: '事件', path: '/events' },
+        { label: '事件详情', path: `/events/${segments[1]}` },
+        { label: '审计时间线', path: pathname },
+      ]
+    }
+
+    return [
+      { label: 'Dashboard', path: '/' },
+      { label: '事件', path: '/events' },
+      { label: '事件详情', path: pathname },
+    ]
+  }
+
+  if (pathname.startsWith('/approvals/')) {
+    return [
+      { label: 'Dashboard', path: '/' },
+      { label: '审批', path: '/approvals' },
+      { label: '审批详情', path: pathname },
+    ]
+  }
+
+  const segments = pathname.split('/').filter(Boolean)
 
   return segments.map((segment, index) => {
     const path = `/${segments.slice(0, index + 1).join('/')}`
 
     return {
-      label: routeLabels.get(segment) ?? segment,
+      label: index === 0 ? routeLabels.get(segment) ?? segment : segment,
       path,
     }
   })
