@@ -1,0 +1,283 @@
+from __future__ import annotations
+
+import asyncio
+import sys
+import tempfile
+import types
+import unittest
+from datetime import datetime, timezone
+from pathlib import Path
+
+from quantagent.core.registry import PluginManifest, PluginRecord, PluginRegistry, PluginSource, PluginStatus, PluginType
+from quantagent.core.runtime import PluginRuntimeService
+from quantagent.core.scheduling import (
+    FrozenSchedulingClock,
+    InMemoryPluginRunRepository,
+    IntervalSchedulePolicy,
+    PluginRunStatus,
+    PluginSchedulingService,
+    PluginTriggerRequest,
+    PluginTriggerType,
+)
+from quantagent.plugin_sdk import BasePlugin, PluginInvokeResult, PluginRuntimeError
+
+
+class StaticScanner:
+    def __init__(self, records: list[PluginRecord]) -> None:
+        self._records = records
+
+    def scan(self) -> list[PluginRecord]:
+        return list(self._records)
+
+
+class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self) -> None:
+        self._module_names: list[str] = []
+        self.clock = FrozenSchedulingClock(datetime(2026, 5, 28, 8, 0, tzinfo=timezone.utc))
+        self.repository = InMemoryPluginRunRepository()
+
+    async def asyncTearDown(self) -> None:
+        for module_name in self._module_names:
+            sys.modules.pop(module_name, None)
+
+    async def test_manual_trigger_success_records_succeeded_run(self) -> None:
+        class SuccessPlugin(BasePlugin):
+            async def invoke(self, request):
+                return PluginInvokeResult(
+                    output={"items": [], "count": 0},
+                    metadata={"trace_id": request.request_id},
+                )
+
+        self._install_module("test_scheduling_success", SuccessPlugin)
+        service = self._service(self._record(entrypoint="test_scheduling_success:plugin"))
+        request = PluginTriggerRequest(
+            plugin_id="quantagent.test.scheduling",
+            capability="source.fetch",
+            request_id="req-success",
+            trigger_type=PluginTriggerType.MANUAL,
+            input={"query": "oil"},
+            effective_config={"enabled": True},
+            metadata={"source": "manual-test"},
+        )
+
+        self.clock.advance(seconds=0.25)
+        run = await service.trigger(request)
+
+        self.assertEqual(run.status, PluginRunStatus.SUCCEEDED)
+        self.assertEqual(run.output_summary["items"], ())
+        self.assertEqual(run.output_summary["count"], 0)
+        self.assertEqual(run.metadata["source"], "manual-test")
+        self.assertIsNone(run.error_summary)
+        self.assertEqual(run.duration_ms, 0)
+        history = self.repository.get_history(run.run_id)
+        self.assertEqual([item.status for item in history], [PluginRunStatus.QUEUED, PluginRunStatus.RUNNING, PluginRunStatus.SUCCEEDED])
+
+    async def test_runtime_structured_failure_records_failed_run(self) -> None:
+        class StructuredFailingPlugin(BasePlugin):
+            async def invoke(self, request):
+                raise PluginRuntimeError(
+                    code="PLUGIN_REMOTE_FAILED",
+                    message="token=abc123 refused at /home/xxs/private.env",
+                    stage="invoke",
+                    retryable=True,
+                    details={
+                        "token": "abc123",
+                        "path": "/home/xxs/private.env",
+                        "nested": {"cookie": "session=value"},
+                        "safe": "visible",
+                    },
+                )
+
+        self._install_module("test_scheduling_failure", StructuredFailingPlugin)
+        service = self._service(self._record(entrypoint="test_scheduling_failure:plugin"))
+
+        self.clock.advance(seconds=0.1)
+        run = await service.trigger(self._request(request_id="req-fail"))
+
+        self.assertEqual(run.status, PluginRunStatus.FAILED)
+        self.assertEqual(run.error_summary["code"], "PLUGIN_REMOTE_FAILED")
+        self.assertEqual(run.error_summary["stage"], "invoke")
+        self.assertEqual(run.error_summary["retryable"], True)
+        self.assertNotIn("abc123", run.error_summary["message"])
+        self.assertEqual(run.error_summary["details"]["token"], "[REDACTED]")
+        self.assertEqual(run.error_summary["details"]["nested"]["cookie"], "[REDACTED]")
+        self.assertEqual(run.error_summary["details"]["safe"], "visible")
+
+    async def test_timeout_records_timeout_run(self) -> None:
+        class SlowPlugin(BasePlugin):
+            async def invoke(self, request):
+                await asyncio.sleep(0.05)
+                return PluginInvokeResult(output={"done": True})
+
+        self._install_module("test_scheduling_timeout", SlowPlugin)
+        service = self._service(self._record(entrypoint="test_scheduling_timeout:plugin"))
+
+        run = await service.trigger(self._request(request_id="req-timeout", timeout_ms=10))
+
+        self.assertEqual(run.status, PluginRunStatus.TIMEOUT)
+        self.assertEqual(run.timeout_ms, 10)
+        self.assertEqual(run.error_summary["code"], "PLUGIN_INVOKE_TIMEOUT")
+        self.assertEqual(run.error_summary["details"]["timeout_ms"], 10)
+        self.assertIsNotNone(run.finished_at)
+        self.assertIsNotNone(run.duration_ms)
+
+    async def test_cleanup_failure_after_success_is_recorded_once_as_failed_run(self) -> None:
+        class StopFailingPlugin(BasePlugin):
+            async def invoke(self, request):
+                return PluginInvokeResult(output={"ok": True})
+
+            async def stop(self):
+                raise PluginRuntimeError(
+                    code="PLUGIN_STOP_FAILED_BY_TEST",
+                    message="Plugin stop failed by test.",
+                    stage="stop",
+                )
+
+        self._install_module("test_scheduling_cleanup_failure", StopFailingPlugin)
+        service = self._service(self._record(entrypoint="test_scheduling_cleanup_failure:plugin"))
+
+        run = await service.trigger(self._request(request_id="req-stop-failed"))
+
+        self.assertEqual(run.status, PluginRunStatus.FAILED)
+        self.assertEqual(run.error_summary["code"], "PLUGIN_STOP_FAILED_BY_TEST")
+        self.assertNotIn("cleanup_error", run.error_summary["details"])
+
+    async def test_empty_result_is_succeeded_with_empty_summary(self) -> None:
+        class EmptyPlugin(BasePlugin):
+            async def invoke(self, request):
+                return PluginInvokeResult()
+
+        self._install_module("test_scheduling_empty", EmptyPlugin)
+        service = self._service(self._record(entrypoint="test_scheduling_empty:plugin"))
+
+        run = await service.trigger(self._request(request_id="req-empty"))
+
+        self.assertEqual(run.status, PluginRunStatus.SUCCEEDED)
+        self.assertEqual(dict(run.output_summary), {})
+        self.assertIsNone(run.error_summary)
+
+    async def test_interval_policy_builds_interval_trigger(self) -> None:
+        policy = IntervalSchedulePolicy(
+            interval_seconds=60,
+            jitter_seconds=5,
+            metadata={"schedule": "hourly"},
+        )
+
+        next_run = policy.next_run_at(self.clock.now(), applied_jitter_seconds=3)
+        request = policy.build_trigger_request(
+            plugin_id="quantagent.test.scheduling",
+            capability="source.fetch",
+            request_id="req-interval",
+            effective_config={"enabled": True},
+            input={"cursor": "next"},
+            metadata={"source": "policy"},
+        )
+
+        self.assertEqual(next_run, datetime(2026, 5, 28, 8, 1, 3, tzinfo=timezone.utc))
+        self.assertEqual(request.trigger_type, PluginTriggerType.INTERVAL)
+        self.assertEqual(request.metadata["schedule"], "hourly")
+        self.assertEqual(request.metadata["source"], "policy")
+
+    async def test_runtime_context_does_not_expose_scheduler_or_host_objects(self) -> None:
+        captured = {}
+
+        class InspectingPlugin(BasePlugin):
+            async def invoke(self, request):
+                captured["context"] = self.context
+                captured["input"] = request.input
+                return PluginInvokeResult(output={"ok": True})
+
+        self._install_module("test_scheduling_context", InspectingPlugin)
+        service = self._service(self._record(entrypoint="test_scheduling_context:plugin"))
+
+        run = await service.trigger(
+            self._request(
+                request_id="req-context",
+                input={"query": "rss"},
+                effective_config={"enabled": True},
+                metadata={"origin": "test"},
+            )
+        )
+
+        self.assertEqual(run.status, PluginRunStatus.SUCCEEDED)
+        context = captured["context"]
+        for forbidden in ("db", "session", "scheduler", "event_bus", "service", "secret_resolver"):
+            self.assertFalse(hasattr(context, forbidden))
+        self.assertNotIn("scheduler", captured["input"])
+
+    async def test_non_json_safe_payload_is_failed_without_runtime_invoke(self) -> None:
+        class NeverReachedPlugin(BasePlugin):
+            async def invoke(self, request):
+                raise AssertionError("runtime invoke should not be reached for invalid payloads")
+
+        self._install_module("test_scheduling_invalid_payload", NeverReachedPlugin)
+        service = self._service(self._record(entrypoint="test_scheduling_invalid_payload:plugin"))
+        request = self._request(request_id="req-invalid")
+        object.__setattr__(request, "input", {"bad": object()})
+
+        run = await service.trigger(request)
+
+        self.assertEqual(run.status, PluginRunStatus.FAILED)
+        self.assertEqual(run.error_summary["code"], "PLUGIN_DTO_VALIDATION_FAILED")
+        self.assertEqual(run.error_summary["stage"], "invoke")
+
+    def _service(self, record: PluginRecord) -> PluginSchedulingService:
+        registry = PluginRegistry(StaticScanner([record]))
+        return PluginSchedulingService(
+            registry=registry,
+            runtime=PluginRuntimeService(),
+            repository=self.repository,
+            clock=self.clock,
+        )
+
+    def _request(
+        self,
+        *,
+        request_id: str,
+        input: dict[str, object] | None = None,
+        effective_config: dict[str, object] | None = None,
+        metadata: dict[str, object] | None = None,
+        timeout_ms: int | None = None,
+    ) -> PluginTriggerRequest:
+        return PluginTriggerRequest(
+            plugin_id="quantagent.test.scheduling",
+            capability="source.fetch",
+            request_id=request_id,
+            trigger_type=PluginTriggerType.MANUAL,
+            input=input or {},
+            effective_config=effective_config or {"enabled": True},
+            metadata=metadata or {},
+            timeout_ms=timeout_ms,
+        )
+
+    def _install_module(self, module_name: str, plugin) -> None:
+        module = types.ModuleType(module_name)
+        module.plugin = plugin
+        sys.modules[module_name] = module
+        self._module_names.append(module_name)
+
+    def _record(
+        self,
+        *,
+        entrypoint: str,
+        status: PluginStatus = PluginStatus.VALID,
+    ) -> PluginRecord:
+        return PluginRecord(
+            id="quantagent.test.scheduling",
+            source=PluginSource.OFFICIAL,
+            path=Path(tempfile.gettempdir()),
+            status=status,
+            manifest=PluginManifest(
+                id="quantagent.test.scheduling",
+                name="Scheduling Test",
+                type=PluginType.SOURCE,
+                version="0.1.0",
+                entrypoint=entrypoint,
+                capabilities=("source.fetch",),
+                config_schema="config.schema.json",
+            ),
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
