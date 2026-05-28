@@ -17,11 +17,30 @@
 ## 架构文档与真源
 
 - `docs/design/` 是项目方向、模块边界和阶段性架构约定的主要参考，但不是一版钉死的实现命令。
+- `.agents/skills/references/` 是跨 skill、跨阶段复用的工程规范和模块 gate，不是 CR 专用资料；规划、写 issue、生成 OpenSpec、实现、PR 和 review 都应按需读取。
 - 实际开发中如果发现设计文档与实现成本、框架限制、业务边界或安全约束冲突，应在 PR 中说明取舍，并判断是否需要回写设计文档或 OpenSpec。
 - 对项目有长期影响的规则，不能只留在对话里；应固化到合适的 `AGENTS.md`、`docs/design/` 或开 `openspec/`。
 - 新 feature、破坏性变更、跨模块契约变更和风险边界变化必须关联真源：issue、OpenSpec change、设计文档段落或 PR 评论。
 - PR 说明必须写清楚证据链：为什么这样改、依据来自哪里、验证了什么、还有哪些未验证风险。
 - 设计文档只提供大方向时，以当前代码、用户最新确认和可运行验证结果作为落地依据。
+
+## Reference 发现机制
+
+- AI 在规划、实现或 review 前，必须先根据本轮影响面主动发现相关规范，不要只读固定的 `AGENTS.md` 和当前代码。
+- 发现维度至少包括：
+  - 路径：例如 `apps/web`、`apps/api`、`packages/core`、`plugins`、`runtime`。
+  - 能力：例如 auth、API client、router、query、realtime、database、plugin registry、approval、audit、secret。
+  - 风险：例如文件职责、目录拆分、权限、安全、契约、迁移、生成物、测试、debug、性能。
+- 推荐发现命令：
+
+```bash
+find .agents/skills/references -maxdepth 1 -type f | sort
+rg -n "<路径或能力关键词>" .agents/skills/references docs/design docs/prd openspec/specs
+```
+
+- 发现到匹配 reference 后，必须读取后再规划或修改；如果只找到较粗设计文档，也要继续查是否有更具体的共享 gate 或模块 reference。
+- 如果没有匹配 reference，按 `AGENTS.md`、最近层级 `AGENTS.md`、设计文档和现有实现推进，并在 PR 或 issue 中说明本轮没有发现更细规范；必要时建议补新的 reference。
+- 不把 reference discovery 当成全量扫仓库。只按本轮路径、能力和风险读取直接相关文件。
 
 ## 控制面沉淀
 
@@ -33,7 +52,7 @@
 
 ## 工程质量硬门槛
 
-- 修改代码或生成 OpenSpec 前，必须读取根目录 `AGENTS.md`、被修改路径最近层级的 `AGENTS.md`、关联 issue 正文与评论、相关 `docs/design/`、`docs/prd/`、`openspec/` 或 PR 讨论；不能只按聊天记忆或模型习惯动手。
+- 修改代码或生成 OpenSpec 前，必须读取根目录 `AGENTS.md`、被修改路径最近层级的 `AGENTS.md`、按影响面发现到的 `.agents/skills/references/`、关联 issue 正文与评论、相关 `docs/design/`、`docs/prd/`、`openspec/` 或 PR 讨论；不能只按聊天记忆或模型习惯动手。
 - 新 feature、跨文件改动、行为变化或契约变化进入实现前，必须先明确职责边界、复用点、数据流、失败路径和验证入口；这些判断应体现在 OpenSpec、issue、PR 说明或实现注释中。
 - 禁止把页面、路由、service、DTO、状态管理、API 调用和业务规则混写成一个大文件；复杂能力必须按既有 app/package 边界拆成可 review、可测试的模块。
 - 文件职责必须优先服务可读性和 AI 可定向阅读。新增或重构模块时，优先按职责拆文件，让文件名说明唯一主要职责；不要把 API 调用、DTO/types、状态机、React provider、hook、policy、UI、测试 fixture 混在同一文件。

@@ -14,6 +14,8 @@
 
 ## 目录与代码
 
+- 规划或实现 Web 变更前，先按根目录 `AGENTS.md` 的 reference 发现机制，用本轮路径和能力关键词在 `.agents/skills/references/`、`docs/design/`、`docs/prd/`、`openspec/specs/` 中查找更具体规范；例如 route、query、API client、runtime、auth、realtime、文件职责、目录拆分、权限或测试。
+- 如果发现共享 Web gate、文件职责规范或相关设计文档，必须先读取并体现在目录规划、文件职责和验证入口中；不能只按当前 `apps/web` 现状或旧 flat 示例继续写。
 - API 调用收敛到 `src/shared/api/`；不要在页面组件里散落裸 `fetch` 或临时请求逻辑。
 - 运行时配置收敛到 `src/shared/config/`；不要在组件中硬编码后端地址或部署参数。
 - 应用级 provider、router、layout 放在 `src/app/`。
@@ -33,7 +35,7 @@
 - TailwindCSS 是默认样式表达；优先使用现有 token、utility 和 `tailwind-merge` 组合样式，避免为普通布局、间距、颜色和状态单独写 CSS。
 - 页面出现可复用区块、复杂状态、表单、表格、timeline、risk panel、权限状态、错误/空/加载态时，必须拆成命名组件和必要 hooks，不能把所有 JSX、请求和状态堆在 route 文件里。
 - 业务组件优先放在对应 `src/features/<domain>/components/`；只有跨两个以上业务域复用且不含业务规则的组件才进入 `src/shared/ui/`。
-- 组件目录增长时，必须继续按 `components/`、`hooks/`、`view-models/`、`types/` 等职责拆分；不要在单个目录下无序平铺一批命名随意的组件文件。
+- 组件目录增长时，必须继续按 `components/`、`hooks/`、`types/`、`utils/` 等职责拆分；不要在单个目录下无序平铺一批命名随意的组件文件。
 - 新增 UI 必须覆盖 loading、empty、error、permission denied、sensitive masked 等与本功能相关的状态；权限不足和后端错误应显示可排查的 request id。
 - 管理台 UI 应保持密度、可扫描性和操作反馈，不写营销落地页式 hero、装饰性大卡片或与运行时管理无关的介绍文案。
 
