@@ -9,7 +9,7 @@
 - 在 `apps/api` 引入 API 私有 observability/logging 能力，用于日志初始化、请求上下文、结构化 JSON Lines 输出、脱敏、队列化写入、文件分类、轮转和 maintenance。
 - 将现有 `X-Request-ID` 能力扩展为 request context，补齐 `trace_id`，并保证响应 header、错误 envelope 和日志字段一致。
 - 将日志数据写入 `LOG_DIR/{stream}/YYYY/MM/DD/*.jsonl`，其中 `LOG_DIR` 默认解析为 `RUNTIME_DIR/logs/api`，stream 至少包括 `access`、`app`、`error`、`security`、`audit`。
-- 使用 `{service}.{env}.{instance_id}.pid-{pid}.{stream}.{yyyyMMddTHH}[.part-NNN].jsonl` 命名活跃文件和轮转文件，避免多进程写同一个文件。
+- 使用 `{service}.{env}.{instance_id}.pid-{pid}.{stream}.{YYYYMMDDTHH}[.part-NNN].jsonl` 命名活跃文件和轮转文件，避免多进程写同一个文件。
 - 阶段 1 即采用队列化写入，避免普通请求路径直接承担文件 IO；阶段 2 补充关闭文件压缩、按 stream retention、启动补偿清理和磁盘水位保护。
 - 更新 `apps/api` README、环境变量样例和测试，说明日志配置、文件布局、轮转、压缩、保留和降级策略。
 

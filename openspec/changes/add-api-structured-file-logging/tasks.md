@@ -25,7 +25,7 @@
 ## 4. 阶段 1：文件布局、轮转与队列写入
 
 - [ ] 4.1 实现 stream 到文件目录的映射：`LOG_DIR/{stream}/YYYY/MM/DD/`，支持 `access`、`app`、`error`、`security`、`audit`，默认 `LOG_DIR` 来自 `RUNTIME_DIR/logs/api`。
-- [ ] 4.2 实现文件命名：`{service}.{env}.{instance_id}.pid-{pid}.{stream}.{yyyyMMddTHH}[.part-NNN].jsonl`。
+- [ ] 4.2 实现文件命名：`{service}.{env}.{instance_id}.pid-{pid}.{stream}.{YYYYMMDDTHH}[.part-NNN].jsonl`，并统一目录日期占位符为 `YYYY/MM/DD`、文件小时分片占位符为 `YYYYMMDDTHH`。
 - [ ] 4.3 实现小时轮转和大小轮转，超过大小阈值时切换到下一个 `part-NNN`。
 - [ ] 4.4 实现阶段 1 队列化写入，普通请求路径只构造记录并入队，由后台 listener 写入文件。
 - [ ] 4.5 实现队列满降级策略：access 可丢弃、采样或聚合计数，error/security/audit 尽量保留；关键 stream 入队失败时走受限 fallback 或至少输出一次脱敏 stderr warning，且不得递归写日志或无限阻塞。
@@ -38,7 +38,7 @@
 - [ ] 5.3 补充文件目录、文件命名、小时轮转、大小轮转和 part 编号测试，所有文件写入测试使用临时目录。
 - [ ] 5.4 补充队列写入和队列满降级测试，验证 access 降级不影响 error/security/audit 的尽量保留策略。
 - [ ] 5.5 更新 `apps/api/README.md`、根 `.env.example`、`apps/api/.env.example`，说明阶段 1 支持的日志配置、文件布局、命名、轮转、脱敏和非目标。
-- [ ] 5.6 运行 `cd apps/api && uv run python -m unittest discover -s src`，并在实现 PR 中说明阶段 1 验证结果。
+- [ ] 5.6 运行 `cd apps/api && uv run python -m unittest discover -s src/tests`，并在实现 PR 中说明阶段 1 验证结果。
 
 ## 6. 阶段 1 Review Gate
 
@@ -60,5 +60,5 @@
 - [ ] 8.2 补充按 stream retention 清理测试和启动补偿清理测试。
 - [ ] 8.3 补充磁盘水位保护和 access 降级测试，验证关键 stream 尽量保留。
 - [ ] 8.4 更新 README 和 env example，补充压缩、retention、补偿清理、磁盘保护和阶段 2 运维说明。
-- [ ] 8.5 运行 `cd apps/api && uv run python -m unittest discover -s src`。
+- [ ] 8.5 运行 `cd apps/api && uv run python -m unittest discover -s src/tests`。
 - [ ] 8.6 最终 PR 描述更新为完整交付范围、两阶段提交边界、验证结果、未验证风险和非目标。
