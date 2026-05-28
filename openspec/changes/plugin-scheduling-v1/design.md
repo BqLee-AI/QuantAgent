@@ -127,7 +127,7 @@ API / test harness / worker
   -> PluginRegistry 查找有效 PluginRecord
   -> 创建 queued run
   -> 标记 running
-  -> PluginRuntimeService.invoke(record, capability, request_id, config=effective_config, input=input, metadata=metadata)
+  -> PluginRuntimeService.invoke(record, capability=capability, request_id=request_id, config=effective_config, input=input, metadata=metadata)
   -> 根据 invocation result 写 succeeded / failed / timeout
   -> 返回 PluginRunRecord
 ```
