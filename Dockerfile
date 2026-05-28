@@ -24,9 +24,6 @@ FROM python:3.12-slim-bookworm AS runtime
 WORKDIR /app
 
 ENV PATH="/opt/venv/bin:$PATH" \
-    APP_ENV=production \
-    HOST=0.0.0.0 \
-    PORT=8000 \
     PYTHONUNBUFFERED=1
 
 COPY --from=builder /opt/venv /opt/venv
@@ -42,4 +39,4 @@ USER quantagent
 
 EXPOSE 8000
 
-CMD ["api"]
+CMD ["uvicorn", "quantagent.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

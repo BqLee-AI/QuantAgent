@@ -75,9 +75,9 @@ docker compose up -d db
 
 Compose 不再把根 `.env` 中的 API 应用配置硬注入为 API 进程环境变量。API 容器同样通过 `apps/api/.env` 或选中的 `apps/api/.env.<APP_ENV>` 读取 `DATABASE_URL`、`RUNTIME_DIR`、`LOG_LEVEL`、`AUTH_*` 等配置；容器侧数据库 URL 应使用 `db:5432`，宿主机直跑可使用 `localhost:15432`。
 
-Compose 仅保留容器网络入口变量 `HOST` 和 `PORT`，默认值分别为 `0.0.0.0` 和 `8000`，同时允许外部环境或 CI 覆盖；根 `.env` 中的 `API_BIND_HOST`、`API_PORT` 只控制宿主机发布地址和端口，容器内默认监听 `8000`。
+Compose 不注入 `HOST` 或 `PORT`，避免宿主机 shell 变量覆盖 API 配置；容器内监听地址由镜像启动命令固定为 `0.0.0.0:8000`。根 `.env` 中的 `API_BIND_HOST`、`API_PORT` 只控制宿主机发布地址和端口，不改变容器内监听端口。
 
-为了避免首次启动时因为缺少 `apps/api/.env` 而退回到镜像默认值，Compose 仍提供最小安全回退：`APP_ENV`、`DATABASE_URL`、`RUNTIME_DIR`、`LOG_LEVEL` 会从根 `.env` 或外部环境注入容器；`apps/api/.env*` 挂载仍然保留，但现在用于 API 私有覆盖和多环境文件矩阵，而不是唯一配置来源。
+为了保留 dotenv 优先级，Compose 不为 API 服务提供 `APP_ENV`、`DATABASE_URL`、`RUNTIME_DIR`、`LOG_LEVEL` 回退注入。首次启动前应创建 `apps/api/.env`，并把容器侧 `DATABASE_URL` 配成 `db:5432`、`RUNTIME_DIR` 配成 `/app/runtime`。
 
 `./apps/api:/app/apps/api` 挂载主要用于让容器内可见 API dotenv 覆盖文件；`./runtime:/app/runtime` 挂载前请确认宿主机 `runtime/` 目录已存在，避免 Docker 创建 root-owned 空目录影响后续写入。
 
@@ -168,7 +168,7 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 - `DATABASE_URL`：API 数据库连接串；容器内应指向 `db:5432`，宿主机直跑通常指向 `localhost:15432`。
 - `RUNTIME_DIR`：API 运行时目录，容器内通常为 `/app/runtime`，宿主机直跑通常为 `./runtime`。
 - `LOG_LEVEL`：应用日志级别，例如 `DEBUG`、`INFO`、`WARNING`、`ERROR`。
-- `API_HOST`：直跑 API 时的监听地址，默认 `127.0.0.1`；兼容读取历史变量名 `HOST`。Compose 中不从根 `.env` 注入该变量，容器内固定使用 `HOST=0.0.0.0`。
+- `API_HOST`：直跑 API 时的监听地址，默认 `127.0.0.1`；兼容读取历史变量名 `HOST`。Compose 中不注入该变量，容器内由启动命令监听 `0.0.0.0`。
 - `API_PORT`：直跑 API 时的监听端口，默认 `8000`；兼容读取历史变量名 `PORT`。在根目录 Compose 中，该变量只表示宿主机发布端口，容器内监听端口固定为 `8000`。
 - `API_V1_PREFIX`：API v1 路由前缀，默认 `/api/v1`。
 - `AUTH_ENABLED`：是否启用鉴权，默认 `true`。

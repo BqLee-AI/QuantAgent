@@ -5,13 +5,6 @@ services:
       dockerfile: Dockerfile
       target: runtime
     image: quantagent-api:local
-    environment:
-      APP_ENV: ${APP_ENV:-local}
-      DATABASE_URL: ${API_DATABASE_URL:-postgresql+psycopg://quantagent:quantagent@db:5432/quantagent}
-      HOST: ${HOST:-0.0.0.0}
-      PORT: ${PORT:-8000}
-      RUNTIME_DIR: ${API_RUNTIME_DIR:-/app/runtime}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
       - "${API_BIND_HOST:-127.0.0.1}:${API_PORT:-8000}:8000"
     volumes:
