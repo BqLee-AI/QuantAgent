@@ -15,7 +15,7 @@ Issue #141 要解决的是插件底座从“能被 Runtime 调用”推进到“
 - 定义平台手动 trigger 插件 capability 的最小 contract。
 - 定义第一版 interval 调度边界，但不实现完整分布式 scheduler。
 - 定义 `PluginRun` 最小状态字段：`queued`、`running`、`succeeded`、`failed`、`timeout`、`cancelled`。
-- 定义 run 审计字段：`run_id`、`plugin_id`、`capability`、`request_id`、`trigger_type`、`started_at`、`finished_at`、`duration_ms`、`error_summary`、`metadata`。
+- 定义 run 审计字段：`run_id`、`plugin_id`、`capability`、`request_id`、`trigger_type`、`started_at`、`finished_at`、`duration_ms`、`output_summary`、`error_summary`、`metadata`。
 - 定义 timeout、异常、DTO 校验失败、插件结构化错误和空结果的处理语义。
 - 明确插件不负责调度，不启动后台循环；平台负责 config/effective_config 注入、状态记录和后续恢复。
 
