@@ -3,7 +3,7 @@ import {
   Chip,
 } from '@heroui/react'
 import { Link } from '@tanstack/react-router'
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 
 import styles from './MainflowPage.module.css'
 import {
@@ -164,6 +164,14 @@ function HealthCard({ alert }: { alert: HealthAlert }) {
       </Link>
     </article>
   )
+}
+
+function maskToken(token: string) {
+  if (token.length <= 8) {
+    return '***'
+  }
+
+  return `${token.slice(0, 4)}…${token.slice(-4)}`
 }
 
 export function DashboardPageContent() {
@@ -340,6 +348,8 @@ export function EventsIndexPageContent() {
 
 export function EventDetailPageContent({ eventId }: { eventId: string }) {
   const event = featuredEvents.find((item) => item.id === eventId) ?? featuredEvents[0]!
+  const relatedApproval =
+    approvalsQueue.find((item) => item.eventTitle === event.title) ?? approvalsQueue[0] ?? null
 
   return (
     <div className={styles.page}>
@@ -388,9 +398,17 @@ export function EventDetailPageContent({ eventId }: { eventId: string }) {
             <p className={styles.detailText}>风险摘要：需要 strong_confirm，且当前建议不等于真实执行完成。</p>
           </div>
           <div className={styles.detailActions}>
-            <Link className={styles.actionLink} to="/approvals/$approvalId" params={{ approvalId: approvalsQueue[0]!.id }}>
-              进入审批
-            </Link>
+            {relatedApproval ? (
+              <Link
+                className={styles.actionLink}
+                to="/approvals/$approvalId"
+                params={{ approvalId: relatedApproval.id }}
+              >
+                进入审批
+              </Link>
+            ) : (
+              <span className={styles.tag}>当前事件暂无关联审批</span>
+            )}
             <Link className={styles.secondaryLink} to="/runtime">
               查看运行摘要
             </Link>
@@ -533,6 +551,8 @@ export function ApprovalsIndexPageContent() {
 
 export function ApprovalDetailPageContent({ approvalId }: { approvalId: string }) {
   const approval = approvalsQueue.find((item) => item.id === approvalId) ?? approvalsQueue[0]!
+  const relatedEvent =
+    featuredEvents.find((item) => item.title === approval.eventTitle) ?? featuredEvents[0] ?? null
 
   return (
     <div className={styles.page}>
@@ -577,9 +597,13 @@ export function ApprovalDetailPageContent({ approvalId }: { approvalId: string }
             若动作失败，后续真实实现必须展示 request_id / trace_id。本轮仅保留展示位，不发明后端响应。
           </p>
           <div className={styles.detailActions}>
-            <Link className={styles.secondaryLink} to="/events/$eventId" params={{ eventId: featuredEvents[0]!.id }}>
-              查看关联事件
-            </Link>
+            {relatedEvent ? (
+              <Link className={styles.secondaryLink} to="/events/$eventId" params={{ eventId: relatedEvent.id }}>
+                查看关联事件
+              </Link>
+            ) : (
+              <span className={styles.tag}>当前审批暂无关联事件</span>
+            )}
             <Link className={styles.secondaryLink} to="/approval-link/$token" params={{ token: 'preview-token' }}>
               预览授权页
             </Link>
@@ -591,6 +615,12 @@ export function ApprovalDetailPageContent({ approvalId }: { approvalId: string }
 }
 
 export function ApprovalLinkPageContent({ token }: { token: string }) {
+  const [showFullToken, setShowFullToken] = useState(false)
+
+  async function handleCopyToken() {
+    await navigator.clipboard.writeText(token)
+  }
+
   return (
     <div className={styles.page}>
       <section className="page-header">
@@ -608,11 +638,17 @@ export function ApprovalLinkPageContent({ token }: { token: string }) {
           description="manual_only 不能通过一次性链接绕过；首版保留受限上下文、风险提示和返回审批工作台入口。"
         />
         <div className={styles.detailSection}>
-          <p className={styles.detailText}>token 占位：{token}</p>
+          <p className={styles.detailText}>token 占位：{showFullToken ? token : maskToken(token)}</p>
           <p className={styles.detailText}>确认等级：link_confirm</p>
           <p className={styles.detailText}>状态：等待后端校验并换取短期上下文</p>
         </div>
         <div className={styles.detailActions}>
+          <Button size="sm" variant="outline" onPress={() => setShowFullToken((value) => !value)}>
+            {showFullToken ? '隐藏完整值' : '显示完整值'}
+          </Button>
+          <Button size="sm" variant="outline" onPress={() => void handleCopyToken()}>
+            复制完整值
+          </Button>
           <Link className={styles.secondaryLink} to="/approvals">
             返回审批工作台
           </Link>

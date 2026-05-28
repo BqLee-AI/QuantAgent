@@ -54,7 +54,7 @@ export const WORKSPACE_ROUTE_POLICY: Record<WorkspaceRoutePath, readonly Capabil
 }
 
 export const NAV_POLICY: readonly NavPolicyEntry[] = [
-  { label: 'Dashboard', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/'], to: '/' },
+  { label: '仪表盘', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/'], to: '/' },
   { label: '事件', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/events'], to: '/events' },
   { label: '运行态', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/runtime'], to: '/runtime' },
   { label: '审批', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/approvals'], to: '/approvals' },
@@ -90,16 +90,9 @@ export function resolveWorkspaceRoutePath(pathname: string): WorkspaceRoutePath 
     return '/'
   }
 
-  const families: readonly WorkspaceRoutePath[] = [
-    '/events',
-    '/approvals',
-    '/runtime',
-    '/plugins',
-    '/skills',
-    '/tools',
-    '/industries',
-    '/settings',
-  ]
+  const families = (Object.keys(WORKSPACE_ROUTE_POLICY) as WorkspaceRoutePath[]).filter(
+    (route) => route !== '/',
+  )
 
   const matchedFamily = families.find((family) => pathname === family || pathname.startsWith(`${family}/`))
 

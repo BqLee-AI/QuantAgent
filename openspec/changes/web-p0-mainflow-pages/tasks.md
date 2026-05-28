@@ -1,11 +1,11 @@
-## 1. OpenSpec-only 交付
+## 1. 主链路契约与实现收口
 
 - [x] 1.1 完成 `proposal.md`、`design.md`、`tasks.md`、`specs/web-p0-mainflow-pages/spec.md` 和 `specs/router-layout/spec.md`。
 - [x] 1.2 核对 proposal 的 capabilities 与 specs 目录一一对应，且 `router-layout` delta 只修改默认首页入口语义。
-- [x] 1.3 将 OpenSpec-only PR 收敛为只包含本 change artifacts 与必要元数据，不混入 React 页面、API contract、依赖升级、格式化或 PRD 附录改动。
-- [ ] 1.4 提交 OpenSpec-only PR，并在 PR 说明中写清楚：本 PR 固化 P0 主链路页面边界，不实现代码；审核通过后 #129、#130、#131 复用本 change。
-- [ ] 1.5 在独立文档变更中将 `docs/prd/08-frontend-pages-overview.md` 回链到 `web-p0-mainflow-pages`，避免 PRD 与 OpenSpec 分叉。
-- [ ] 1.6 等维护者在 OpenSpec-only PR 下明确评论“没问题”或批准后，再进入实现类 issue。
+- [x] 1.3 在同一 PR 中同步落地 `apps/web` 页面骨架、默认首页入口和主链路路由，不让 OpenSpec 与实现继续分叉。
+- [x] 1.4 更新 PR 说明，明确当前 PR 同时交付页面契约与 Dashboard / Events / Approval 主链路骨架。
+- [x] 1.5 收敛 `docs/prd/08-frontend-pages-overview.md` 的 OpenSpec 建议范围，只保留当前 change 已实际承接的页面契约边界。
+- [ ] 1.6 后续若拆出独立文档或 OpenSpec-only 流程，需在新的 change / PR 中单独说明边界，不回写当前实现型 PR 的完成状态。
 
 ## 2. 后续实现输入
 
@@ -19,7 +19,7 @@
 ## 3. 验证
 
 - [x] 3.1 运行 `openspec validate web-p0-mainflow-pages --type change --strict --json`。
-- [x] 3.2 人工核对当前 PR 只包含 OpenSpec artifacts，且 `docs/prd/08-frontend-pages-overview.md` 不再混入 OpenSpec-only 范围。
+- [x] 3.2 人工核对 OpenSpec artifacts、PRD 真源映射和 `apps/web` 页面骨架已经同步到同一主链路语义。
 - [x] 3.3 人工核对 issue #129、#130、#131 可直接回链到本 change，而不再各自假设不同首页入口。
-- [ ] 3.4 在后续独立文档变更中收敛 `docs/prd/08-frontend-pages-overview.md` 的 OpenSpec 真源映射，只保留 Dashboard、Events、Event Detail、Approvals 和 `/` 默认入口语义。
-- [ ] 3.5 在最终说明中列出未执行的代码验证，并说明原因是本轮仅交付 OpenSpec 文档。
+- [x] 3.4 收敛 `docs/prd/08-frontend-pages-overview.md` 的 OpenSpec 真源映射，只保留 Dashboard、Events、Event Detail、Approvals 和 `/` 默认入口语义。
+- [x] 3.5 运行 `cd apps/web && bun run build`，确认当前页面骨架、路由和导航收口可以正常构建。

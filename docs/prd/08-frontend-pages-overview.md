@@ -252,19 +252,17 @@ Model Providers / LLM Policies
 
 组件名、字段草案和原型只能作为参考，不应替代 `packages/contracts`、OpenAPI、JSON Schema 或 OpenSpec。
 
-## 后续 OpenSpec 建议
+## OpenSpec 真源映射
 
-若本 PRD 评审通过，应创建统一 change：
+当前已由 `web-p0-mainflow-pages` change 承接的范围：
 
-```text
-web-trader-workbench-v1
-```
+- Dashboard / Events / Event Detail / Approvals 的页面职责边界。
+- ApprovalRequest / ApprovalDecision / ApprovalLink 的主链路入口语义。
+- 根路径 `/` 作为独立 Dashboard 默认首页的 router-layout 语义。
 
-建议包含：
+当前未由该 change 承接、需要后续独立 change 收口的范围：
 
-- Dashboard / Events / Event Detail 行为 spec。
-- ApprovalRequest / ApprovalDecision / ApprovalLink 行为 spec。
-- EventAuditTimeline 节点和 diff 摘要 spec。
-- Scoring 展示语义 spec。
+- EventAuditTimeline 节点和 diff 摘要 contract 细化。
+- Scoring 展示语义和排序权重来源。
 - Registry / Plugin 治理入口的非顶层 Skill / Tool / Industry 约束。
 - Model Providers / LLM Policies 治理入口、ProviderPolicy 字段和敏感信息边界。

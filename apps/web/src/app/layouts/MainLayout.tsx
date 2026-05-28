@@ -77,7 +77,7 @@ export function MainLayout({ children }: PropsWithChildren) {
 
 function getBreadcrumbs(pathname: string) {
   if (pathname === '/') {
-    return [{ label: 'Dashboard', path: '/' }]
+    return [{ label: '仪表盘', path: '/' }]
   }
 
   if (pathname.startsWith('/approval-link/')) {
@@ -92,7 +92,7 @@ function getBreadcrumbs(pathname: string) {
 
     if (segments[2] === 'audit') {
       return [
-        { label: 'Dashboard', path: '/' },
+        { label: '仪表盘', path: '/' },
         { label: '事件', path: '/events' },
         { label: '事件详情', path: `/events/${segments[1]}` },
         { label: '审计时间线', path: pathname },
@@ -100,7 +100,7 @@ function getBreadcrumbs(pathname: string) {
     }
 
     return [
-      { label: 'Dashboard', path: '/' },
+      { label: '仪表盘', path: '/' },
       { label: '事件', path: '/events' },
       { label: '事件详情', path: pathname },
     ]
@@ -108,7 +108,7 @@ function getBreadcrumbs(pathname: string) {
 
   if (pathname.startsWith('/approvals/')) {
     return [
-      { label: 'Dashboard', path: '/' },
+      { label: '仪表盘', path: '/' },
       { label: '审批', path: '/approvals' },
       { label: '审批详情', path: pathname },
     ]
