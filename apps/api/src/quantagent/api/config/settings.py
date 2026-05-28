@@ -128,7 +128,7 @@ def _build_env_file_paths(
     )
     # APP_ENV controls which API-specific dotenv gets loaded; process env wins,
     # then base dotenv layers decide before environment-specific files are appended.
-    selected_env = (app_env or _resolve_app_env_from_files(base_files) or "").strip()
+    selected_env = (app_env or _resolve_app_env_from_files(base_files) or "").strip().lower()
     candidates = list(base_files)
     if selected_env and api_app_dir is not None:
         candidates.extend((api_app_dir / f".env.{selected_env}", api_app_dir / f".env.{selected_env}.local"))

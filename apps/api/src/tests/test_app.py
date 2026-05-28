@@ -802,6 +802,24 @@ class ApiAppTestCase(unittest.TestCase):
 
         self.assertEqual(settings.API_HOST, "0.0.0.0")
 
+    def test_app_env_uses_lowercase_when_selecting_environment_dotenv(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            api_dir = workspace / "apps/api"
+            api_dir.mkdir(parents=True)
+            (api_dir / ".env.production").write_text(
+                "LOG_LEVEL=ERROR\nAUTH_ADMIN_PASSWORD=prod-admin-password\nAUTH_SESSION_SECRET=production-session-secret-0123456789abcdef\n",
+                encoding="utf-8",
+            )
+
+            env_files = _build_env_file_paths(app_env="Production", cwd=workspace, source_repo_root=workspace, source_api_app_dir=api_dir)
+            settings = Settings(_env_file=tuple(str(path) for path in env_files), APP_ENV="Production")
+
+        self.assertIn(api_dir / ".env.production", env_files)
+        self.assertNotIn(api_dir / ".env.Production", env_files)
+        self.assertEqual(settings.LOG_LEVEL, "ERROR")
+        self.assertEqual(settings.APP_ENV, "Production")
+
     def test_env_file_paths_do_not_assume_repo_root_when_source_layout_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
