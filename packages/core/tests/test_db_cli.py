@@ -64,6 +64,28 @@ class DatabaseCliTestCase(unittest.TestCase):
         self.assertEqual(Path(config.config_file_name).parent, migration_root)
         self.assertEqual(Path(config.get_main_option("script_location")), migration_root / "alembic")
 
+    def test_migration_root_discovers_repo_layout_from_module_file_parent(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            repo_root = Path(temp_dir)
+            migration_root = repo_root / "packages" / "core"
+            migration_root.mkdir(parents=True)
+            (migration_root / "alembic.ini").write_text(
+                "[alembic]\nscript_location = alembic\n",
+                encoding="utf-8",
+            )
+            (migration_root / "alembic").mkdir()
+            module_file = repo_root / "venv" / "lib" / "python3.13" / "site-packages" / "quantagent" / "core" / "db" / "cli.py"
+            module_file.parent.mkdir(parents=True)
+            module_file.write_text("# test stub\n", encoding="utf-8")
+
+            with patch.dict("os.environ", {}, clear=True):
+                with patch("quantagent.core.db.cli.Path.cwd", return_value=Path("/nonexistent")):
+                    with patch("quantagent.core.db.cli.__file__", str(module_file)):
+                        config = cli.create_alembic_config()
+
+        self.assertEqual(Path(config.config_file_name).parent, migration_root)
+        self.assertEqual(Path(config.get_main_option("script_location")), migration_root / "alembic")
+
     def test_upgrade_defaults_to_head(self) -> None:
         with patch.object(settings, "DATABASE_URL", "sqlite:///:memory:"):
             with patch("quantagent.core.db.cli.command.upgrade") as upgrade:

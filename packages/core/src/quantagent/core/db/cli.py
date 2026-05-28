@@ -41,7 +41,7 @@ def _migration_root() -> Path:
 
     candidates = [
         *_iter_candidate_roots(Path.cwd().resolve()),
-        *_iter_candidate_roots(Path(__file__).resolve()),
+        *_iter_candidate_roots(Path(__file__).resolve().parent),
     ]
     for candidate in dict.fromkeys(candidates):
         if _is_migration_root(candidate):
