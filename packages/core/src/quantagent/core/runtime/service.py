@@ -5,8 +5,11 @@ import importlib
 import inspect
 import logging
 import re
+import sys
 from collections.abc import Awaitable, Callable, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from quantagent.core.registry.models import PluginError, PluginRecord, PluginStatus
@@ -125,7 +128,7 @@ class PluginRuntimeService:
 
         assert record.manifest is not None
         try:
-            plugin = self._load_entrypoint(record.manifest.entrypoint)
+            plugin = self._load_entrypoint(record.manifest.entrypoint, plugin_path=record.path)
             if not _has_runtime_shape(plugin):
                 return None, PluginError(
                     code="PLUGIN_RUNTIME_PROTOCOL_INVALID",
@@ -176,7 +179,7 @@ class PluginRuntimeService:
             return _to_plugin_error(exc, stage="stop", plugin_id=plugin_id)
         return None
 
-    def _load_entrypoint(self, entrypoint: str) -> Any:
+    def _load_entrypoint(self, entrypoint: str, *, plugin_path: Path | None = None) -> Any:
         module_name, separator, attribute_name = entrypoint.partition(":")
         if not separator or not module_name or not attribute_name:
             raise PluginRuntimeError(
@@ -185,7 +188,8 @@ class PluginRuntimeService:
                 stage="load",
             )
 
-        module = self._import_module(module_name)
+        with _plugin_import_path(plugin_path):
+            module = self._import_module(module_name)
         entrypoint_object = module
         for attribute in attribute_name.split("."):
             entrypoint_object = getattr(entrypoint_object, attribute)
@@ -227,6 +231,22 @@ def _has_runtime_shape(plugin: Any) -> bool:
         callable(getattr(plugin, method_name, None))
         for method_name in ("load", "start", "stop", "health_check", "invoke")
     )
+
+
+@contextmanager
+def _plugin_import_path(plugin_path: Path | None):
+    if plugin_path is None:
+        yield
+        return
+    path_entry = str(plugin_path)
+    sys.path.insert(0, path_entry)
+    try:
+        yield
+    finally:
+        try:
+            sys.path.remove(path_entry)
+        except ValueError:
+            pass
 
 
 async def _call_async(value: Awaitable[Any] | Any) -> Any:
