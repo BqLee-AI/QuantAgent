@@ -28,7 +28,7 @@
 5. 检查 debug route 是否通过 runtime/development split 隔离生产。
 6. 检查 `routeTree.gen.ts` 是否只来自生成流程。
 
-如果 route 承载了业务请求、表格、表单、弹窗或业务 hook 实现，继续读取 `file-responsibility-and-feature-structure.md`，给出应拆入的 feature 目录结构。
+如果 route 承载了业务请求、表格、表单、弹窗或业务 hook 实现，继续读取 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`，给出应拆入的 feature 目录结构。
 
 ## Must-fix
 

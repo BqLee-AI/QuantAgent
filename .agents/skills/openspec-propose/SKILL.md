@@ -27,10 +27,11 @@ When ready to implement, run /opsx:apply
 - Related `docs/design/*.md`, `docs/prd/*.md`, existing `openspec/changes/*`, issue comments, and PR discussion when referenced.
 - `.agents/skills/references/engineering-quality-gate.md`.
 - For `apps/web/**` changes, `.agents/skills/references/web-architecture-gate.md`.
+- For Web feature structure, complex routes, shared capabilities, or file splitting, `.agents/skills/references/web-file-responsibility-and-feature-structure.md`.
 
 Generated artifacts must be specific enough for implementation. Do not produce generic proposal/design/tasks text. If the change affects architecture, behavior, contracts, frontend UI, backend services, persistence, permissions, or auditability, the artifacts must record directory/file planning, layered architecture, responsibilities, core models, API/DTO/schema/event/config/database field drafts, reuse points, data flow, failure paths, and validation entrypoints.
 
-For Web changes, artifacts must explicitly apply `web-architecture-gate.md`: route boundaries, app runtime ownership, `apiClient -> BaseApi -> FeatureApi`, TanStack Query hooks, business hooks, view components, README / usage notes, Chinese comments, and directory grouping. Do not leave these choices for implementation.
+For Web changes, artifacts must explicitly apply `web-architecture-gate.md`: route boundaries, app runtime ownership, `apiClient -> BaseApi -> FeatureApi`, TanStack Query hooks, business hooks, view components, README / usage notes, Chinese comments, and directory grouping. For complex Web features, also apply `web-file-responsibility-and-feature-structure.md` so `design.md` and `tasks.md` name concrete target files and their responsibilities. Do not leave these choices for implementation.
 
 **Steps**
 
@@ -50,6 +51,7 @@ For Web changes, artifacts must explicitly apply `web-architecture-gate.md`: rou
    - The nearest `AGENTS.md` for affected app/package/plugin paths
    - `.agents/skills/references/engineering-quality-gate.md`
    - `.agents/skills/references/web-architecture-gate.md` when affected paths or requested scope involve `apps/web/**`
+   - `.agents/skills/references/web-file-responsibility-and-feature-structure.md` when a Web change needs feature structure or file splitting decisions
    - Related design/PRD/OpenSpec/issue/PR context named by the user or required by the affected boundary
 
    If context conflicts, capture the conflict in the artifacts instead of silently choosing.
@@ -94,6 +96,7 @@ For Web changes, artifacts must explicitly apply `web-architecture-gate.md`: rou
         - `specs/**/spec.md` must describe verifiable requirements and scenarios, not implementation chores.
         - `tasks.md` must show dependencies, parallel boundaries, write scopes, review gates, and validation actions.
       - For Web changes, apply `.agents/skills/references/web-architecture-gate.md` so `design.md` and `tasks.md` name the route, runtime/API, query/mutation, business hook, component, README, comment, and validation boundaries.
+      - For complex Web features, apply `.agents/skills/references/web-file-responsibility-and-feature-structure.md` so artifacts name the concrete route, api, contracts, query keys, queries, mutations, hooks, components, types, utils, and README files.
       - Apply `context` and `rules` as constraints - but do NOT copy them into the file
       - Show brief progress: "Created <artifact-id>"
 

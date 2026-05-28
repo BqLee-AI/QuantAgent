@@ -62,7 +62,7 @@ src/
 2. 当前文件是否是该职责的目标落点，还是只是历史上刚好写在这里？
 3. 如果以后同类页面复制这段代码，会扩大架构债务还是形成可复用模式？
 
-如果答案涉及“应该拆到哪些文件”，继续读取 `file-responsibility-and-feature-structure.md`，不要只给泛泛的“建议拆分”。
+如果答案涉及“应该拆到哪些文件”，继续读取 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`，不要只给泛泛的“建议拆分”。
 
 ## 常见 must-fix 信号
 

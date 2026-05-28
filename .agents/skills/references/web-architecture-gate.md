@@ -33,6 +33,8 @@ features/<area>/<domain>/
 
 `docs/design/09-frontend-architecture-design.md` 中的 `api.ts` / `queries.ts` flat 示例只代表早期方向；新代码和重构代码以本 gate 的职责目录为准。小功能可以暂时少建子目录，但不能把不同变化原因混进同一文件。
 
+当 Web 变更涉及新增 feature、复杂 route、目录增长、shared 能力，或同一 diff 同时改 API / query / hook / component / types / README 时，必须继续读取 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`。这份文件是规划和实现阶段的规范，不是只给 CR 用。
+
 ## 文件职责矩阵
 
 | 文件 / 目录 | 只负责 | 禁止放入 |
@@ -103,6 +105,7 @@ app/runtime -> apiClient -> BaseApi -> FeatureApi -> queries/mutations -> busine
 ## 规划和 Review 口径
 
 - Issue / OpenSpec 规划阶段必须写清目录蓝图、文件职责、runtime/API/query/hook/component 边界、失败路径、验证入口和是否需要 README / 中文注释。
+- 涉及复杂 feature 或文件拆分时，Issue / OpenSpec / implementation 必须对照 `.agents/skills/references/web-file-responsibility-and-feature-structure.md` 写清目标文件和目录。
 - Implementation 阶段如果发现 artifacts 没体现这些边界，应先暂停补 artifacts 或向维护者确认，不能按当前代码习惯继续堆。
 - PR 阶段必须说明实现是否遵循本 gate；偏离时说明原因、风险和后续收敛点。
 - Code Review 阶段只对当前 diff 中新增或扩大债务的问题给 actionable finding；未触碰历史问题列 residual risk / defer。

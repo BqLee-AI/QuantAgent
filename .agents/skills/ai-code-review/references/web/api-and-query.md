@@ -38,7 +38,7 @@
 5. 检查 mutation 成功、失败、权限不足、网络错误是否有可排查反馈。
 6. 检查文件职责是否单一：runtime 容器、client 配置、dedupe、envelope、errors、BaseApi、FeatureApi、contracts、query keys、query hook、mutation hook 和 UI 是否分开。
 
-如果一个变更同时新增 API、query、mutation、业务 hook 或 UI，继续读取 `file-responsibility-and-feature-structure.md`，直接指出目标文件和目录。
+如果一个变更同时新增 API、query、mutation、业务 hook 或 UI，继续读取 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`，直接指出目标文件和目录。
 
 ## Must-fix
 

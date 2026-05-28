@@ -13,7 +13,7 @@ Implement tasks from an OpenSpec change.
 
 **Input**: Optionally specify a change name. If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
 
-**QuantAgent quality gate**: Before implementation, read `.agents/skills/references/engineering-quality-gate.md` and verify the selected change artifacts are implementation-ready. If affected paths include `apps/web/**`, also read `.agents/skills/references/web-architecture-gate.md`. If the artifacts do not describe directory/file planning, responsibilities, core models, interface fields, reuse points, data flow, failure paths, and validation entrypoints, pause and propose artifact updates instead of writing code.
+**QuantAgent quality gate**: Before implementation, read `.agents/skills/references/engineering-quality-gate.md` and verify the selected change artifacts are implementation-ready. If affected paths include `apps/web/**`, also read `.agents/skills/references/web-architecture-gate.md`. For complex Web features, routes, shared capabilities, or file splitting, read `.agents/skills/references/web-file-responsibility-and-feature-structure.md`. If the artifacts do not describe directory/file planning, responsibilities, core models, interface fields, reuse points, data flow, failure paths, and validation entrypoints, pause and propose artifact updates instead of writing code.
 
 **Steps**
 
@@ -58,7 +58,7 @@ Implement tasks from an OpenSpec change.
    - **spec-driven**: proposal, specs, design, tasks
    - Other schemas: follow the contextFiles from CLI output
 
-   Also read `.agents/skills/references/engineering-quality-gate.md`, root `AGENTS.md`, and the nearest `AGENTS.md` files for the paths the tasks will touch. For Web tasks, read `.agents/skills/references/web-architecture-gate.md`.
+   Also read `.agents/skills/references/engineering-quality-gate.md`, root `AGENTS.md`, and the nearest `AGENTS.md` files for the paths the tasks will touch. For Web tasks, read `.agents/skills/references/web-architecture-gate.md`; for complex Web feature structure or file splitting, read `.agents/skills/references/web-file-responsibility-and-feature-structure.md`.
 
 5. **Run engineering quality gate**
 
@@ -71,6 +71,7 @@ Implement tasks from an OpenSpec change.
    - What frontend component/state boundaries or backend service/repository/port boundaries are required?
    - What validation must be run after each meaningful slice?
    - For Web tasks, whether artifacts specify route, app runtime, API/BaseApi/FeatureApi, query/mutation, business hook, component, README, Chinese comment, and directory grouping boundaries.
+   - For complex Web tasks, whether artifacts name concrete route, api, contracts, query keys, queries, mutations, hooks, components, types, utils, and README files.
 
    Pause if the answer is missing or contradictory. Suggest updating proposal/design/tasks/specs in the same change rather than guessing in implementation.
 

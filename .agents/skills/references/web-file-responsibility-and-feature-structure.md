@@ -1,10 +1,10 @@
-# Web 文件职责与 Feature 结构审查
+# Web 文件职责与 Feature 结构
 
-本文件用于审查 `apps/web` 变更是否按职责拆分到正确文件和目录。它不是一般“代码风格”检查，而是为了让 AI 和维护者能定向阅读、定向修改，避免一次变更把请求、DTO、query cache、状态、权限和 UI 全塞进同一个上下文。
+本文件是 `apps/web` 在规划、OpenSpec、实现、PR 和 Code Review 阶段共用的文件职责规范。它不是一般“代码风格”检查，而是为了让 AI 和维护者能定向阅读、定向修改，避免一次变更把请求、DTO、query cache、状态、权限和 UI 全塞进同一个上下文。
 
 ## 适用范围
 
-必须加载本文件的信号：
+出现以下信号时，写 issue、OpenSpec、实现计划、代码或 review 都必须加载本文件：
 
 - 新增或重构 `src/features/**`、`src/routes/**`、`src/shared/**`、`src/app/**` 下的复杂能力。
 - 新 route 中出现业务请求、表格、表单、弹窗、权限动作或复杂状态。
@@ -12,7 +12,7 @@
 - shared UI / shared capability 接收业务 DTO、业务权限、feature query 或 API response。
 - diff 同时修改 API、types、query、component、route、README 或测试，且职责边界不清。
 
-只改文案、简单样式或旧文件内单一展示逻辑时，不强制加载；看到历史债务可以列 residual risk。
+只改文案、简单样式或旧文件内单一展示逻辑时，不强制加载；看到历史债务可以列 residual risk 或后续 issue。
 
 ## 目标结构
 
@@ -50,7 +50,7 @@ features/<area>/<domain>/
 
 小功能可以少建目录，但必须保持“一个文件一个主要职责”。如果本 PR 已经新增请求、query、状态和视图，不能再用“小功能”作为继续平铺的理由。
 
-## 审查步骤
+## 规划与实现步骤
 
 1. 先列出新增和修改文件，按 route、api、contracts、query keys、queries、mutations、hooks、components、types、utils、README 归类。
 2. 对每个文件问：它是否只有一个主要修改理由？如果不是，指出应该拆到哪些目标文件。
@@ -60,7 +60,9 @@ features/<area>/<domain>/
 6. 检查 components 是否只渲染 props；完整 API response、底层 client、跨域权限策略不能透传。
 7. 检查 README / usage note 是否说明职责、入口、公开 hook/component、子目录含义和禁止放什么。
 
-## Must-fix
+OpenSpec `design.md` / `tasks.md` 必须体现这些目录和文件职责；如果 artifacts 没写清，不进入实现。
+
+## Must-fix / must-plan
 
 - 新 route 内同时新增业务请求、服务端列表状态、表格/表单主体或弹窗状态。
 - 新增复杂 feature 只有一个大文件或根目录平铺，并且混入请求、DTO、query、业务 hook、组件和状态视图。
@@ -70,7 +72,7 @@ features/<area>/<domain>/
 - 删除或跳过复杂 feature README，导致公开入口、子目录职责和禁止放入内容不可判读。
 - 非显然安全、权限、状态同步、debug 隔离或生成物边界没有中文注释。
 
-## Should-fix
+## Should-fix / should-plan
 
 - feature 根目录新增少量平铺文件，但当前 PR 可以低成本迁到 `api/`、`queries/`、`hooks/`、`components/`。
 - 一个组件同时做格式化和展示，但仍局限在单一业务域、风险可控。

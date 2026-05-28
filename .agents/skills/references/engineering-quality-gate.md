@@ -20,6 +20,7 @@
 按受影响路径加载共享模块 gate，不要把模块细则复制到每个 skill：
 
 - 涉及 `apps/web/**` 时，必须读取 `.agents/skills/references/web-architecture-gate.md`。
+- Web 变更涉及新增 feature、复杂 route、目录增长、shared 能力或文件职责拆分时，还必须读取 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`。
 - 后续涉及 `apps/api/**`、`packages/core/**` 且有共享 gate 时，按同样方式加载对应文件。
 
 模块 gate 是规划和实现阶段的规范来源；`ai-code-review/references/**` 只补充审查场景、finding 口径和输出导航。
@@ -45,6 +46,7 @@
 涉及 `apps/web` 时必须检查：
 
 - 已读取 `.agents/skills/references/web-architecture-gate.md`，并把其中的目标分层落实到 issue、OpenSpec、实现计划或 PR 说明。
+- 复杂 feature、route、shared 能力或目录重组已读取 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`，并写清目标文件职责。
 - HeroUI v3 是基础组件库；按钮、输入、弹窗、表格、菜单、tabs、toast、tooltip 等优先 HeroUI。
 - 样式默认使用 TailwindCSS 和现有 token；`*.module.css` 只用于 Tailwind 明显不适合的局部复杂样式。
 - route 只负责页面入口、loader、search params 和组合；业务 API、query、mutation、hooks、组件、局部类型进入 `features/*`；跨模块基础能力进入 `shared/*`。
