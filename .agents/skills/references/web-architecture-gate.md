@@ -20,16 +20,50 @@
 ```text
 features/<area>/<domain>/
   README.md
-  api/
-  queries/
-  mutations/
-  hooks/
-  components/
-  types/
-  utils/
+  api/         # endpoint class 与 API contracts
+  queries/     # query keys 与 useQuery hooks
+  mutations/   # useMutation hooks 与 invalidate
+  hooks/       # 页面级业务 hook、筛选、表单状态
+  components/  # page、panel、table、form、states 等视图组件
+  types/       # UI 局部类型、表单类型、领域展示类型
+  utils/       # 纯格式化、标签、能力判断等无副作用 helper
 ```
 
 `README.md` 至少说明：负责什么、route 入口、公开 hook / component、子目录含义、不负责什么，以及不要继续往根目录平铺什么。
+
+`docs/design/09-frontend-architecture-design.md` 中的 `api.ts` / `queries.ts` flat 示例只代表早期方向；新代码和重构代码以本 gate 的职责目录为准。小功能可以暂时少建子目录，但不能把不同变化原因混进同一文件。
+
+## 文件职责矩阵
+
+| 文件 / 目录 | 只负责 | 禁止放入 |
+| --- | --- | --- |
+| `routes/**` | `createFileRoute`、search/loader/beforeLoad/redirect、把 route 参数传给 feature page | `apiClient`、feature API 实例、query/mutation 实现、表格/表单主体、弹窗状态、业务格式化 |
+| `features/<domain>/api/*.api.ts` | `class XxxApi extends BaseApi`、endpoint path、payload/params/response type 使用 | React state、TanStack Query、query key、toast、UI 状态、权限渲染 |
+| `features/<domain>/api/*.contracts.ts` | API payload、params、response、DTO 映射边界；未来可替换 generated contracts | endpoint 实现、React hook、UI props、表单局部状态 |
+| `features/<domain>/queries/*.keys.ts` | query key factory，稳定表达资源边界和筛选参数 | request 调用、组件状态、mutation invalidate |
+| `features/<domain>/queries/use-*.ts` | `useQuery` 封装、调用 runtime `apis`、选择 query key | JSX、表单状态、弹窗状态、业务页面编排 |
+| `features/<domain>/mutations/use-*.ts` | `useMutation` 封装、成功后 invalidate、错误透传 | JSX、页面局部状态、endpoint path 拼接 |
+| `features/<domain>/hooks/use-*.ts` | 页面级业务 hook：组合 query/mutation、权限、筛选、选中项、动作 | 底层 HTTP、endpoint 定义、复杂 JSX、shared UI 实现 |
+| `features/<domain>/components/page/*.tsx` | 页面组合，把业务 hook 解构后传给 panel/table/form | 底层请求、query key、DTO envelope、复杂业务规则 |
+| `features/<domain>/components/**` | 展示组件、表格、表单字段、状态组件，接收稳定 props | `ApiResponse`、完整业务 DTO 透传、底层 client、跨域业务策略 |
+| `features/<domain>/types/*.ts` | UI 局部类型、表单类型、展示模型、组件 props 公共类型 | endpoint 实现、hook、运行时代码 |
+| `features/<domain>/utils/*.ts` | 纯函数：label、format、capability 判断、无副作用转换 | React state、请求、query cache、DOM |
+| `features/<domain>/README.md` | 职责、入口、公开 API、子目录含义、禁止放什么 | 施工日志、临时 TODO、未确认设计 |
+
+## 拆分触发阈值
+
+同一新增或重构文件中如果同时出现以下 3 类以上，必须拆分到职责文件；如果出现在 route 或 shared UI 中，通常是 `must-fix`：
+
+- 请求或 endpoint path：`apiClient`、`fetch`、`BaseApi`、URL 拼接。
+- DTO / contracts / envelope：`ApiResponse`、payload、params、response shape、`code/data/msg/error`。
+- TanStack Query：query key、`useQuery`、`useMutation`、invalidate。
+- 页面局部状态：选中项、筛选草稿、抽屉/弹窗、步骤状态。
+- 权限或安全：capability、403、脱敏、敏感字段。
+- 格式化和派生：label、status tone、排序、筛选适配。
+- 表格 / 表单主体：columns、fields、validation、drawer/modal form。
+- 状态视图：loading、empty、error、permission denied、toast。
+
+拆分不是按行数触发；一个 80 行文件同时改变 endpoint、query cache、弹窗状态和 JSX，也比一个 180 行纯展示表格更需要拆。
 
 ## 运行时与 API
 
@@ -51,9 +85,8 @@ app/runtime -> apiClient -> BaseApi -> FeatureApi -> queries/mutations -> busine
 
 - 服务端状态必须通过 TanStack Query；React state 只保存局部 UI 状态，例如选中项、抽屉开关、临时筛选输入。
 - query key 必须稳定表达资源边界和筛选参数；mutation 成功后按资源边界 invalidate。
-- 页面编排层使用业务 hook 命名，不默认使用 `vm` / `view-model` 命名。
+- 页面编排层使用业务 hook 命名，例如 `useXxxPage()`、`useXxxForm()`、`useXxxFilters()`。
 - 推荐命名：`useModelProviderPage()`、`useProviderForm()`、`useProviderFilters()`、`useProviderList()`、`useProviderModels()`。
-- 不推荐命名：`useModelProviderVm()`、`useProviderPageVm()`。
 - 业务 hook 负责组合 query、mutation、权限、页面局部状态和动作；view component 接收解构后的字段和回调进行渲染。
 - presentational component 不直接依赖 `ApiResponse`、底层 client、完整后端 DTO 或 query cache。
 

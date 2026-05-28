@@ -19,7 +19,7 @@
 src/
   app/       # bootstrap、providers、router、layout、应用级错误边界
   routes/    # TanStack Router 文件路由入口：loader/search/beforeLoad/redirect/page 组合
-  features/  # 业务域：api、queries、mutations、view-model hooks、components、types
+  features/  # 业务域：api、queries、mutations、业务 hooks、components、types
   shared/    # 跨域基础能力：api client、auth、config、errors、ui、utils
   styles/    # 全局 tokens、layout fallback、HeroUI/Tailwind 主题
   debug/     # 开发态诊断入口，生产不可见
@@ -29,7 +29,7 @@ src/
 
 - `app` 不放业务规则，不直接调用业务 API。
 - `routes` 不承载复杂业务 UI 或服务端状态逻辑。
-- `features/<domain>` 是业务 UI、query/mutation、领域组件和 view model 的默认落点。
+- `features/<domain>` 是业务 UI、query/mutation、领域组件和业务 hook 的默认落点。
 - `shared` 只放跨业务域复用且不含具体业务流程的基础能力。
 - `styles` 维护设计系统底座，不为单个页面承载业务样式堆叠。
 - `debug` 只服务开发诊断，不进入正式导航或生产路由。
@@ -43,7 +43,7 @@ src/
 ## 文件职责基准
 
 - 一个文件应只有一个主要职责和一个主要修改理由。
-- `client.ts`、`base-api.ts`、feature `api.ts`、`queries.ts`、view-model hook、presentational component、policy、types 和 test fixture 应尽量分离。
+- `client.ts`、`base-api.ts`、feature API、query keys、query hook、mutation hook、业务 hook、presentational component、policy、types 和 test fixture 应尽量分离。
 - 注释和文档也要按职责落位：文件内非显然设计写中文注释，目录级约束写 `README.md` 或 usage note。
 - 不用固定行数判断是否需要拆分；如果同一文件同时修改请求协议、状态机、React 生命周期、权限策略和渲染，就已经违反职责单一。
 - 当“少建文件”和“职责清晰”冲突时，优先职责清晰。
@@ -61,6 +61,8 @@ src/
 1. 这段新增逻辑属于路由入口、业务功能、跨域基础能力，还是开发诊断？
 2. 当前文件是否是该职责的目标落点，还是只是历史上刚好写在这里？
 3. 如果以后同类页面复制这段代码，会扩大架构债务还是形成可复用模式？
+
+如果答案涉及“应该拆到哪些文件”，继续读取 `file-responsibility-and-feature-structure.md`，不要只给泛泛的“建议拆分”。
 
 ## 常见 must-fix 信号
 

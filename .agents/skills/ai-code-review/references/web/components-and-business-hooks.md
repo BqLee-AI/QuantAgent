@@ -1,6 +1,6 @@
-# Web 组件与 MVVM 审查
+# Web 组件与业务 Hook 审查
 
-本文件用于审查 React 组件职责、feature/shared 归属、props 边界和轻量 MVVM 拆分。
+本文件用于审查 React 组件职责、feature/shared 归属、props 边界和业务 hook 拆分。页面编排层统一使用 `useXxxPage()`、`useXxxForm()`、`useXxxFilters()` 这类业务 hook 命名。
 
 ## 适用范围
 
@@ -15,11 +15,12 @@
 - `features/<domain>` 承载业务组件、page/container、业务 hook、局部类型和领域格式化。
 - `shared/ui` 只放跨域基础 UI，不含业务规则、业务 API、领域权限或完整 DTO。
 - `app/components` 放应用级状态组件或 shell 级组件，不放业务域组件。
-- 组件目录增长后必须分组：至少按 `components/`、`hooks/`、`view-models/`、`types/`、`utils/` 等职责组织，而不是长期平铺。
-- 复杂页面采用轻量业务 Hook 编排：
+- 组件目录增长后必须分组：至少按 `components/`、`hooks/`、`types/`、`utils/` 等职责组织，而不是长期平铺。
+- 复杂页面采用业务 hook 编排：
   - query/mutation 提供服务端状态和动作。
   - 页面级业务 hook/container 组合状态、权限、派生字段和事件处理。
   - presentational component 只接收稳定 props 并负责渲染。
+- 推荐 `useModelProviderPage()`、`useProviderForm()`、`useProviderFilters()`。
 - props 应最小、稳定、语义化，不透传完整 API response 或万能 `raw` 对象。
 - 非显然共享组件和复杂组件目录必须有 `README.md` 或 usage note；复杂边界、限制条件和设计取舍优先用中文注释说明。
 
@@ -50,7 +51,7 @@
 
 ## 常见误判
 
-- 不是所有小组件都需要 MVVM 拆分；静态展示组件可以保持简单。
+- 不是所有小组件都需要业务 hook 拆分；静态展示组件可以保持简单。
 - feature-only 组件可以带领域语言，不需要强行抽到 shared。
 - 不是所有组件都需要 README；只有 shared UI、复杂公共组件或非显然 API 需要补说明。
 - 修改旧组件的文案或样式不必强制重构整个组件。
