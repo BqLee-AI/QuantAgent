@@ -8,12 +8,13 @@ import {
 } from "react";
 
 import {
-  createApiClient,
-  type ApiClient,
-} from "@/shared/api";
+  AppRuntimeProvider,
+} from "@/app/runtime/runtime.provider";
+import { useApis } from "@/app/runtime/use-app-runtime";
+import type { AuthRuntimeBridge } from "@/app/runtime/runtime.types";
 import { useRuntimeConfig } from "@/shared/config";
 
-import { createAuthApi, type AuthApi } from "./api";
+import type { AuthApi } from "./api";
 import { AuthContext } from "./context";
 import { toForbiddenDetails } from "./forbidden";
 import type { AuthContextValue, AuthState } from "./models";
@@ -35,6 +36,16 @@ import {
   createBootstrappingState,
   createUnauthenticatedState,
 } from "./state";
+
+interface AuthProviderBridgeProps extends PropsWithChildren {
+  authEnabled: boolean;
+  nextRefreshAtMsRef: { current: null | number };
+  onBootstrap(authApi: AuthApi): Promise<void>;
+  onRefresh(authApi: AuthApi): Promise<void>;
+  refreshRefs: Parameters<typeof clearRefreshState>[0];
+  stateStatus: AuthState["status"];
+  valueFactory(authApi: AuthApi): AuthContextValue;
+}
 
 function syncCsrfToken(
   csrfTokenRef: { current: string | null },
@@ -71,6 +82,51 @@ function applyRefreshResult(
   return result.state;
 }
 
+function AuthProviderRuntimeBridge({
+  authEnabled,
+  children,
+  nextRefreshAtMsRef,
+  onBootstrap,
+  onRefresh,
+  refreshRefs,
+  stateStatus,
+  valueFactory,
+}: AuthProviderBridgeProps) {
+  const { auth } = useApis();
+
+  useEffect(() => {
+    void onBootstrap(auth);
+  }, [auth, onBootstrap]);
+
+  useEffect(() => () => clearRefreshState(refreshRefs), [refreshRefs]);
+
+  useEffect(() => {
+    if (!authEnabled || stateStatus !== "authenticated") {
+      return;
+    }
+
+    const handleWindowFocus = () => {
+      if (
+        nextRefreshAtMsRef.current !== null &&
+        Date.now() < nextRefreshAtMsRef.current
+      ) {
+        return;
+      }
+
+      void onRefresh(auth);
+    };
+
+    window.addEventListener("focus", handleWindowFocus);
+    return () => {
+      window.removeEventListener("focus", handleWindowFocus);
+    };
+  }, [auth, authEnabled, nextRefreshAtMsRef, onRefresh, stateStatus]);
+
+  const value = useMemo<AuthContextValue>(() => valueFactory(auth), [auth, valueFactory]);
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
 export function AuthProvider({ children }: PropsWithChildren) {
   const config = useRuntimeConfig();
   const [state, setState] = useState<AuthState>(createBootstrappingState);
@@ -91,95 +147,95 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setState(createUnauthenticatedState(!config.authEnabled));
   }, [config.authEnabled, refreshRefs]);
 
-  const apiClient = useMemo<ApiClient>(
-    () =>
-      createApiClient({
-        baseURL: config.apiBaseUrl || undefined,
-        getCsrfToken: () => csrfTokenRef.current,
-        onError: (error) => {
-          if (error.status === 403) {
-            setState((current) => ({
-              ...current,
-              forbidden: toForbiddenDetails(error),
-              lastForbiddenMessage: error.msg,
-            }));
-          }
-        },
-        onUnauthorized: resetToUnauthenticated,
-        withCredentials: true,
-      }),
-    [config.apiBaseUrl, resetToUnauthenticated],
+  const runtimeAuthBridge = useMemo<AuthRuntimeBridge>(
+    () => ({
+      getCsrfToken: () => csrfTokenRef.current,
+      handleApiError: (error) => {
+        if (error.status === 403) {
+          setState((current) => ({
+            ...current,
+            forbidden: toForbiddenDetails(error),
+            lastForbiddenMessage: error.msg,
+          }));
+        }
+      },
+      handleUnauthorized: resetToUnauthenticated,
+    }),
+    [resetToUnauthenticated],
   );
-  const authApi = useMemo<AuthApi>(() => createAuthApi(apiClient), [apiClient]);
 
-  const refreshAuthenticatedSession = useCallback(async () => {
-    if (!config.authEnabled || !csrfTokenRef.current) {
-      clearRefreshState(refreshRefs);
-      return;
-    }
+  const refreshAuthenticatedSession = useCallback(
+    async (authApi: AuthApi) => {
+      if (!config.authEnabled || !csrfTokenRef.current) {
+        clearRefreshState(refreshRefs);
+        return;
+      }
 
-    const nowMs = Date.now();
-    if (nowMs - lastRefreshAttemptAtMsRef.current < REFRESH_RETRY_DELAY_MS) {
-      return;
-    }
+      const nowMs = Date.now();
+      if (nowMs - lastRefreshAttemptAtMsRef.current < REFRESH_RETRY_DELAY_MS) {
+        return;
+      }
 
-    lastRefreshAttemptAtMsRef.current = nowMs;
+      lastRefreshAttemptAtMsRef.current = nowMs;
 
-    const result = await refreshSession({
-      authApi,
-      isAuthDisabled: !config.authEnabled,
-    });
+      const result = await refreshSession({
+        authApi,
+        isAuthDisabled: !config.authEnabled,
+      });
 
-    const nextState = applyRefreshResult(result, csrfTokenRef);
+      const nextState = applyRefreshResult(result, csrfTokenRef);
 
-    if (result.kind === "refresh-retry") {
-      scheduleRefreshRetry(refreshRefs, refreshAuthenticatedSession);
-      return;
-    }
+      if (result.kind === "refresh-retry") {
+        scheduleRefreshRetry(refreshRefs, () => refreshAuthenticatedSession(authApi));
+        return;
+      }
 
-    if (result.kind === "unauthenticated") {
-      clearSessionSideEffects(csrfTokenRef, refreshRefs);
-      setState(result.state);
-      return;
-    }
+      if (result.kind === "unauthenticated") {
+        clearSessionSideEffects(csrfTokenRef, refreshRefs);
+        setState(result.state);
+        return;
+      }
 
-    setState(nextState ?? result.state);
+      setState(nextState ?? result.state);
 
-    if (result.kind === "refresh-forbidden") {
-      scheduleRefreshRetry(refreshRefs, refreshAuthenticatedSession);
-      return;
-    }
+      if (result.kind === "refresh-forbidden") {
+        scheduleRefreshRetry(refreshRefs, () => refreshAuthenticatedSession(authApi));
+        return;
+      }
 
-    scheduleRefreshTimer(
-      refreshRefs,
-      result.actor.expires_at,
-      refreshAuthenticatedSession,
-    );
-  }, [authApi, config.authEnabled, refreshRefs]);
+      scheduleRefreshTimer(refreshRefs, result.actor.expires_at, () =>
+        refreshAuthenticatedSession(authApi),
+      );
+    },
+    [config.authEnabled, refreshRefs],
+  );
 
-  const bootstrap = useCallback(async () => {
-    setState((current) => ({ ...current, status: "bootstrapping" }));
+  const bootstrap = useCallback(
+    async (authApi: AuthApi) => {
+      setState((current) => ({ ...current, status: "bootstrapping" }));
 
-    const result = await bootstrapSession({
-      authApi,
-      isAuthDisabled: !config.authEnabled,
-    });
+      const result = await bootstrapSession({
+        authApi,
+        isAuthDisabled: !config.authEnabled,
+      });
 
-    setState(applyBootstrapResult(result, csrfTokenRef));
+      setState(applyBootstrapResult(result, csrfTokenRef));
 
-    if (result.kind === "authenticated") {
-      // `/me` only returns the actor snapshot. Prime refresh once to learn idle expiration.
-      await refreshAuthenticatedSession();
-      return;
-    }
+      if (result.kind === "authenticated") {
+        // 中文注释：`/me` 只有 actor 快照，首次 refresh 才能拿到刷新调度所需的过期时间。
+        await refreshAuthenticatedSession(authApi);
+        return;
+      }
 
-    if (result.kind === "unauthenticated") {
-      clearSessionSideEffects(csrfTokenRef, refreshRefs);
-    }
-  }, [authApi, config.authEnabled, refreshAuthenticatedSession, refreshRefs]);
+      if (result.kind === "unauthenticated") {
+        clearSessionSideEffects(csrfTokenRef, refreshRefs);
+      }
+    },
+    [config.authEnabled, refreshAuthenticatedSession, refreshRefs],
+  );
 
   const login = useCallback(
-    async (password: string) => {
+    async (password: string, authApi: AuthApi) => {
       const result = await loginSession(
         { password },
         {
@@ -190,64 +246,52 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       syncCsrfToken(csrfTokenRef, result.state);
       setState(result.state);
-      // Login response does not include exp/max_exp, so refresh seeds the first timer.
-      await refreshAuthenticatedSession();
+      // 中文注释：登录返回没有 exp/max_exp，需主动 refresh 才能建立前端续期调度。
+      await refreshAuthenticatedSession(authApi);
     },
-    [authApi, config.authEnabled, refreshAuthenticatedSession],
+    [config.authEnabled, refreshAuthenticatedSession],
   );
 
-  const logout = useCallback(async () => {
-    try {
-      const result = await logoutSession(state.status === "authenticated", {
-        authApi,
-        isAuthDisabled: !config.authEnabled,
-      });
+  const logout = useCallback(
+    async (authApi: AuthApi) => {
+      try {
+        const result = await logoutSession(state.status === "authenticated", {
+          authApi,
+          isAuthDisabled: !config.authEnabled,
+        });
 
-      setState(result.state);
-    } finally {
-      clearSessionSideEffects(csrfTokenRef, refreshRefs);
-      setState(createUnauthenticatedState(!config.authEnabled));
-    }
-  }, [authApi, config.authEnabled, refreshRefs, state.status]);
-
-  useEffect(() => {
-    void bootstrap();
-  }, [bootstrap]);
-
-  useEffect(() => () => clearRefreshState(refreshRefs), [refreshRefs]);
-
-  useEffect(() => {
-    if (!config.authEnabled || state.status !== "authenticated") {
-      return;
-    }
-
-    const handleWindowFocus = () => {
-      if (
-        nextRefreshAtMsRef.current !== null &&
-        Date.now() < nextRefreshAtMsRef.current
-      ) {
-        return;
+        setState(result.state);
+      } finally {
+        clearSessionSideEffects(csrfTokenRef, refreshRefs);
+        setState(createUnauthenticatedState(!config.authEnabled));
       }
-
-      void refreshAuthenticatedSession();
-    };
-
-    window.addEventListener("focus", handleWindowFocus);
-    return () => {
-      window.removeEventListener("focus", handleWindowFocus);
-    };
-  }, [config.authEnabled, refreshAuthenticatedSession, state.status]);
-
-  const value = useMemo<AuthContextValue>(
-    () => ({
-      ...state,
-      apiClient,
-      bootstrap,
-      login,
-      logout,
-    }),
-    [apiClient, bootstrap, login, logout, state],
+    },
+    [config.authEnabled, refreshRefs, state.status],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  const valueFactory = useCallback(
+    (authApi: AuthApi): AuthContextValue => ({
+      ...state,
+      bootstrap: () => bootstrap(authApi),
+      login: (password: string) => login(password, authApi),
+      logout: () => logout(authApi),
+    }),
+    [bootstrap, login, logout, state],
+  );
+
+  return (
+    <AppRuntimeProvider auth={runtimeAuthBridge} config={config}>
+      <AuthProviderRuntimeBridge
+        authEnabled={config.authEnabled}
+        nextRefreshAtMsRef={nextRefreshAtMsRef}
+        onBootstrap={bootstrap}
+        onRefresh={refreshAuthenticatedSession}
+        refreshRefs={refreshRefs}
+        stateStatus={state.status}
+        valueFactory={valueFactory}
+      >
+        {children}
+      </AuthProviderRuntimeBridge>
+    </AppRuntimeProvider>
+  );
 }

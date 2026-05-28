@@ -1,5 +1,3 @@
-import type { ApiClient } from "@/shared/api";
-
 export interface AuthenticatedActor {
   actor_id: string;
   actor_type: string;
@@ -31,7 +29,6 @@ export interface AuthState {
 }
 
 export interface AuthContextValue extends AuthState {
-  apiClient: ApiClient;
   bootstrap(): Promise<void>;
   login(password: string): Promise<void>;
   logout(): Promise<void>;

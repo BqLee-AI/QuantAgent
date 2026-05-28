@@ -12,10 +12,11 @@
 
 ## 目标规范
 
-- API 调用链路固定为：`apiClient -> BaseApi -> FeatureApi -> query/view-model -> UI`。
+- API 调用链路固定为：`app/runtime -> apiClient -> BaseApi -> FeatureApi -> query/mutation/hook -> UI`。
 - `shared/api` 只负责底层 client、envelope unwrap、错误类型、request id / trace id、CSRF 和通用请求能力。
 - `shared/api/client.ts` 只定义 `createApiClient` 和 `ApiClient` 的 HTTP 请求实现；不导出默认 singleton，不知道 auth、plugins、events、approval 等业务 endpoint。
 - `shared/api/base-api.ts` 提供单层 `BaseApi` 基类，只负责 `basePath`、endpoint path 拼接和受保护的 `get/post/put/patch/del/requestEnvelope` helper；多 `baseURL` 用多个 client 实例，不做复杂继承树。
+- `app/runtime` 负责创建运行时级 `apiClient`、`apis` 和未来 `realtime` 等服务；页面和 query hook 默认通过 `useApis()` 或 `useAppRuntime()` 取用，不从 `useAuth()` 暴露业务 API，也不在 hook 内手动 `new XxxApi(apiClient)`。
 - 业务 endpoint 默认进入 `features/<domain>/api.ts`，服务端状态进入 `features/<domain>/queries.ts` / `mutations.ts`。
 - feature `api.ts` 只封装 endpoint 和 DTO，不放 React state、TanStack Query cache、view state 或 UI；推荐导出 `class XxxApi extends BaseApi`。
 - Auth 是横切能力，可以放在 `shared/auth/api.ts`，但仍必须走 `class AuthApi extends BaseApi`，不能复制旧 `context.tsx` 包办请求、状态和 React 生命周期的模式。
@@ -34,7 +35,7 @@
 3. 检查 envelope 和错误处理是否只在 shared client 层解包，业务层是否接收已归一化数据或 `ApiError`。
 4. 检查 query key 是否稳定，是否包含资源边界和筛选参数。
 5. 检查 mutation 成功、失败、权限不足、网络错误是否有可排查反馈。
-6. 检查文件职责是否单一：client 配置、dedupe、envelope、errors、BaseApi、FeatureApi、query hook 和 UI 是否分开。
+6. 检查文件职责是否单一：runtime 容器、client 配置、dedupe、envelope、errors、BaseApi、FeatureApi、query hook 和 UI 是否分开。
 
 ## Must-fix
 
@@ -43,7 +44,8 @@
 - 把 REST 快照长期复制进 React state / Zustand，并绕过 TanStack Query 刷新机制。
 - mutation 后只修改本地 UI 状态，不 invalidate 相关资源且无明确理由。
 - 错误 UI 吞掉 `requestId` / `traceId`，导致后端错误不可排查。
-- 新增代码把 `apiClient`、base path、业务 endpoint、React provider、session state 和 UI feedback 混进同一文件。
+- 新增代码把 `apiClient`、runtime 初始化、业务 endpoint、React provider、session state 和 UI feedback 混进同一文件。
+- 在 query hook、component 或 route 内直接 `new XxxApi(apiClient)`，而不是通过 runtime 暴露稳定 `apis` 对象复用。
 
 ## Should-fix
 
@@ -72,14 +74,34 @@ export class PluginsApi extends BaseApi {
   }
 }
 
+// app/runtime/runtime.factory.ts
+export function createAppRuntime(options: CreateAppRuntimeOptions): AppRuntime {
+  const apiClient = createApiClient({
+    baseURL: options.config.apiBaseUrl,
+    getCsrfToken: options.auth.getCsrfToken,
+    onUnauthorized: options.auth.handleUnauthorized,
+  });
+
+  return {
+    apiClient,
+    apis: {
+      auth: new AuthApi(apiClient),
+      plugins: new PluginsApi(apiClient),
+    },
+    realtime: {
+      client: null,
+      status: "disabled",
+    },
+  };
+}
+
 // features/plugins/queries.ts
 export function usePluginList(params: PluginListParams) {
-  const { apiClient } = useAuth();
-  const pluginsApi = useMemo(() => new PluginsApi(apiClient), [apiClient]);
+  const { plugins } = useApis();
 
   return useQuery({
     queryKey: pluginQueryKeys.list(params),
-    queryFn: () => pluginsApi.list(params),
+    queryFn: () => plugins.list(params),
   });
 }
 ```
@@ -115,17 +137,19 @@ useEffect(() => {
 问题：route 直接请求业务 API、手写 envelope、复制服务端状态。
 
 ```tsx
-// shared/auth/context.tsx
-export function AuthProvider() {
-  const apiClient = createApiClient();
-  async function login() {
-    const actor = await apiClient.post("/auth/login");
-    setState(actor);
-  }
+// features/plugins/queries.ts
+export function usePluginList() {
+  const { apiClient } = useAuth();
+  const pluginsApi = new PluginsApi(apiClient);
+
+  return useQuery({
+    queryKey: ["plugins"],
+    queryFn: () => pluginsApi.list(),
+  });
 }
 ```
 
-问题：一个 provider 文件同时负责 client 创建、endpoint、session state、refresh timer 和 React context，新增代码不应复制这种旧厚文件模式。
+问题：业务 hook 自己 new feature API，运行时对象不稳定，也把 API 装配责任散回 feature 层。
 
 ## 验证建议
 

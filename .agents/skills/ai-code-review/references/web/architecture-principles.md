@@ -9,6 +9,7 @@
 - 如果本次变更在旧的不规范文件中继续新增请求、状态、权限、表单、业务格式化或复杂 JSX，应判定为扩大债务。
 - Review finding 必须聚焦当前 diff 新增或修改的行为，不用全局重构建议压垮局部 PR。
 - 文件职责单一是 `apps/web` 的基础 review 标准。拆文件不是为了形式，而是让 AI 和维护者能根据文件名定向阅读，避免把无关 API、DTO、状态机、provider、hook、policy、UI 和 fixture 一起塞进上下文。
+- 中文注释、目录说明和 usage note 也是架构的一部分。对于非显然边界和复杂目录，不能默认靠命名猜。
 
 ## 目标分层
 
@@ -31,10 +32,17 @@ src/
 - `styles` 维护设计系统底座，不为单个页面承载业务样式堆叠。
 - `debug` 只服务开发诊断，不进入正式导航或生产路由。
 
+目录组织也应保持可定位：
+
+- 同一 capability 目录下如果同时存在组件、hooks、types、api、utils、tests，应优先拆成子目录，而不是长期平铺。
+- 当目录增长到需要读文件名列表才能猜职责时，就已经需要分组或补 README。
+- 复杂目录必须有 `README.md` 或最小 usage note，说明职责、公开入口、子目录含义和禁止继续堆放的内容。
+
 ## 文件职责基准
 
 - 一个文件应只有一个主要职责和一个主要修改理由。
 - `client.ts`、`base-api.ts`、feature `api.ts`、`queries.ts`、view-model hook、presentational component、policy、types 和 test fixture 应尽量分离。
+- 注释和文档也要按职责落位：文件内非显然设计写中文注释，目录级约束写 `README.md` 或 usage note。
 - 不用固定行数判断是否需要拆分；如果同一文件同时修改请求协议、状态机、React 生命周期、权限策略和渲染，就已经违反职责单一。
 - 当“少建文件”和“职责清晰”冲突时，优先职责清晰。
 - 旧文件已经过厚不是新增代码继续堆叠的理由；触碰旧代码时至少要把本次新增逻辑收敛到目标边界。
@@ -60,3 +68,5 @@ src/
 - 页面把 REST 快照长期复制到 React state / Zustand，并绕过 TanStack Query。
 - debug 代码进入生产路由、正式导航或用户可见业务页面。
 - 新增或重构文件把 API 调用、DTO/types、状态机、provider、hook、policy、UI 或 fixture 混成多个变化原因。
+- 复杂目录长期平铺几十个文件，没有 `components/`、`hooks/`、`types/` 等职责分组，也没有 README 解释边界。
+- 非显然安全/状态/权限边界没有中文注释，只能靠 reviewer 或 AI 猜测实现意图。

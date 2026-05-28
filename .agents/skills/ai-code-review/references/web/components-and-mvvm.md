@@ -12,14 +12,16 @@
 
 ## 目标规范
 
-- `features/<domain>` 承载业务组件、page/container、view-model hook、局部类型和领域格式化。
+- `features/<domain>` 承载业务组件、page/container、业务 hook、局部类型和领域格式化。
 - `shared/ui` 只放跨域基础 UI，不含业务规则、业务 API、领域权限或完整 DTO。
 - `app/components` 放应用级状态组件或 shell 级组件，不放业务域组件。
-- 复杂页面采用轻量 MVVM：
+- 组件目录增长后必须分组：至少按 `components/`、`hooks/`、`view-models/`、`types/`、`utils/` 等职责组织，而不是长期平铺。
+- 复杂页面采用轻量业务 Hook 编排：
   - query/mutation 提供服务端状态和动作。
-  - view-model hook/container 组合状态、权限、派生字段和事件处理。
+  - 页面级业务 hook/container 组合状态、权限、派生字段和事件处理。
   - presentational component 只接收稳定 props 并负责渲染。
 - props 应最小、稳定、语义化，不透传完整 API response 或万能 `raw` 对象。
+- 非显然共享组件和复杂组件目录必须有 `README.md` 或 usage note；复杂边界、限制条件和设计取舍优先用中文注释说明。
 
 ## 审查步骤
 
@@ -27,7 +29,8 @@
 2. 检查组件是否混合请求、权限、格式化、筛选、mutation 和 JSX。
 3. 检查 props 是否暴露完整后端 DTO、ApiResponse、AuthState 或过宽 callback。
 4. 检查状态覆盖：loading、empty、error、permission denied、sensitive masked 是否与功能风险匹配。
-5. 检查公共组件是否有可理解的 API；非显然 shared UI 应有 usage note 或测试样例。
+5. 检查公共组件是否有可理解的 API；非显然 shared UI 应有 usage note、README 或测试样例。
+6. 检查目录是否已按职责分组，还是把组件、hooks、types 和 helper 无序堆在一起。
 
 ## Must-fix
 
@@ -36,11 +39,13 @@
 - 组件手写 API envelope 或直接依赖 `ApiResponse<T>`。
 - 敏感字段、prompt、私有策略、完整模型推理链或工具参数被组件直接展示。
 - 权限不足状态被当成 empty state，导致用户无法排查 request id。
+- 一个组件目录平铺大量文件且无 `README` / usage note，导致组件边界、入口和复用方式不可判读。
+- 复杂组件依赖关键边界但没有中文注释解释，reviewer 只能猜其安全或状态语义。
 
 ## Should-fix
 
 - feature component props 偏宽，但仍只在单一业务域内使用。
-- view-model hook 和 presentational component 未完全拆开，但当前 PR 可低成本拆出。
+- 页面级业务 hook 和 presentational component 未完全拆开，但当前 PR 可低成本拆出。
 - 公共组件 API 非显然，缺少最小示例或测试覆盖。
 
 ## 常见误判
