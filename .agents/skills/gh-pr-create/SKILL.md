@@ -22,7 +22,8 @@ metadata:
 4. 关联 issue：`gh issue view <id> --repo BqLee-AI/QuantAgent --json title,body,labels,comments,url,state`
 5. 关联 OpenSpec change 的 `proposal.md`、`tasks.md`、`design.md`、`specs/**/spec.md`
 6. 需要判断工程质量门槛时读 `.agents/skills/references/engineering-quality-gate.md`
-7. 需要对照 PR 说明结构时再读 `references/pr-body.md`
+7. 涉及 `apps/web/**`、前端 feature、route、API 调用、组件或运行时容器时，读 `.agents/skills/references/web-architecture-gate.md`
+8. 需要对照 PR 说明结构时再读 `references/pr-body.md`
 
 不要把未提交、无关或用户已有脏改动混进 PR。当前工作区有无关变更时，先说明并只 stage 自己负责的文件。
 
@@ -39,6 +40,7 @@ metadata:
 - 验证命令和结果可被写进 PR，不用“应该没问题”代替。
 - 新 package、依赖、生成物或 runtime 边界变化有明确真源和说明。
 - 工程质量 gate 已体现在 diff 或 PR 说明中：目录/文件规划、职责边界、核心模型、接口字段、复用点、数据流、失败路径、验证入口和必要注释都有交代。
+- Web PR 已体现在 diff 或 PR 说明中：route、app runtime、API/BaseApi/FeatureApi、query/mutation、业务 hook、view component、README、中文注释和目录分组是否符合 `web-architecture-gate.md`。
 - 若跳过组件拆分、service/repository/port、注释或测试，必须有基于范围和风险的理由。
 - 没有提交 secrets、真实 `.env`、runtime 私有内容、缓存或构建产物。
 

@@ -37,7 +37,8 @@ metadata:
 4. 影响设计或产品边界时，读相关 `docs/design/*.md`，必要时再读 `docs/prd/*.md`
 5. 已有关联 change 时，读 `proposal.md`、`tasks.md`、`design.md` 和 `specs/**/spec.md`
 6. 需要判断工程质量门槛时读 `.agents/skills/references/engineering-quality-gate.md`
-7. 需要执行清单时再读 `references/workflow.md`
+7. 涉及 `apps/web/**`、前端 feature、route、API 调用、组件或运行时容器时，读 `.agents/skills/references/web-architecture-gate.md`
+8. 需要执行清单时再读 `references/workflow.md`
 
 不要批量扫仓库。不要创建、读取或更新 `docs/openspec`。
 
@@ -59,6 +60,7 @@ metadata:
 - 是否已经读取根 `AGENTS.md`、最近层级 `AGENTS.md`、issue/comment、相关 design/PRD/OpenSpec 和目标模块现有实现。
 - 是否说清目录/文件规划、职责边界、核心模型、接口字段、复用点、数据流、失败路径和验证入口。
 - 前端工作是否覆盖 HeroUI、Tailwind、route/features/shared 分层、TanStack Query、组件拆分和页面状态。
+- Web 工作是否对照 `.agents/skills/references/web-architecture-gate.md` 说清 route、app runtime、API/BaseApi/FeatureApi、query/mutation、业务 hook、view component、README、中文注释和目录分组边界。
 - 后端工作是否覆盖薄 router、service/provider/repository/port、DTO/ORM/领域对象分层、审计权限和最小测试。
 - OpenSpec artifacts 或 issue 是否足以指导实现；如果缺少目录蓝图、架构分层、模型/字段草案、复用判断、失败路径或验证口径，必须先补 artifacts 或追问，不能直接编码。
 

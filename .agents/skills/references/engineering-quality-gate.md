@@ -1,6 +1,8 @@
 # Engineering Quality Gate
 
-本文件是 QuantAgent gh / OpenSpec skills 共用的工程质量门槛。它不是模板素材，而是执行前必须通过的检查清单。
+本文件是 QuantAgent gh / OpenSpec / PR / Code Review skills 共用的工程质量门槛。它不是模板素材，而是执行前必须通过的检查清单。
+
+工程规则必须前置到 issue、OpenSpec、implementation、PR 和 CR 全链路。CR 是最后一道检查，不是架构规范的唯一真源；任何会影响代码结构、目录边界、接口契约或验证方式的工作，都不能等到 review 阶段才第一次看到这些规则。
 
 ## 真源读取
 
@@ -12,6 +14,15 @@
 - 目标模块现有实现、测试和 README；涉及较新库时再查 lockfile、已安装版本和官方文档。
 
 如果真源之间冲突，先说明冲突和取舍，不得直接按模型记忆或个人偏好实现。
+
+## 模块 Gate 加载
+
+按受影响路径加载共享模块 gate，不要把模块细则复制到每个 skill：
+
+- 涉及 `apps/web/**` 时，必须读取 `.agents/skills/references/web-architecture-gate.md`。
+- 后续涉及 `apps/api/**`、`packages/core/**` 且有共享 gate 时，按同样方式加载对应文件。
+
+模块 gate 是规划和实现阶段的规范来源；`ai-code-review/references/**` 只补充审查场景、finding 口径和输出导航。
 
 ## 架构分层检查
 
@@ -27,15 +38,21 @@
 
 禁止把页面、路由、服务、DTO、状态管理、API 调用和业务规则混写成一个大文件。只有存在多实现、稳定接口、外部适配、可替换策略、生命周期或持久化边界时，才引入 service、repository、port、adapter、strategy、registry、base class 等结构；不要为了设计模式本身制造抽象。
 
+设计和实现前必须写清目录分层、文件职责、是否需要 README / usage note、哪些非显然边界需要中文注释，以及 runtime、API、query/hook、component、service、repository、DTO 或 schema 的边界。缺少这些内容时，先补 issue / OpenSpec / plan，不要直接编码。
+
 ## 前端质量门槛
 
 涉及 `apps/web` 时必须检查：
 
+- 已读取 `.agents/skills/references/web-architecture-gate.md`，并把其中的目标分层落实到 issue、OpenSpec、实现计划或 PR 说明。
 - HeroUI v3 是基础组件库；按钮、输入、弹窗、表格、菜单、tabs、toast、tooltip 等优先 HeroUI。
 - 样式默认使用 TailwindCSS 和现有 token；`*.module.css` 只用于 Tailwind 明显不适合的局部复杂样式。
-- route 只负责页面入口、loader、search params 和组合；业务 query、mutation、组件、局部类型进入 `features/*`；跨模块基础能力进入 `shared/*`。
+- route 只负责页面入口、loader、search params 和组合；业务 API、query、mutation、hooks、组件、局部类型进入 `features/*`；跨模块基础能力进入 `shared/*`。
 - 页面出现可复用区块、复杂状态、表单、表格、timeline、risk panel、权限状态、错误/空/加载态时，必须拆成命名组件和必要 hooks。
 - 服务端状态必须通过 TanStack Query；页面不得裸 `fetch` 或手写后端 envelope / error 处理。
+- `apiClient` 由 `app/runtime` 在运行时创建，不导出模块级全局单例；feature hooks 通过 runtime 的稳定 `apis` 对象访问业务 API。
+- `BaseApi` 只做 path 与 transport helper；业务 endpoint 留在 feature API，不把 CRUD、分页、筛选或 query key 做进基类。
+- 复杂 feature 和共享能力必须按 `api/`、`queries/`、`mutations/`、`hooks/`、`components/`、`types/`、`utils/`、`README.md` 等职责组织，不能长期平铺。
 - 新 UI 必须覆盖 loading、empty、error、permission denied、sensitive masked 等状态，并保持管理台风格。
 
 ## 后端质量门槛

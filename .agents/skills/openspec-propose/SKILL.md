@@ -26,8 +26,11 @@ When ready to implement, run /opsx:apply
 - `AGENTS.md` and the nearest `AGENTS.md` under affected paths.
 - Related `docs/design/*.md`, `docs/prd/*.md`, existing `openspec/changes/*`, issue comments, and PR discussion when referenced.
 - `.agents/skills/references/engineering-quality-gate.md`.
+- For `apps/web/**` changes, `.agents/skills/references/web-architecture-gate.md`.
 
 Generated artifacts must be specific enough for implementation. Do not produce generic proposal/design/tasks text. If the change affects architecture, behavior, contracts, frontend UI, backend services, persistence, permissions, or auditability, the artifacts must record directory/file planning, layered architecture, responsibilities, core models, API/DTO/schema/event/config/database field drafts, reuse points, data flow, failure paths, and validation entrypoints.
+
+For Web changes, artifacts must explicitly apply `web-architecture-gate.md`: route boundaries, app runtime ownership, `apiClient -> BaseApi -> FeatureApi`, TanStack Query hooks, business hooks, view components, README / usage notes, Chinese comments, and directory grouping. Do not leave these choices for implementation.
 
 **Steps**
 
@@ -46,6 +49,7 @@ Generated artifacts must be specific enough for implementation. Do not produce g
    - Root `AGENTS.md`
    - The nearest `AGENTS.md` for affected app/package/plugin paths
    - `.agents/skills/references/engineering-quality-gate.md`
+   - `.agents/skills/references/web-architecture-gate.md` when affected paths or requested scope involve `apps/web/**`
    - Related design/PRD/OpenSpec/issue/PR context named by the user or required by the affected boundary
 
    If context conflicts, capture the conflict in the artifacts instead of silently choosing.
@@ -89,6 +93,7 @@ Generated artifacts must be specific enough for implementation. Do not produce g
         - `design.md` must be an implementation blueprint covering directory/file planning, layered architecture, module responsibilities, core models, DTO/schema/API/event/config/database field drafts, data flow, failure paths, reuse decisions, and validation strategy.
         - `specs/**/spec.md` must describe verifiable requirements and scenarios, not implementation chores.
         - `tasks.md` must show dependencies, parallel boundaries, write scopes, review gates, and validation actions.
+      - For Web changes, apply `.agents/skills/references/web-architecture-gate.md` so `design.md` and `tasks.md` name the route, runtime/API, query/mutation, business hook, component, README, comment, and validation boundaries.
       - Apply `context` and `rules` as constraints - but do NOT copy them into the file
       - Show brief progress: "Created <artifact-id>"
 

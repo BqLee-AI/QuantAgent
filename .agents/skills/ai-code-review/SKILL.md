@@ -23,11 +23,12 @@ metadata:
 3. PR / commit / diff 元信息、changed files、base/head、用户指定关注点
 4. 关联 issue、OpenSpec change、设计文档、PRD、PR 评论和 CI 结果
 5. 需要判断工程质量门槛时读 `.agents/skills/references/engineering-quality-gate.md`
-6. 按变更路径加载本 skill 的 reference：
+6. 涉及 `apps/web/**` 时，先读 `.agents/skills/references/web-architecture-gate.md`，再读本 skill 的 Web review reference
+7. 按变更路径加载本 skill 的 reference：
    - `apps/web/**`：读 `references/web/overview.md`
    - `apps/api/**`：读 `references/api/overview.md`
    - `packages/core/**`：读 `references/core/overview.md`
-7. 需要统一输出格式时读 `references/shared/review-output.md`
+8. 需要统一输出格式时读 `references/shared/review-output.md`
 
 不要一次性加载所有模块细则。先用 changed files、imports、调用形态和 diff 内容选择相关 reference。
 
@@ -72,6 +73,7 @@ metadata:
 ## 关联 reference
 
 - 输出格式：`references/shared/review-output.md`
+- Web 规划与实现 gate：`.agents/skills/references/web-architecture-gate.md`
 - 前端管理台：`references/web/overview.md`
 - FastAPI API 边界：`references/api/overview.md`
 - 共享 core 包：`references/core/overview.md`

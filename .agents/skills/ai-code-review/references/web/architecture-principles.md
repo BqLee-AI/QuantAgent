@@ -1,10 +1,12 @@
 # Web 架构审查基准
 
-本文件定义 `apps/web` AI Code Review 的目标架构基准。现有实现可以帮助理解迁移背景，但不能作为新代码的规范模板。
+本文件定义 `apps/web` AI Code Review 的目标架构基准。规划和实现阶段的共享规范真源是 `.agents/skills/references/web-architecture-gate.md`；本文件只补充 review 时如何把这些规范转成 finding。
+
+现有实现可以帮助理解迁移背景，但不能作为新代码的规范模板。
 
 ## 审查原则
 
-- 以目标架构审查新增和被修改代码：`apps/web/AGENTS.md`、`docs/design/09-frontend-architecture-design.md`、React / TanStack Query / TanStack Router 主流实践优先于当前偶然实现。
+- 以目标架构审查新增和被修改代码：`.agents/skills/references/web-architecture-gate.md`、`apps/web/AGENTS.md`、`docs/design/09-frontend-architecture-design.md`、React / TanStack Query / TanStack Router 主流实践优先于当前偶然实现。
 - 不要求一个 PR 清完全部历史债务；未触碰的旧问题列为 residual risk 或 defer。
 - 如果本次变更在旧的不规范文件中继续新增请求、状态、权限、表单、业务格式化或复杂 JSX，应判定为扩大债务。
 - Review finding 必须聚焦当前 diff 新增或修改的行为，不用全局重构建议压垮局部 PR。

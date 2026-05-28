@@ -10,6 +10,7 @@
 - `docs/design/09-frontend-architecture-design.md`
 - `docs/design/08-api-and-websocket-design.md`
 - `.agents/skills/references/engineering-quality-gate.md`
+- `.agents/skills/references/web-architecture-gate.md`
 - `architecture-principles.md`
 
 ## 场景索引
