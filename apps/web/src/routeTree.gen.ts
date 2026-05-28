@@ -9,9 +9,10 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as IndexRouteImport } from './routes/index'
 import { Route as publicLoginRouteImport } from './routes/(public)/login'
 import { Route as AppworkspaceRouteRouteImport } from './routes/_app/(workspace)/route'
+import { Route as AppworkspaceIndexRouteImport } from './routes/_app/(workspace)/index'
+import { Route as publicApprovalLinkTokenRouteImport } from './routes/(public)/approval-link/$token'
 import { Route as AppworkspaceToolsIndexRouteImport } from './routes/_app/(workspace)/tools/index'
 import { Route as AppworkspaceSkillsIndexRouteImport } from './routes/_app/(workspace)/skills/index'
 import { Route as AppworkspaceSettingsIndexRouteImport } from './routes/_app/(workspace)/settings/index'
@@ -20,12 +21,10 @@ import { Route as AppworkspacePluginsIndexRouteImport } from './routes/_app/(wor
 import { Route as AppworkspaceIndustriesIndexRouteImport } from './routes/_app/(workspace)/industries/index'
 import { Route as AppworkspaceEventsIndexRouteImport } from './routes/_app/(workspace)/events/index'
 import { Route as AppworkspaceApprovalsIndexRouteImport } from './routes/_app/(workspace)/approvals/index'
+import { Route as AppworkspaceEventsEventIdRouteImport } from './routes/_app/(workspace)/events/$eventId'
+import { Route as AppworkspaceApprovalsApprovalIdRouteImport } from './routes/_app/(workspace)/approvals/$approvalId'
+import { Route as AppworkspaceEventsEventIdAuditRouteImport } from './routes/_app/(workspace)/events/$eventId/audit'
 
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const publicLoginRoute = publicLoginRouteImport.update({
   id: '/(public)/login',
   path: '/login',
@@ -34,6 +33,16 @@ const publicLoginRoute = publicLoginRouteImport.update({
 const AppworkspaceRouteRoute = AppworkspaceRouteRouteImport.update({
   id: '/_app/(workspace)',
   path: '',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppworkspaceIndexRoute = AppworkspaceIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppworkspaceRouteRoute,
+} as any)
+const publicApprovalLinkTokenRoute = publicApprovalLinkTokenRouteImport.update({
+  id: '/(public)/approval-link/$token',
+  path: '/approval-link/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppworkspaceToolsIndexRoute = AppworkspaceToolsIndexRouteImport.update({
@@ -81,10 +90,31 @@ const AppworkspaceApprovalsIndexRoute =
     path: '/approvals/',
     getParentRoute: () => AppworkspaceRouteRoute,
   } as any)
+const AppworkspaceEventsEventIdRoute =
+  AppworkspaceEventsEventIdRouteImport.update({
+    id: '/events/$eventId',
+    path: '/events/$eventId',
+    getParentRoute: () => AppworkspaceRouteRoute,
+  } as any)
+const AppworkspaceApprovalsApprovalIdRoute =
+  AppworkspaceApprovalsApprovalIdRouteImport.update({
+    id: '/approvals/$approvalId',
+    path: '/approvals/$approvalId',
+    getParentRoute: () => AppworkspaceRouteRoute,
+  } as any)
+const AppworkspaceEventsEventIdAuditRoute =
+  AppworkspaceEventsEventIdAuditRouteImport.update({
+    id: '/audit',
+    path: '/audit',
+    getParentRoute: () => AppworkspaceEventsEventIdRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
   '/login': typeof publicLoginRoute
+  '/approval-link/$token': typeof publicApprovalLinkTokenRoute
+  '/': typeof AppworkspaceIndexRoute
+  '/approvals/$approvalId': typeof AppworkspaceApprovalsApprovalIdRoute
+  '/events/$eventId': typeof AppworkspaceEventsEventIdRouteWithChildren
   '/approvals/': typeof AppworkspaceApprovalsIndexRoute
   '/events/': typeof AppworkspaceEventsIndexRoute
   '/industries/': typeof AppworkspaceIndustriesIndexRoute
@@ -93,10 +123,14 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof AppworkspaceSettingsIndexRoute
   '/skills/': typeof AppworkspaceSkillsIndexRoute
   '/tools/': typeof AppworkspaceToolsIndexRoute
+  '/events/$eventId/audit': typeof AppworkspaceEventsEventIdAuditRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
   '/login': typeof publicLoginRoute
+  '/approval-link/$token': typeof publicApprovalLinkTokenRoute
+  '/': typeof AppworkspaceIndexRoute
+  '/approvals/$approvalId': typeof AppworkspaceApprovalsApprovalIdRoute
+  '/events/$eventId': typeof AppworkspaceEventsEventIdRouteWithChildren
   '/approvals': typeof AppworkspaceApprovalsIndexRoute
   '/events': typeof AppworkspaceEventsIndexRoute
   '/industries': typeof AppworkspaceIndustriesIndexRoute
@@ -105,12 +139,16 @@ export interface FileRoutesByTo {
   '/settings': typeof AppworkspaceSettingsIndexRoute
   '/skills': typeof AppworkspaceSkillsIndexRoute
   '/tools': typeof AppworkspaceToolsIndexRoute
+  '/events/$eventId/audit': typeof AppworkspaceEventsEventIdAuditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
   '/_app/(workspace)': typeof AppworkspaceRouteRouteWithChildren
   '/(public)/login': typeof publicLoginRoute
+  '/(public)/approval-link/$token': typeof publicApprovalLinkTokenRoute
+  '/_app/(workspace)/': typeof AppworkspaceIndexRoute
+  '/_app/(workspace)/approvals/$approvalId': typeof AppworkspaceApprovalsApprovalIdRoute
+  '/_app/(workspace)/events/$eventId': typeof AppworkspaceEventsEventIdRouteWithChildren
   '/_app/(workspace)/approvals/': typeof AppworkspaceApprovalsIndexRoute
   '/_app/(workspace)/events/': typeof AppworkspaceEventsIndexRoute
   '/_app/(workspace)/industries/': typeof AppworkspaceIndustriesIndexRoute
@@ -119,12 +157,16 @@ export interface FileRoutesById {
   '/_app/(workspace)/settings/': typeof AppworkspaceSettingsIndexRoute
   '/_app/(workspace)/skills/': typeof AppworkspaceSkillsIndexRoute
   '/_app/(workspace)/tools/': typeof AppworkspaceToolsIndexRoute
+  '/_app/(workspace)/events/$eventId/audit': typeof AppworkspaceEventsEventIdAuditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | '/'
     | '/login'
+    | '/approval-link/$token'
+    | '/'
+    | '/approvals/$approvalId'
+    | '/events/$eventId'
     | '/approvals/'
     | '/events/'
     | '/industries/'
@@ -133,10 +175,14 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/skills/'
     | '/tools/'
+    | '/events/$eventId/audit'
   fileRoutesByTo: FileRoutesByTo
   to:
-    | '/'
     | '/login'
+    | '/approval-link/$token'
+    | '/'
+    | '/approvals/$approvalId'
+    | '/events/$eventId'
     | '/approvals'
     | '/events'
     | '/industries'
@@ -145,11 +191,15 @@ export interface FileRouteTypes {
     | '/settings'
     | '/skills'
     | '/tools'
+    | '/events/$eventId/audit'
   id:
     | '__root__'
-    | '/'
     | '/_app/(workspace)'
     | '/(public)/login'
+    | '/(public)/approval-link/$token'
+    | '/_app/(workspace)/'
+    | '/_app/(workspace)/approvals/$approvalId'
+    | '/_app/(workspace)/events/$eventId'
     | '/_app/(workspace)/approvals/'
     | '/_app/(workspace)/events/'
     | '/_app/(workspace)/industries/'
@@ -158,23 +208,17 @@ export interface FileRouteTypes {
     | '/_app/(workspace)/settings/'
     | '/_app/(workspace)/skills/'
     | '/_app/(workspace)/tools/'
+    | '/_app/(workspace)/events/$eventId/audit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
   AppworkspaceRouteRoute: typeof AppworkspaceRouteRouteWithChildren
   publicLoginRoute: typeof publicLoginRoute
+  publicApprovalLinkTokenRoute: typeof publicApprovalLinkTokenRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/(public)/login': {
       id: '/(public)/login'
       path: '/login'
@@ -187,6 +231,20 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: ''
       preLoaderRoute: typeof AppworkspaceRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app/(workspace)/': {
+      id: '/_app/(workspace)/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof AppworkspaceIndexRouteImport
+      parentRoute: typeof AppworkspaceRouteRoute
+    }
+    '/(public)/approval-link/$token': {
+      id: '/(public)/approval-link/$token'
+      path: '/approval-link/$token'
+      fullPath: '/approval-link/$token'
+      preLoaderRoute: typeof publicApprovalLinkTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/(workspace)/tools/': {
@@ -245,10 +303,48 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppworkspaceApprovalsIndexRouteImport
       parentRoute: typeof AppworkspaceRouteRoute
     }
+    '/_app/(workspace)/events/$eventId': {
+      id: '/_app/(workspace)/events/$eventId'
+      path: '/events/$eventId'
+      fullPath: '/events/$eventId'
+      preLoaderRoute: typeof AppworkspaceEventsEventIdRouteImport
+      parentRoute: typeof AppworkspaceRouteRoute
+    }
+    '/_app/(workspace)/approvals/$approvalId': {
+      id: '/_app/(workspace)/approvals/$approvalId'
+      path: '/approvals/$approvalId'
+      fullPath: '/approvals/$approvalId'
+      preLoaderRoute: typeof AppworkspaceApprovalsApprovalIdRouteImport
+      parentRoute: typeof AppworkspaceRouteRoute
+    }
+    '/_app/(workspace)/events/$eventId/audit': {
+      id: '/_app/(workspace)/events/$eventId/audit'
+      path: '/audit'
+      fullPath: '/events/$eventId/audit'
+      preLoaderRoute: typeof AppworkspaceEventsEventIdAuditRouteImport
+      parentRoute: typeof AppworkspaceEventsEventIdRoute
+    }
   }
 }
 
+interface AppworkspaceEventsEventIdRouteChildren {
+  AppworkspaceEventsEventIdAuditRoute: typeof AppworkspaceEventsEventIdAuditRoute
+}
+
+const AppworkspaceEventsEventIdRouteChildren: AppworkspaceEventsEventIdRouteChildren =
+  {
+    AppworkspaceEventsEventIdAuditRoute: AppworkspaceEventsEventIdAuditRoute,
+  }
+
+const AppworkspaceEventsEventIdRouteWithChildren =
+  AppworkspaceEventsEventIdRoute._addFileChildren(
+    AppworkspaceEventsEventIdRouteChildren,
+  )
+
 interface AppworkspaceRouteRouteChildren {
+  AppworkspaceIndexRoute: typeof AppworkspaceIndexRoute
+  AppworkspaceApprovalsApprovalIdRoute: typeof AppworkspaceApprovalsApprovalIdRoute
+  AppworkspaceEventsEventIdRoute: typeof AppworkspaceEventsEventIdRouteWithChildren
   AppworkspaceApprovalsIndexRoute: typeof AppworkspaceApprovalsIndexRoute
   AppworkspaceEventsIndexRoute: typeof AppworkspaceEventsIndexRoute
   AppworkspaceIndustriesIndexRoute: typeof AppworkspaceIndustriesIndexRoute
@@ -260,6 +356,9 @@ interface AppworkspaceRouteRouteChildren {
 }
 
 const AppworkspaceRouteRouteChildren: AppworkspaceRouteRouteChildren = {
+  AppworkspaceIndexRoute: AppworkspaceIndexRoute,
+  AppworkspaceApprovalsApprovalIdRoute: AppworkspaceApprovalsApprovalIdRoute,
+  AppworkspaceEventsEventIdRoute: AppworkspaceEventsEventIdRouteWithChildren,
   AppworkspaceApprovalsIndexRoute: AppworkspaceApprovalsIndexRoute,
   AppworkspaceEventsIndexRoute: AppworkspaceEventsIndexRoute,
   AppworkspaceIndustriesIndexRoute: AppworkspaceIndustriesIndexRoute,
@@ -274,9 +373,9 @@ const AppworkspaceRouteRouteWithChildren =
   AppworkspaceRouteRoute._addFileChildren(AppworkspaceRouteRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
   AppworkspaceRouteRoute: AppworkspaceRouteRouteWithChildren,
   publicLoginRoute: publicLoginRoute,
+  publicApprovalLinkTokenRoute: publicApprovalLinkTokenRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
