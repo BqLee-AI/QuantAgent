@@ -96,6 +96,7 @@ apps/api/
 
 - API 本地配置放在 `quantagent.api.config`；共享运行时配置或数据库配置放到 package 层。
 - `Settings` 继承 `quantagent.core.config.settings.Settings`；当前 API 只补充 `API_V1_PREFIX`、`API_HOST`、`API_PORT` 等传输层配置。新增 API 专属配置时，同步判断它应留在 API 层还是下沉到 `quantagent-core`。
+- `apps/api/.env.*` 用于 API 本地多环境配置分层；调整配置加载行为或新增相关约定时，要同时检查实现、样例文件和 README 是否一致。
 - 新增环境变量时更新 `apps/api/README.md`；如果 Docker 运行也依赖该变量，同步检查根目录 `docker-compose.yml` 和 `.env.example`。
 - 不要硬编码数据库地址、生产端口、secret、部署环境值、生产必需密钥、数据库 URL 或外部服务凭证；通过 Settings 和环境变量读取。
 
