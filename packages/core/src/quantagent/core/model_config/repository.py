@@ -24,6 +24,9 @@ class ModelProviderRepository:
     def get_provider(self, provider_id: int) -> ModelProviderORM | None:
         return self._session.get(ModelProviderORM, provider_id)
 
+    def delete_provider(self, provider: ModelProviderORM) -> None:
+        self._session.delete(provider)
+
     def list_providers(self) -> list[ModelProviderORM]:
         statement = select(ModelProviderORM).order_by(
             ModelProviderORM.is_default.desc(),
@@ -129,4 +132,8 @@ class ModelProviderRepository:
         if preset_key is not None:
             statement = statement.where(ModelInvocationORM.preset_key == preset_key.value)
         statement = statement.limit(limit)
+        return list(self._session.scalars(statement).all())
+
+    def list_provider_invocations(self, provider_id: int) -> list[ModelInvocationORM]:
+        statement = select(ModelInvocationORM).where(ModelInvocationORM.provider_id == provider_id)
         return list(self._session.scalars(statement).all())

@@ -15,6 +15,7 @@ from quantagent.api.schemas.models import (
     ModelProviderDetailResponse,
     ModelProviderListResponse,
     ModelProviderModelResponse,
+    RemoteProviderModelResponse,
     ModelProviderSummaryResponse,
     ModelTestConnectionResponse,
     ModelTokenUsageResponse,
@@ -37,6 +38,7 @@ from quantagent.core.model_config import (
     ModelProviderModelResult,
     ModelProviderSummaryResult,
     ModelProviderType,
+    RemoteProviderModelResult,
     UpdateModelPresetInput,
     UpdateModelProviderInput,
     UpdateProviderModelInput,
@@ -134,6 +136,21 @@ def set_default_model_provider(
         raise _api_error(exc) from exc
 
 
+@router.delete("/providers/{provider_id}", response_model=ApiResponse[dict[str, bool]])
+def delete_model_provider(
+    provider_id: int,
+    request: Request,
+    session: Session = Depends(get_db_session),
+    _actor: CurrentActor = Depends(require_csrf),
+) -> ApiResponse[dict[str, bool]]:
+    service = _service(request, session)
+    try:
+        service.delete_provider(provider_id)
+    except ModelConfigServiceError as exc:
+        raise _api_error(exc) from exc
+    return ApiResponse.success({"deleted": True})
+
+
 @router.post(
     "/providers/{provider_id}/actions/test-connection",
     response_model=ApiResponse[ModelTestConnectionResponse],
@@ -150,6 +167,23 @@ def test_model_provider_connection(
         return ApiResponse.success(
             ModelTestConnectionResponse(success=True, invocation=_invocation_response(invocation))
         )
+    except ModelConfigServiceError as exc:
+        raise _api_error(exc) from exc
+
+
+@router.get(
+    "/providers/{provider_id}/remote-models",
+    response_model=ApiResponse[list[RemoteProviderModelResponse]],
+)
+def list_remote_provider_models(
+    provider_id: int,
+    request: Request,
+    session: Session = Depends(get_db_session),
+) -> ApiResponse[list[RemoteProviderModelResponse]]:
+    service = _service(request, session)
+    try:
+        models = service.list_remote_models(provider_id, request_id=get_request_id(request))
+        return ApiResponse.success([_remote_provider_model_response(item) for item in models])
     except ModelConfigServiceError as exc:
         raise _api_error(exc) from exc
 
@@ -346,6 +380,14 @@ def _provider_model_response(result: ModelProviderModelResult) -> ModelProviderM
         is_global_default=result.is_global_default,
         created_at=result.created_at,
         updated_at=result.updated_at,
+    )
+
+
+def _remote_provider_model_response(result: RemoteProviderModelResult) -> RemoteProviderModelResponse:
+    return RemoteProviderModelResponse(
+        id=result.id,
+        owned_by=result.owned_by,
+        supports_vision=result.supports_vision,
     )
 
 

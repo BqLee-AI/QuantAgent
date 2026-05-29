@@ -27,6 +27,14 @@ class ModelProviderModelResponse(BaseModel):
     updated_at: datetime
 
 
+class RemoteProviderModelResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str
+    owned_by: str | None = None
+    supports_vision: bool | None = None
+
+
 class ModelProviderSummaryResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

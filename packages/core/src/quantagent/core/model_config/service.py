@@ -203,6 +203,13 @@ class ModelCallResult:
     token_usage: ModelTokenUsage
 
 
+@dataclass(frozen=True)
+class RemoteProviderModelResult:
+    id: str
+    owned_by: str | None = None
+    supports_vision: bool | None = None
+
+
 class FixedModelCallClient(Protocol):
     def run_fixed_smoke(
         self,
@@ -212,6 +219,15 @@ class FixedModelCallClient(Protocol):
         api_key: str,
         request_id: str | None,
     ) -> ModelCallResult:
+        ...
+
+    def list_remote_models(
+        self,
+        *,
+        base_url: str | None,
+        api_key: str,
+        request_id: str | None,
+    ) -> list[RemoteProviderModelResult]:
         ...
 
 
@@ -287,6 +303,83 @@ class OpenAICompatibleModelClient:
             )
         )
 
+    def list_remote_models(
+        self,
+        *,
+        base_url: str | None,
+        api_key: str,
+        request_id: str | None,
+    ) -> list[RemoteProviderModelResult]:
+        candidate_endpoints = _candidate_model_list_endpoints(base_url)
+        headers = {"Authorization": f"Bearer {api_key}"}
+        if request_id:
+            headers["X-Request-ID"] = request_id
+
+        last_not_found: urllib.error.HTTPError | None = None
+        for endpoint in candidate_endpoints:
+            req = urllib_request.Request(endpoint, headers=headers, method="GET")
+            try:
+                with urllib_request.urlopen(req, timeout=15) as response:  # noqa: S310
+                    body = response.read()
+                parsed = json.loads(body.decode("utf-8"))
+                data = parsed.get("data")
+                if not isinstance(data, list):
+                    raise ModelConfigServiceError(
+                        "Model provider returned an invalid response",
+                        code="MODEL_PROVIDER_RESPONSE_INVALID",
+                    )
+                results: list[RemoteProviderModelResult] = []
+                for item in data:
+                    if not isinstance(item, dict):
+                        continue
+                    model_id = item.get("id")
+                    if not isinstance(model_id, str) or not model_id.strip():
+                        continue
+                    owned_by = item.get("owned_by")
+                    results.append(
+                        RemoteProviderModelResult(
+                            id=model_id.strip(),
+                            owned_by=owned_by if isinstance(owned_by, str) and owned_by.strip() else None,
+                            supports_vision=_infer_supports_vision(model_id),
+                        )
+                    )
+                return results
+            except urllib.error.HTTPError as exc:
+                if exc.code == 404:
+                    last_not_found = exc
+                    continue
+                raise ModelConfigServiceError(
+                    "Model provider request failed",
+                    code="MODEL_PROVIDER_HTTP_ERROR",
+                    retryable=exc.code >= 500,
+                    safe_details={"status": exc.code},
+                ) from exc
+            except urllib.error.URLError as exc:
+                raise ModelConfigServiceError(
+                    "Model provider is not reachable",
+                    code="MODEL_PROVIDER_UNREACHABLE",
+                    retryable=True,
+                ) from exc
+            except TimeoutError as exc:
+                raise ModelConfigServiceError(
+                    "Model provider request timed out",
+                    code="MODEL_PROVIDER_TIMEOUT",
+                    retryable=True,
+                ) from exc
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise ModelConfigServiceError(
+                    "Model provider returned an invalid response",
+                    code="MODEL_PROVIDER_RESPONSE_INVALID",
+                ) from exc
+
+        if last_not_found is not None:
+            raise ModelConfigServiceError(
+                "Model provider request failed",
+                code="MODEL_PROVIDER_HTTP_ERROR",
+                safe_details={"status": 404},
+            ) from last_not_found
+        return []
+
 
 class ModelConfigService:
     def __init__(
@@ -360,6 +453,38 @@ class ModelConfigService:
         self._session.commit()
         self._session.refresh(provider)
         return self._provider_detail_result(provider)
+
+    def delete_provider(self, provider_id: int) -> None:
+        provider = self._require_provider(provider_id)
+        provider_models = self._repository.list_provider_models(provider.id)
+        provider_model_ids = {model.id for model in provider_models}
+        deleted_global_default = any(model.is_global_default for model in provider_models)
+
+        if provider_model_ids:
+            for binding in self._repository.list_preset_bindings():
+                if binding.primary_model_id in provider_model_ids:
+                    binding.primary_model_id = None
+                if binding.fallback_model_id in provider_model_ids:
+                    binding.fallback_model_id = None
+
+        for invocation in self._repository.list_provider_invocations(provider.id):
+            invocation.provider_id = None
+
+        if deleted_global_default:
+            self._repository.clear_global_default_model()
+
+        for model in provider_models:
+            self._repository.delete_provider_model(model)
+
+        if provider.is_default:
+            provider.is_default = False
+
+        self._repository.delete_provider(provider)
+
+        if deleted_global_default:
+            self._promote_next_global_default(excluding_provider_id=provider.id)
+
+        self._session.commit()
 
     def create_provider_model(self, provider_id: int, payload: CreateProviderModelInput) -> ModelProviderModelResult:
         provider = self._require_provider(provider_id)
@@ -857,6 +982,33 @@ class ModelConfigService:
         self._session.flush()
         return _invocation_result(invocation)
 
+    def list_remote_models(
+        self,
+        provider_id: int,
+        *,
+        request_id: str | None = None,
+    ) -> list[RemoteProviderModelResult]:
+        provider = self._require_provider(provider_id)
+        if not provider.encrypted_api_key:
+            raise ModelConfigServiceError(
+                "Model provider API key is missing",
+                code="MODEL_PROVIDER_KEY_MISSING",
+                safe_details={"provider_id": provider.id},
+            )
+        try:
+            api_key = self._crypto().decrypt(provider.encrypted_api_key)
+            return self._client.list_remote_models(
+                base_url=provider.base_url,
+                api_key=api_key,
+                request_id=request_id,
+            )
+        except ModelConfigCryptoError as exc:
+            raise ModelConfigServiceError(
+                "Model provider API key cannot be decrypted",
+                code="MODEL_PROVIDER_DECRYPT_FAILED",
+                safe_details={"provider_id": provider.id},
+            ) from exc
+
     def _record_failed_invocation_and_commit(
         self,
         *,
@@ -892,6 +1044,18 @@ def _provider_model_result(model: ModelProviderModelORM) -> ModelProviderModelRe
         created_at=model.created_at,
         updated_at=model.updated_at,
     )
+
+
+def _candidate_model_list_endpoints(base_url: str | None) -> list[str]:
+    normalized = (base_url or DEFAULT_OPENAI_BASE_URL).rstrip("/")
+    if normalized.endswith("/v1"):
+        return [f"{normalized}/models", f"{normalized[:-3]}/models"]
+    return [f"{normalized}/models", f"{normalized}/v1/models"]
+
+
+def _infer_supports_vision(model_id: str) -> bool:
+    lowered = model_id.lower()
+    return any(token in lowered for token in ("vision", "vl", "omni", "gpt-4o", "gemini", "multimodal"))
 
 
 def _invocation_result(invocation: ModelInvocationORM) -> ModelInvocationResult:
