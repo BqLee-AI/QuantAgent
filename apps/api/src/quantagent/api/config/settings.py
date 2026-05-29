@@ -168,6 +168,14 @@ class Settings(CoreSettings):
     LOG_ROTATE_MAX_BYTES: int = Field(default=20 * 1024 * 1024, ge=1024)
     LOG_QUEUE_MAX_SIZE: int = Field(default=10000, ge=16)
     LOG_ACCESS_DROP_WHEN_FULL: bool = True
+    LOG_ACCESS_RETENTION_DAYS: int = Field(default=7, ge=1)
+    LOG_APP_RETENTION_DAYS: int = Field(default=14, ge=1)
+    LOG_ERROR_RETENTION_DAYS: int = Field(default=30, ge=1)
+    LOG_SECURITY_RETENTION_DAYS: int = Field(default=30, ge=1)
+    LOG_AUDIT_RETENTION_DAYS: int = Field(default=90, ge=1)
+    LOG_MAINTENANCE_MIN_AGE_SECONDS: int = Field(default=300, ge=1)
+    LOG_MAX_TOTAL_BYTES: int | None = Field(default=None, ge=1024)
+    LOG_MIN_FREE_BYTES: int | None = Field(default=None, ge=1024)
     LOG_SHUTDOWN_DRAIN_TIMEOUT_SECONDS: float = Field(default=2.0, ge=0.1, le=30.0)
     LOG_USE_MEMORY_SINK: bool = False
     AUTH_ENABLED: bool = True
@@ -192,6 +200,13 @@ class Settings(CoreSettings):
         if value in (None, ""):
             return None
         return Path(value)
+
+    @field_validator("LOG_MAX_TOTAL_BYTES", "LOG_MIN_FREE_BYTES", mode="before")
+    @classmethod
+    def normalize_optional_bytes(cls, value: int | str | None) -> int | None:
+        if value in (None, ""):
+            return None
+        return int(value)
 
     @model_validator(mode="after")
     def validate_auth_settings(self) -> "Settings":

@@ -3,11 +3,18 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+import re
 import threading
 from typing import TextIO
 
 
 SUPPORTED_STREAMS = ("access", "app", "error", "security", "audit")
+_STREAM_PATTERN = "|".join(SUPPORTED_STREAMS)
+_LOG_FILENAME_PATTERN = re.compile(
+    rf"^(?P<service>[^.]+)\.(?P<env>[^.]+)\.(?P<instance_id>.+?)\.pid-(?P<pid>\d+)"
+    rf"\.(?P<stream>{_STREAM_PATTERN})\.(?P<hour_slice>\d{{8}}T\d{{2}})"
+    rf"(?:\.part-(?P<part>\d{{3}}))?\.jsonl(?P<compressed>\.gz)?$"
+)
 
 
 @dataclass(frozen=True)
@@ -18,6 +25,22 @@ class FileLayoutConfig:
     instance_id: str
     pid: int
     rotate_max_bytes: int
+
+
+@dataclass(frozen=True)
+class ParsedLogFile:
+    path: Path
+    service: str
+    env: str
+    instance_id: str
+    pid: int
+    stream: str
+    hour_slice: str
+    part: int
+    compressed: bool
+
+    def hour_start(self) -> datetime:
+        return datetime.strptime(self.hour_slice, "%Y%m%dT%H").replace(tzinfo=UTC)
 
 
 def build_stream_directory(root_dir: Path, stream: str, timestamp: datetime) -> Path:
@@ -38,6 +61,23 @@ def build_stream_filename(
     if part > 0:
         filename += f".part-{part:03d}"
     return f"{filename}.jsonl"
+
+
+def parse_log_file(path: Path) -> ParsedLogFile | None:
+    match = _LOG_FILENAME_PATTERN.fullmatch(path.name)
+    if match is None:
+        return None
+    return ParsedLogFile(
+        path=path,
+        service=match.group("service"),
+        env=match.group("env"),
+        instance_id=match.group("instance_id"),
+        pid=int(match.group("pid")),
+        stream=match.group("stream"),
+        hour_slice=match.group("hour_slice"),
+        part=int(match.group("part") or "0"),
+        compressed=bool(match.group("compressed")),
+    )
 
 
 class StreamFileWriter:
@@ -122,3 +162,11 @@ class StreamFileWriterSet:
         with self._lock:
             writer = self._writers[stream]
             return writer.active_path()
+
+    def active_paths(self) -> set[Path]:
+        with self._lock:
+            return {
+                path
+                for writer in self._writers.values()
+                if (path := writer.active_path()) is not None
+            }

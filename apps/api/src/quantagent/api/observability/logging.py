@@ -17,6 +17,7 @@ from quantagent.api.observability import events
 from quantagent.api.observability.files import FileLayoutConfig, StreamFileWriterSet
 from quantagent.api.observability.filters import ContextInjectionFilter, SensitiveDataRedactionFilter
 from quantagent.api.observability.formatters import JsonLinesFormatter
+from quantagent.api.observability.maintenance import LogMaintenanceRuntime, MaintenanceConfig, StreamRetentionDays
 from quantagent.api.observability.queue import QueueWriterRuntime
 
 
@@ -40,6 +41,10 @@ class LoggingConfig:
     access_drop_when_full: bool
     shutdown_timeout_seconds: float
     use_memory_sink: bool
+    maintenance_min_age_seconds: int
+    max_total_bytes: int | None
+    min_free_bytes: int | None
+    retention_days: StreamRetentionDays
 
 
 class QueueStructuredFileHandler(logging.Handler):
@@ -90,10 +95,16 @@ class _LoggingRuntime:
     config: LoggingConfig
     queue_runtime: QueueWriterRuntime | None
     handler: logging.Handler
+    maintenance_runtime: LogMaintenanceRuntime | None
 
     def shutdown(self) -> None:
+        force_closed_paths: set[Path] = set()
+        if self.queue_runtime is not None:
+            force_closed_paths = self.queue_runtime.active_paths()
         if self.queue_runtime is not None:
             self.queue_runtime.stop()
+        if self.maintenance_runtime is not None:
+            self.maintenance_runtime.run_shutdown_cleanup(force_closed_paths=force_closed_paths)
         logger = logging.getLogger(_LOGGER_NAME)
         if self.handler in logger.handlers:
             logger.removeHandler(self.handler)
@@ -115,6 +126,16 @@ def _build_config(settings: Settings) -> LoggingConfig:
         access_drop_when_full=settings.LOG_ACCESS_DROP_WHEN_FULL,
         shutdown_timeout_seconds=settings.LOG_SHUTDOWN_DRAIN_TIMEOUT_SECONDS,
         use_memory_sink=settings.LOG_USE_MEMORY_SINK,
+        maintenance_min_age_seconds=settings.LOG_MAINTENANCE_MIN_AGE_SECONDS,
+        max_total_bytes=settings.LOG_MAX_TOTAL_BYTES,
+        min_free_bytes=settings.LOG_MIN_FREE_BYTES,
+        retention_days=StreamRetentionDays(
+            access=settings.LOG_ACCESS_RETENTION_DAYS,
+            app=settings.LOG_APP_RETENTION_DAYS,
+            error=settings.LOG_ERROR_RETENTION_DAYS,
+            security=settings.LOG_SECURITY_RETENTION_DAYS,
+            audit=settings.LOG_AUDIT_RETENTION_DAYS,
+        ),
     )
 
 
@@ -136,8 +157,19 @@ def configure_api_logging(settings: Settings) -> None:
         if config.use_memory_sink:
             queue_runtime = None
             handler: logging.Handler = InMemoryStructuredHandler(formatter)
+            maintenance_runtime = None
         else:
             config.log_dir.mkdir(parents=True, exist_ok=True)
+            maintenance_runtime = LogMaintenanceRuntime(
+                MaintenanceConfig(
+                    root_dir=config.log_dir,
+                    min_age_seconds=config.maintenance_min_age_seconds,
+                    retention_days=config.retention_days,
+                    max_total_bytes=config.max_total_bytes,
+                    min_free_bytes=config.min_free_bytes,
+                )
+            )
+            maintenance_summary = maintenance_runtime.run_startup_cleanup()
             writer_set = StreamFileWriterSet(
                 FileLayoutConfig(
                     root_dir=config.log_dir,
@@ -153,6 +185,7 @@ def configure_api_logging(settings: Settings) -> None:
                 max_size=config.queue_max_size,
                 access_drop_when_full=config.access_drop_when_full,
                 shutdown_timeout_seconds=config.shutdown_timeout_seconds,
+                disk_guard=maintenance_runtime.disk_guard,
             )
             handler = QueueStructuredFileHandler(queue_runtime, formatter)
             queue_runtime.start()
@@ -175,7 +208,12 @@ def configure_api_logging(settings: Settings) -> None:
         uvicorn_access.propagate = False
         uvicorn_access.disabled = True
 
-        _ACTIVE_RUNTIME = _LoggingRuntime(config=config, queue_runtime=queue_runtime, handler=handler)
+        _ACTIVE_RUNTIME = _LoggingRuntime(
+            config=config,
+            queue_runtime=queue_runtime,
+            handler=handler,
+            maintenance_runtime=maintenance_runtime,
+        )
 
     log_structured(
         logging.INFO,
@@ -185,6 +223,25 @@ def configure_api_logging(settings: Settings) -> None:
         queue_max_size=config.queue_max_size,
         rotate_max_bytes=config.rotate_max_bytes,
     )
+    if not config.use_memory_sink and maintenance_runtime is not None:
+        disk_state = maintenance_runtime.disk_guard.current_state(force=True)
+        log_structured(
+            logging.INFO,
+            event=events.LOGGING_MAINTENANCE_COMPLETED,
+            stream="app",
+            compressed_files=maintenance_summary.compressed_files,
+            deleted_files=maintenance_summary.deleted_files,
+            skipped_files=maintenance_summary.skipped_files,
+        )
+        if disk_state.under_pressure:
+            log_structured(
+                logging.WARNING,
+                event=events.LOGGING_DISK_GUARD_ACTIVE,
+                stream="app",
+                reason=disk_state.reason,
+                total_bytes=disk_state.total_bytes,
+                free_bytes=disk_state.free_bytes,
+            )
 
 
 def shutdown_api_logging() -> None:

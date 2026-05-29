@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+import os
 from types import SimpleNamespace
 import tempfile
 import threading
@@ -17,6 +18,7 @@ from quantagent.api.observability.files import (
     StreamFileWriterSet,
     build_stream_directory,
     build_stream_filename,
+    parse_log_file,
 )
 from quantagent.api.observability.filters import ContextInjectionFilter, SensitiveDataRedactionFilter, redact_value
 from quantagent.api.observability.formatters import JsonLinesFormatter
@@ -27,6 +29,7 @@ from quantagent.api.observability.logging import (
     log_error_event,
     shutdown_api_logging,
 )
+from quantagent.api.observability.maintenance import DiskGuard, LogMaintenanceRuntime, MaintenanceConfig, StreamRetentionDays
 from quantagent.api.observability.queue import QueueWriterRuntime
 
 
@@ -199,6 +202,19 @@ class ObservabilityTestCase(unittest.TestCase):
         self.assertEqual(filename, "api.test.api-test.pid-321.access.20240501T09.part-002.jsonl")
         self.assertTrue(dt)
 
+    def test_parse_log_file_supports_jsonl_and_gzip(self) -> None:
+        parsed = parse_log_file(Path("api.test.api-test.pid-321.access.20240501T09.part-002.jsonl"))
+        compressed = parse_log_file(Path("api.test.api-test.pid-321.access.20240501T09.jsonl.gz"))
+
+        assert parsed is not None
+        assert compressed is not None
+        self.assertEqual(parsed.stream, "access")
+        self.assertEqual(parsed.part, 2)
+        self.assertFalse(parsed.compressed)
+        self.assertEqual(compressed.stream, "access")
+        self.assertEqual(compressed.part, 0)
+        self.assertTrue(compressed.compressed)
+
     def test_file_writer_rotates_by_size_and_hour(self) -> None:
         from datetime import datetime, UTC
 
@@ -332,6 +348,52 @@ class ObservabilityTestCase(unittest.TestCase):
             contents = written_files[0].read_text(encoding="utf-8")
             self.assertIn('"event":"audit"', contents)
 
+    def test_queue_disk_guard_drops_access_before_critical_streams(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            pressure_file = Path(tmp_dir) / "pressure.bin"
+            pressure_file.write_bytes(b"disk-pressure")
+            writer_set = StreamFileWriterSet(
+                FileLayoutConfig(
+                    root_dir=Path(tmp_dir),
+                    service="api",
+                    env="test",
+                    instance_id="api-test",
+                    pid=999,
+                    rotate_max_bytes=1024,
+                )
+            )
+            guard = DiskGuard(
+                config=MaintenanceConfig(
+                    root_dir=Path(tmp_dir),
+                    min_age_seconds=1,
+                    retention_days=StreamRetentionDays(access=1, app=1, error=1, security=1, audit=1),
+                    max_total_bytes=1,
+                    min_free_bytes=None,
+                )
+            )
+            warning_buffer = io.StringIO()
+            with patch("sys.stderr", new=warning_buffer):
+                runtime = QueueWriterRuntime(
+                    writer_set=writer_set,
+                    max_size=16,
+                    access_drop_when_full=True,
+                    shutdown_timeout_seconds=1.0,
+                    disk_guard=guard,
+                )
+                runtime.start()
+                try:
+                    self.assertFalse(runtime.enqueue(stream="access", line='{"event":"access"}', created_at=time.time()))
+                    self.assertTrue(runtime.enqueue(stream="error", line='{"event":"error"}', created_at=time.time()))
+                finally:
+                    runtime.stop()
+
+            self.assertIn("disk guard active", warning_buffer.getvalue())
+            written_files = list(Path(tmp_dir).rglob("*.jsonl*"))
+            self.assertTrue(written_files)
+            contents = "\n".join(path.read_text(encoding="utf-8") for path in written_files if path.suffix == ".jsonl")
+            self.assertIn('"event":"error"', contents)
+            self.assertNotIn('"event":"access"', contents)
+
     def test_queue_shutdown_eventually_stops_when_sentinel_cannot_be_enqueued(self) -> None:
         class BlockingWriterSet:
             def __init__(self) -> None:
@@ -444,6 +506,135 @@ class ObservabilityTestCase(unittest.TestCase):
 
         self.assertTrue(uvicorn_error.propagate)
         self.assertTrue(any(isinstance(handler, QueueStructuredFileHandler) for handler in uvicorn_error.handlers))
+
+    def test_maintenance_skips_active_or_unconfirmed_files_during_startup_cleanup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            active_path = root_dir / "access/2024/05/01/api.test.api-test.pid-321.access.20240501T09.jsonl"
+            active_path.parent.mkdir(parents=True, exist_ok=True)
+            active_path.write_text('{"event":"active"}\n', encoding="utf-8")
+            now = time.time()
+            os.utime(active_path, (now, now))
+            with patch("quantagent.api.observability.maintenance.datetime") as datetime_mock:
+                from datetime import UTC, datetime
+
+                fixed_now = datetime(2024, 5, 1, 9, 10, 0, tzinfo=UTC)
+                datetime_mock.now.return_value = fixed_now
+                datetime_mock.fromtimestamp = datetime.fromtimestamp
+                datetime_mock.strptime = datetime.strptime
+                runtime = LogMaintenanceRuntime(
+                    MaintenanceConfig(
+                        root_dir=root_dir,
+                        min_age_seconds=300,
+                        retention_days=StreamRetentionDays(access=7, app=7, error=7, security=7, audit=7),
+                        max_total_bytes=None,
+                        min_free_bytes=None,
+                    )
+                )
+                summary = runtime.run_startup_cleanup()
+
+            self.assertEqual(summary.compressed_files, 0)
+            self.assertEqual(summary.deleted_files, 0)
+            self.assertGreaterEqual(summary.skipped_files, 1)
+            self.assertTrue(active_path.exists())
+            self.assertFalse(active_path.with_suffix(".jsonl.gz").exists())
+            self.assertTrue(now > 0)
+
+    def test_maintenance_compresses_closed_files_and_startup_compensates_previous_run(self) -> None:
+        from datetime import UTC, datetime
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            closed_path = root_dir / "error/2024/05/01/api.test.api-test.pid-321.error.20240501T08.part-001.jsonl"
+            closed_path.parent.mkdir(parents=True, exist_ok=True)
+            closed_path.write_text('{"event":"error"}\n', encoding="utf-8")
+            old_mtime = datetime(2024, 5, 1, 8, 5, 0, tzinfo=UTC).timestamp()
+            os.utime(closed_path, (old_mtime, old_mtime))
+
+            with patch("quantagent.api.observability.maintenance.datetime") as datetime_mock:
+                fixed_now = datetime(2024, 5, 1, 10, 0, 0, tzinfo=UTC)
+                datetime_mock.now.return_value = fixed_now
+                datetime_mock.fromtimestamp = datetime.fromtimestamp
+                datetime_mock.strptime = datetime.strptime
+                runtime = LogMaintenanceRuntime(
+                    MaintenanceConfig(
+                        root_dir=root_dir,
+                        min_age_seconds=60,
+                        retention_days=StreamRetentionDays(access=7, app=7, error=7, security=7, audit=7),
+                        max_total_bytes=None,
+                        min_free_bytes=None,
+                    )
+                )
+                summary = runtime.run_startup_cleanup()
+
+            compressed_path = closed_path.with_suffix(".jsonl.gz")
+            self.assertEqual(summary.compressed_files, 1)
+            self.assertFalse(closed_path.exists())
+            self.assertTrue(compressed_path.exists())
+
+    def test_maintenance_applies_stream_specific_retention(self) -> None:
+        from datetime import UTC, datetime
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            access_path = root_dir / "access/2024/05/01/api.test.api-test.pid-321.access.20240501T06.jsonl"
+            error_path = root_dir / "error/2024/05/01/api.test.api-test.pid-321.error.20240501T06.jsonl"
+            for path in (access_path, error_path):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('{"event":"x"}\n', encoding="utf-8")
+                old_mtime = datetime(2024, 5, 1, 6, 5, 0, tzinfo=UTC).timestamp()
+                os.utime(path, (old_mtime, old_mtime))
+
+            with patch("quantagent.api.observability.maintenance.datetime") as datetime_mock:
+                fixed_now = datetime(2024, 5, 10, 12, 0, 0, tzinfo=UTC)
+                datetime_mock.now.return_value = fixed_now
+                datetime_mock.fromtimestamp = datetime.fromtimestamp
+                datetime_mock.strptime = datetime.strptime
+                runtime = LogMaintenanceRuntime(
+                    MaintenanceConfig(
+                        root_dir=root_dir,
+                        min_age_seconds=60,
+                        retention_days=StreamRetentionDays(access=1, app=14, error=30, security=30, audit=90),
+                        max_total_bytes=None,
+                        min_free_bytes=None,
+                    )
+                )
+                summary = runtime.run_startup_cleanup()
+
+            self.assertGreaterEqual(summary.deleted_files, 1)
+            self.assertFalse(access_path.exists())
+            self.assertTrue(error_path.with_suffix(".jsonl.gz").exists())
+
+    def test_maintenance_shutdown_can_process_closed_active_file_without_rewriting(self) -> None:
+        from datetime import UTC, datetime
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            active_path = root_dir / "audit/2024/05/01/api.test.api-test.pid-321.audit.20240501T10.jsonl"
+            active_path.parent.mkdir(parents=True, exist_ok=True)
+            active_path.write_text('{"event":"audit"}\n', encoding="utf-8")
+            mtime = datetime(2024, 5, 1, 10, 0, 0, tzinfo=UTC).timestamp()
+            os.utime(active_path, (mtime, mtime))
+
+            with patch("quantagent.api.observability.maintenance.datetime") as datetime_mock:
+                fixed_now = datetime(2024, 5, 1, 10, 1, 0, tzinfo=UTC)
+                datetime_mock.now.return_value = fixed_now
+                datetime_mock.fromtimestamp = datetime.fromtimestamp
+                datetime_mock.strptime = datetime.strptime
+                runtime = LogMaintenanceRuntime(
+                    MaintenanceConfig(
+                        root_dir=root_dir,
+                        min_age_seconds=300,
+                        retention_days=StreamRetentionDays(access=7, app=7, error=7, security=7, audit=7),
+                        max_total_bytes=None,
+                        min_free_bytes=None,
+                    )
+                )
+                summary = runtime.run_shutdown_cleanup(force_closed_paths={active_path})
+
+            self.assertEqual(summary.compressed_files, 1)
+            self.assertFalse(active_path.exists())
+            self.assertTrue(active_path.with_suffix(".jsonl.gz").exists())
 
 
 if __name__ == "__main__":

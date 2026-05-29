@@ -23,6 +23,7 @@ from quantagent.api.observability.logging import (
     log_structured,
     shutdown_api_logging,
 )
+from quantagent.api.observability.maintenance import DiskGuardState, LogMaintenanceRuntime, MaintenanceConfig, StreamRetentionDays
 
 __all__ = [
     "REQUEST_ID_HEADER",
@@ -46,4 +47,8 @@ __all__ = [
     "set_actor_context",
     "set_request_context",
     "shutdown_api_logging",
+    "DiskGuardState",
+    "LogMaintenanceRuntime",
+    "MaintenanceConfig",
+    "StreamRetentionDays",
 ]

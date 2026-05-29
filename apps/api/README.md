@@ -39,15 +39,31 @@ LOG_DIR/{stream}/YYYY/MM/DD/{service}.{env}.{instance_id}.pid-{pid}.{stream}.{YY
 
 当前日志格式固定为 JSON Lines，不提供多格式切换。请求与错误响应会同时返回 `X-Request-ID` 和 `X-Trace-ID`；错误 envelope 中的 `error.trace_id` 会与响应头一致。access 日志默认只记录 path，不记录 query string。
 
-阶段 1 已支持：
+当前已支持：
 
 - `LOG_DIR`
 - `LOG_INSTANCE_ID`
 - `LOG_ROTATE_MAX_BYTES`
 - `LOG_QUEUE_MAX_SIZE`
 - `LOG_ACCESS_DROP_WHEN_FULL`
+- `LOG_ACCESS_RETENTION_DAYS`
+- `LOG_APP_RETENTION_DAYS`
+- `LOG_ERROR_RETENTION_DAYS`
+- `LOG_SECURITY_RETENTION_DAYS`
+- `LOG_AUDIT_RETENTION_DAYS`
+- `LOG_MAINTENANCE_MIN_AGE_SECONDS`
+- `LOG_MAX_TOTAL_BYTES`
+- `LOG_MIN_FREE_BYTES`
 
-阶段 1 非目标：
+阶段 2 maintenance 与磁盘保护：
+
+- startup 会先做一次补偿清理：只处理可确认已关闭的 `.jsonl` 文件。
+- 已关闭文件会压缩为 `.jsonl.gz`；无法确认关闭状态的文件会跳过，不会强行压缩或删除。
+- retention 按 stream 独立配置，允许 access 短保留，error/security/audit 长保留。
+- disk guard 命中 `LOG_MAX_TOTAL_BYTES` 或 `LOG_MIN_FREE_BYTES` 时，优先丢弃 access，尽量保留 error/security/audit。
+- shutdown 会在 queue drain 完成后做一次 maintenance 收口，避免当前进程刚关闭的活跃文件长期留在未压缩状态。
+
+当前非目标：
 
 - 不写数据库，不替代未来 append-only `audit_logs`。
 - 不接入 OpenTelemetry、APM SDK 或外部日志平台。
@@ -217,6 +233,14 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 - `LOG_ROTATE_MAX_BYTES`：单个活跃日志文件的大小轮转阈值，默认 `20971520`。
 - `LOG_QUEUE_MAX_SIZE`：结构化日志内存队列大小，默认 `10000`。
 - `LOG_ACCESS_DROP_WHEN_FULL`：队列满时是否优先丢弃 access 记录，默认 `true`。
+- `LOG_ACCESS_RETENTION_DAYS`：access stream 保留天数，默认 `7`。
+- `LOG_APP_RETENTION_DAYS`：app stream 保留天数，默认 `14`。
+- `LOG_ERROR_RETENTION_DAYS`：error stream 保留天数，默认 `30`。
+- `LOG_SECURITY_RETENTION_DAYS`：security stream 保留天数，默认 `30`。
+- `LOG_AUDIT_RETENTION_DAYS`：audit stream 保留天数，默认 `90`。
+- `LOG_MAINTENANCE_MIN_AGE_SECONDS`：maintenance 认定“关闭文件”的最小安全窗口，默认 `300`。
+- `LOG_MAX_TOTAL_BYTES`：日志目录总大小阈值；达到后优先降级 access。
+- `LOG_MIN_FREE_BYTES`：磁盘剩余空间阈值；低于后优先降级 access。
 - `API_HOST`：直跑 API 时的监听地址，默认 `127.0.0.1`；兼容读取历史变量名 `HOST`。Compose 中不注入该变量，容器内由启动命令监听 `0.0.0.0`。
 - `API_PORT`：直跑 API 时的监听端口，默认 `8000`；兼容读取历史变量名 `PORT`。在根目录 Compose 中，该变量只表示宿主机发布端口，容器内监听端口固定为 `8000`。
 - `API_V1_PREFIX`：API v1 路由前缀，默认 `/api/v1`。
