@@ -9,6 +9,7 @@ from quantagent.api.observability.files import StreamFileWriterSet
 
 
 _STOP_STREAM = "__stop__"
+_QUEUE_POLL_TIMEOUT_SECONDS = 0.05
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,10 @@ class QueueWriterRuntime:
 
     def stop(self) -> None:
         self._stop_requested.set()
+        if self._thread.ident is None:
+            self._drain_remaining()
+            self._writer_set.close()
+            return
         # 用 sentinel 主动唤醒 listener，避免测试关闭 app 时为轮询超时白等。
         try:
             self._queue.put_nowait(QueuedLogLine(stream=_STOP_STREAM, line="", created_at=0.0))
@@ -78,8 +83,10 @@ class QueueWriterRuntime:
         self._thread.join(timeout=self._shutdown_timeout_seconds)
         if self._thread.is_alive():
             self.warn_once("shutdown-timeout", "structured logging shutdown timed out before queue drained")
-        self._drain_remaining()
-        self._writer_set.close()
+            return
+        if self._thread.ident is None:
+            self._drain_remaining()
+            self._writer_set.close()
 
     def warn_once(self, key: str, message: str) -> None:
         with self._warning_lock:
@@ -101,12 +108,20 @@ class QueueWriterRuntime:
             self._queue.task_done()
 
     def _run(self) -> None:
-        while True:
-            queued = self._queue.get()
-
-            try:
-                if queued.stream == _STOP_STREAM:
+        try:
+            while True:
+                if self._stop_requested.is_set() and self._queue.empty():
                     return
-                self._writer_set.write(stream=queued.stream, line=queued.line, created_at=queued.created_at)
-            finally:
-                self._queue.task_done()
+                try:
+                    queued = self._queue.get(timeout=_QUEUE_POLL_TIMEOUT_SECONDS)
+                except Empty:
+                    continue
+
+                try:
+                    # sentinel 只负责唤醒 listener；真正退出取决于 stop 事件和队列 drain 完成。
+                    if queued.stream != _STOP_STREAM:
+                        self._writer_set.write(stream=queued.stream, line=queued.line, created_at=queued.created_at)
+                finally:
+                    self._queue.task_done()
+        finally:
+            self._writer_set.close()
