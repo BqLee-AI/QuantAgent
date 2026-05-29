@@ -235,6 +235,46 @@ class ObservabilityTestCase(unittest.TestCase):
             contents = written_files[0].read_text(encoding="utf-8")
             self.assertIn('"event":"audit"', contents)
 
+    def test_queue_shutdown_eventually_stops_when_sentinel_cannot_be_enqueued(self) -> None:
+        class BlockingWriterSet:
+            def __init__(self) -> None:
+                self.writes: list[tuple[str, str]] = []
+                self.started_write = threading.Event()
+                self.release = threading.Event()
+                self.closed = threading.Event()
+
+            def write(self, *, stream: str, line: str, created_at: float):
+                self.started_write.set()
+                self.release.wait(timeout=2.0)
+                self.writes.append((stream, line))
+                return Path("/tmp/fake.jsonl")
+
+            def close(self) -> None:
+                self.closed.set()
+
+        writer_set = BlockingWriterSet()
+        with patch("sys.stderr", new_callable=io.StringIO):
+            runtime = QueueWriterRuntime(
+                writer_set=writer_set,  # type: ignore[arg-type]
+                max_size=1,
+                access_drop_when_full=True,
+                shutdown_timeout_seconds=0.1,
+            )
+            runtime.start()
+            self.assertTrue(runtime.enqueue(stream="app", line='{"event":"first"}', created_at=time.time()))
+            self.assertTrue(writer_set.started_write.wait(timeout=1.0))
+            self.assertTrue(runtime.enqueue(stream="app", line='{"event":"queued"}', created_at=time.time()))
+
+            runtime.stop()
+            self.assertTrue(runtime.thread.is_alive())
+
+            writer_set.release.set()
+            runtime.thread.join(timeout=1.0)
+
+        self.assertFalse(runtime.thread.is_alive())
+        self.assertTrue(writer_set.closed.is_set())
+        self.assertEqual(writer_set.writes, [("app", '{"event":"first"}'), ("app", '{"event":"queued"}')])
+
     def test_test_settings_use_memory_sink_by_default(self) -> None:
         from quantagent.api.config.settings import Settings
 
