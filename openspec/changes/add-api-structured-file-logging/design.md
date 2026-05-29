@@ -11,9 +11,11 @@
 - `apps/api/src/quantagent/api/http/exceptions.py`：异常 envelope 与未处理异常日志。
 - `apps/api/src/quantagent/api/db.py`：数据库初始化、session 和 readiness 失败路径。
 - `apps/api/src/quantagent/api/auth/audit.py` 与 auth 相关模块：actor 审计上下文和安全事件。
-- `apps/api/README.md`、根 `.env.example`、`apps/api/.env.example`：日志配置说明。
+- `apps/api/README.md`、根 `.env.example`、`apps/api/.env.example` 和 `apps/api/.env.*.example` 多环境模板：日志配置说明。
 
-配置默认值应遵循现有 `Settings` 模型：共享 `RUNTIME_DIR` 仍由 `quantagent-core` 提供，API 专属日志配置留在 `quantagent.api.config.settings.Settings`。`LOG_DIR` 默认解析为 `RUNTIME_DIR / "logs/api"`；只有显式配置 `LOG_DIR` 时才覆盖该默认路径。
+配置默认值应遵循现有 `Settings` 模型：共享 `RUNTIME_DIR` 仍由 `quantagent-core` 提供，API 专属日志配置留在 `quantagent.api.config.settings.Settings`。`LOG_DIR` 默认解析为 `RUNTIME_DIR / "logs/api"`；只有显式配置 `LOG_DIR` 时才覆盖该默认路径。新增的 `LOG_*` 字段遵循现有 API `Settings` 继承和多环境 dotenv 加载规则，实现者只需在 `Settings` 上声明字段、在对应 `apps/api/.env.*.example` 中补充示例值，不需要修改 dotenv 加载逻辑。
+
+日志模块在初始化时应对 `LOG_DIR` 执行绝对路径解析（例如 `Path.resolve()`），使相对路径 `RUNTIME_DIR` 在启动时就确定实际写入位置，避免因后续进程 cwd 变化导致日志分散到不同目录。
 
 ## Goals / Non-Goals
 
@@ -52,6 +54,8 @@
 - `events.py`：稳定 event 名称常量。
 
 不把这些能力放到 `packages/core`，因为当前真实复用方只有 `apps/api`。后续 worker/scheduler 需要复用时，应通过新的 issue/change 评估下沉边界。
+
+日志 bootstrap 的生命周期与 FastAPI lifespan 对齐：`create_app()` 显式配置日志，lifespan shutdown 阶段应停止 queue listener、flush 已入队记录并关闭文件 handler。这个关闭路径必须幂等，测试多次创建和销毁 app 时不能留下后台线程、重复 handler 或未关闭文件描述符。
 
 ### 2. Request context 替代单一 request id middleware
 
@@ -116,6 +120,7 @@ api.production.pod-api-7d9c9.pid-123.access.20260528T14.part-002.jsonl
 - `error`、`security`、`audit` 先尝试非阻塞入队；失败时允许走一个受限的 fallback writer 或 stderr 脱敏告警，避免关键事件被静默丢弃。
 - fallback writer 只用于关键 stream 的降级路径，必须避免递归日志和无限阻塞；实现应设置最小限度的保护，例如单次告警、超时或进程内状态位。
 - 队列满、降级和丢弃行为本身必须有内部计数或事件，便于测试和排查。
+- 应用关闭时必须停止 listener 并 flush 已入队记录；如果超时仍未完成，应至少输出一次脱敏 stderr warning，并避免 shutdown 无限阻塞。
 
 阶段 1 不做压缩、retention 和磁盘水位清理，但接口和任务边界必须为阶段 2 留出 maintenance 入口。
 

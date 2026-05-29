@@ -10,6 +10,13 @@
 - **THEN** the API logging bootstrap is configured through an explicit idempotent entrypoint
 - **AND** repeated app creation in tests does not duplicate handlers or duplicate log records
 
+#### Scenario: App shutdown flushes logging resources
+
+- **WHEN** the FastAPI lifespan shuts down after logging was configured
+- **THEN** the API stops the logging queue listener through an idempotent shutdown path
+- **AND** queued records are flushed to their stream files before file handlers are closed as far as possible
+- **AND** repeated app creation and shutdown in tests does not leave background logging threads, duplicate handlers, or open file descriptors
+
 #### Scenario: Logging stays inside API boundary
 
 - **WHEN** the first implementation of this capability is added
@@ -92,6 +99,7 @@ API file logs SHALL be grouped by stream, date, process, and time slice to suppo
 - **THEN** each record is routed to `LOG_DIR/{stream}/YYYY/MM/DD/`
 - **AND** the default `LOG_DIR` resolves to `RUNTIME_DIR/logs/api`
 - **AND** file management, rotation, and cleanup logic use the resolved `LOG_DIR` instead of hardcoding the repository root `runtime/` string
+- **AND** the logging module resolves `LOG_DIR` to an absolute path at initialization so that a relative `RUNTIME_DIR` is anchored to the process cwd at startup rather than drifting with subsequent cwd changes
 - **AND** supported streams include at least `access`, `app`, `error`, `security`, and `audit`
 - **AND** route name, actor, source, status code, and event type are stored as JSON fields rather than as separate physical file names
 
@@ -131,6 +139,13 @@ API logging SHALL use a queue based write path in stage 1 so ordinary requests d
 - **AND** if critical records still cannot be queued, the API uses a bounded fallback path or emits at least one redacted local stderr warning
 - **AND** fallback handling does not recursively emit new structured log records or block indefinitely
 - **AND** queue full or dropped access events are observable through an internal counter or log event
+
+#### Scenario: Queue shutdown does not lose queued records silently
+
+- **WHEN** the application is shutting down
+- **THEN** the logging queue listener is asked to drain queued records before stopping
+- **AND** shutdown uses a bounded wait so API shutdown cannot block indefinitely
+- **AND** if queued records cannot be fully drained, the API emits at least one redacted local stderr warning
 
 ### Requirement: Sensitive Data Redaction
 
@@ -202,4 +217,4 @@ The change SHALL update documentation and tests so the logging contract is revie
 - **WHEN** automated tests validate file logging behavior
 - **THEN** they use temporary directories
 - **AND** they do not write test logs into the real `runtime/` directory
-- **AND** the API test command `cd apps/api && uv run python -m unittest discover -s src/tests` covers the relevant behavior
+- **AND** the API test command `cd apps/api && uv run python -m unittest discover -s src` covers the relevant behavior
