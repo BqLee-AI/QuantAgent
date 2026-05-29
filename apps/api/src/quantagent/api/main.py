@@ -6,13 +6,15 @@ from quantagent.api import __version__
 from quantagent.api.config.settings import Settings, settings
 from quantagent.api.db import initialize_database, shutdown_database
 from quantagent.api.http.exceptions import register_exception_handlers
-from quantagent.api.http.middleware import RequestIdMiddleware
+from quantagent.api.http.middleware import RequestContextMiddleware
+from quantagent.api.observability.logging import configure_api_logging, shutdown_api_logging
 from quantagent.api.routers.v1 import register_api_v1_routes
 
 
 def create_app(app_settings: Settings | None = None) -> FastAPI:
     """构建 FastAPI 应用，并注册公共中间件、异常处理和路由。"""
     current_settings = app_settings or settings
+    configure_api_logging(current_settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -22,10 +24,11 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             shutdown_database(app)
+            shutdown_api_logging()
 
     app = FastAPI(title="QuantAgent API", version=__version__, lifespan=lifespan)
     app.state.settings = current_settings
-    app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(RequestContextMiddleware)
     register_exception_handlers(app)
     register_api_v1_routes(app, current_settings)
     return app
