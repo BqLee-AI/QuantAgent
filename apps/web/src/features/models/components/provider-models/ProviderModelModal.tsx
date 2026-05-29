@@ -1,4 +1,4 @@
-import { Button, Input, Modal, Switch, TextField, useOverlayState } from '@heroui/react';
+import { Button, Input, Label, Modal, Switch, TextField, useOverlayState } from '@heroui/react';
 import { useEffect, useMemo, useState } from 'react';
 
 import type { ModelProviderModel, SaveProviderModelInput } from '../../api';
@@ -71,11 +71,33 @@ export function AddProviderModelModal({
                 {isDuplicate ? (
                   <p className="pl-[88px] text-[12px] text-trading-down">这个模型 ID 已经存在。</p>
                 ) : null}
-                <Switch isSelected={enabled} onChange={setEnabled}>
-                  启用模型
+                <Switch
+                  className="items-start gap-3 rounded-lg border border-hairline bg-surface-soft px-3 py-3"
+                  isSelected={enabled}
+                  onChange={() => {
+                    setEnabled((current) => !current);
+                  }}
+                >
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                  <Switch.Content className="gap-1">
+                    <Label className="text-[13px] font-medium text-ink">启用模型</Label>
+                  </Switch.Content>
                 </Switch>
-                <Switch isSelected={supportsVision} onChange={setSupportsVision}>
-                  支持视觉输入
+                <Switch
+                  className="items-start gap-3 rounded-lg border border-hairline bg-surface-soft px-3 py-3"
+                  isSelected={supportsVision}
+                  onChange={() => {
+                    setSupportsVision((current) => !current);
+                  }}
+                >
+                  <Switch.Control>
+                    <Switch.Thumb />
+                  </Switch.Control>
+                  <Switch.Content className="gap-1">
+                    <Label className="text-[13px] font-medium text-ink">支持视觉输入</Label>
+                  </Switch.Content>
                 </Switch>
               </div>
             </Modal.Body>
@@ -105,14 +127,17 @@ function InlineField({
   value: string;
 }) {
   return (
-    <div className="grid items-center gap-2 sm:grid-cols-[76px_minmax(0,1fr)] sm:gap-3">
-      <label className="text-[13px] font-medium text-ink">
+    <TextField
+      className="grid items-center gap-2 sm:grid-cols-[76px_minmax(0,1fr)] sm:gap-3"
+      isDisabled={isDisabled}
+      value={value}
+      onChange={onChange}
+    >
+      <Label className="text-[13px] font-medium text-ink">
         {label}
         {isRequired ? <span className="ml-1 text-trading-down">*</span> : null}
-      </label>
-      <TextField isDisabled={isDisabled} value={value} onChange={onChange}>
-        <Input className={`w-full min-w-0 ${isDisabled ? 'opacity-60' : ''}`} variant="secondary" />
-      </TextField>
-    </div>
+      </Label>
+      <Input className={`w-full min-w-0 ${isDisabled ? 'opacity-60' : ''}`} variant="secondary" />
+    </TextField>
   );
 }

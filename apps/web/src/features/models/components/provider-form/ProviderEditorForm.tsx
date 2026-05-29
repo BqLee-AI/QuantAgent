@@ -1,4 +1,4 @@
-import { Button, Chip, Input, TextField } from '@heroui/react';
+import { Button, Chip, Input, Switch, TextField, useOverlayState } from '@heroui/react';
 import { type ReactNode } from 'react';
 
 import type {
@@ -11,6 +11,7 @@ import type {
 import { useProviderForm } from '../../hooks/useProviderForm';
 import { type ProviderPresetDefinition } from '../../provider-presets';
 import { ProviderModelManager } from '../provider-models/ProviderModelManager';
+import { ConfirmActionModal } from '../shared/ConfirmActionModal';
 import { ProviderAvatar } from '../shared/ProviderAvatar';
 
 interface ProviderEditorFormProps {
@@ -18,6 +19,10 @@ interface ProviderEditorFormProps {
   isCreating: boolean;
   /** 当前选中的预设定义 */
   activePreset: ProviderPresetDefinition | undefined;
+  createDraft?: {
+    baseUrl: string;
+    name: string;
+  } | null;
   /** 后端返回的 provider 详情（编辑模式时非空） */
   provider: ModelProviderDetail | undefined;
   enabledOverride?: boolean;
@@ -27,6 +32,7 @@ interface ProviderEditorFormProps {
   isDeleting: boolean;
   isSettingDefault: boolean;
   saveError: string | null;
+  statusPanel?: ReactNode;
   testError: string | null;
   testSuccess: boolean;
   onEnabledChange?: (enabled: boolean) => void;
@@ -47,6 +53,7 @@ interface ProviderEditorFormProps {
 export function ProviderEditorForm({
   isCreating,
   activePreset,
+  createDraft,
   provider,
   enabledOverride,
   isLoading,
@@ -55,6 +62,7 @@ export function ProviderEditorForm({
   isDeleting,
   isSettingDefault,
   saveError,
+  statusPanel,
   testError,
   testSuccess,
   onEnabledChange,
@@ -68,18 +76,22 @@ export function ProviderEditorForm({
   onFetchRemoteModels,
   onUpdateModel,
 }: ProviderEditorFormProps) {
+  const deleteConfirmState = useOverlayState();
   const {
     apiKey,
     baseUrl,
     buildProviderInput,
     enabled,
+    name,
     persistProviderIfNeeded,
     setApiKey,
     setBaseUrl,
     setEnabled,
+    setName,
     submit,
   } = useProviderForm({
     activePreset,
+    createDraft,
     enabledOverride,
     isCreating,
     onCreateWithModel,
@@ -97,7 +109,7 @@ export function ProviderEditorForm({
   // 空状态
   if (!isCreating && !provider && !isLoading) {
     return (
-      <section className="flex h-full items-center justify-center rounded-xl border border-hairline bg-canvas">
+      <section className="flex min-h-[24rem] items-center justify-center rounded-xl border border-hairline bg-canvas">
         <div className="flex flex-col items-center gap-3 py-20 text-center">
           <span className="text-3xl">📡</span>
           <p className="text-sm text-muted">选择左侧的供应商查看和编辑配置</p>
@@ -107,14 +119,14 @@ export function ProviderEditorForm({
   }
 
   return (
-    <section className="flex h-full flex-col overflow-hidden rounded-xl border border-hairline bg-canvas">
+    <section className="flex min-h-[24rem] flex-col overflow-hidden rounded-xl border border-hairline bg-canvas">
       {/* Title bar */}
-      <div className="flex items-center justify-between gap-4 border-b border-hairline px-5 py-3.5">
+      <div className="flex flex-col gap-4 border-b border-hairline px-4 py-4 sm:px-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <ProviderAvatar name={displayName} size={28} />
           <h2 className="truncate text-[15px] font-semibold text-ink">{displayName}</h2>
         </div>
-        <div className="flex shrink-0 items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {!isCreating && provider ? (
             <Chip color={keyStatus === 'configured' ? 'success' : 'warning'} size="sm" variant="soft">
               {keyStatus === 'configured' ? 'Key 已配置' : '缺少 Key'}
@@ -137,19 +149,15 @@ export function ProviderEditorForm({
               size="sm"
               type="button"
               variant="danger-soft"
-              onPress={() => {
-                if (!window.confirm(`确定删除供应商「${provider.name}」吗？`)) return;
-                onDeleteProvider();
-              }}
+              onPress={deleteConfirmState.open}
             >
               {isDeleting ? '删除中...' : '删除供应商'}
             </Button>
           ) : null}
-          <button
-            aria-label={enabled ? '关闭供应商' : '开启供应商'}
-            className={`relative h-7 w-12 rounded-full transition-colors ${enabled ? 'bg-trading-up' : 'bg-muted/50'}`}
-            type="button"
-            onClick={() => {
+          <Switch
+            isSelected={enabled}
+            size="sm"
+            onChange={() => {
               const next = !enabled;
               setEnabled(next);
               onEnabledChange?.(next);
@@ -159,16 +167,48 @@ export function ProviderEditorForm({
               });
             }}
           >
-            <span
-              className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-all ${enabled ? 'left-6' : 'left-1'}`}
-            />
-          </button>
+            启用供应商
+          </Switch>
         </div>
       </div>
 
+      {!isCreating && provider ? (
+        <ConfirmActionModal
+          confirmLabel="删除供应商"
+          description={
+            <>
+              确定删除供应商「{provider.name}」吗？
+              <br />
+              该操作会同时移除其模型配置，并清理相关预设绑定。
+            </>
+          }
+          isConfirming={isDeleting}
+          state={deleteConfirmState}
+          title="删除供应商"
+          tone="danger"
+          onConfirm={onDeleteProvider}
+        />
+      ) : null}
+
       {/* Scrollable body */}
-      <div className="flex-1 overflow-y-auto px-5 py-5">
+      <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-5">
         <form className="grid gap-6" onSubmit={submit}>
+          {/* Provider Name */}
+          <div>
+            <SectionTitle>供应商名称</SectionTitle>
+            <div className="mt-3">
+              <TextField isDisabled={isLoading} value={name} onChange={(value) => setName(value)}>
+                <Input
+                  placeholder={activePreset?.draft.name ?? '输入供应商名称'}
+                  variant="secondary"
+                  onBlur={() => {
+                    void persistProviderIfNeeded();
+                  }}
+                />
+              </TextField>
+            </div>
+          </div>
+
           {/* API Host */}
           <div>
             <SectionTitle>API Host</SectionTitle>
@@ -201,7 +241,7 @@ export function ProviderEditorForm({
               </TextField>
             </div>
             {/* Check connection */}
-            <div className="mt-2 flex items-center gap-3">
+            <div className="mt-2 flex flex-wrap items-center gap-3">
               <Button
                 isDisabled={!canTest}
                 size="sm"
@@ -254,6 +294,11 @@ export function ProviderEditorForm({
             }}
             onUpdateModel={onUpdateModel}
           />
+          {statusPanel ? (
+            <div className="mt-6 border-t border-hairline pt-6">
+              {statusPanel}
+            </div>
+          ) : null}
         </div>
       </div>
     </section>

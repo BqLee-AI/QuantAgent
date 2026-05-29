@@ -10,6 +10,10 @@ import type { ProviderPresetDefinition } from '../provider-presets';
 
 interface UseProviderFormOptions {
   activePreset: ProviderPresetDefinition | undefined;
+  createDraft?: {
+    baseUrl: string;
+    name: string;
+  } | null;
   enabledOverride?: boolean;
   isCreating: boolean;
   provider: ModelProviderDetail | undefined;
@@ -22,6 +26,7 @@ interface UseProviderFormOptions {
 
 export function useProviderForm({
   activePreset,
+  createDraft,
   enabledOverride,
   isCreating,
   provider,
@@ -60,6 +65,15 @@ export function useProviderForm({
 
   useEffect(() => {
     if (!isCreating) return;
+    if (createDraft) {
+      setName(createDraft.name);
+      setBaseUrl(createDraft.baseUrl);
+      setEnabled(false);
+      setApiKey('');
+      lastPresetIdRef.current = null;
+      lastProviderNameRef.current = createDraft.name;
+      return;
+    }
     if (!activePreset) return;
     const presetChanged = lastPresetIdRef.current !== activePreset.id;
     setName(activePreset.draft.name);
@@ -70,7 +84,7 @@ export function useProviderForm({
       lastPresetIdRef.current = activePreset.id;
     }
     lastProviderNameRef.current = activePreset.draft.name;
-  }, [activePreset, isCreating]);
+  }, [activePreset, createDraft, isCreating]);
 
   function buildProviderInput(overrides: Partial<UpdateModelProviderInput> = {}): UpdateModelProviderInput {
     return {
@@ -134,9 +148,11 @@ export function useProviderForm({
     buildProviderInput,
     enabled,
     persistProviderIfNeeded,
+    name,
     setApiKey,
     setBaseUrl,
     setEnabled,
+    setName,
     submit,
   };
 }

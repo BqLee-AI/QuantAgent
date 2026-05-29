@@ -1,5 +1,5 @@
 import { Button, Chip, Input, TextField, useOverlayState } from '@heroui/react';
-import { Pencil, Plus } from 'lucide-react';
+import { Pencil, Plus, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import type { ModelProviderModel, RemoteProviderModel, SaveProviderModelInput } from '../../api';
@@ -44,51 +44,53 @@ export function ProviderModelManager({
 
   return (
     <div className="grid gap-3">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex items-center gap-2">
           <SectionTitle>模型列表</SectionTitle>
           <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-surface-card px-1.5 text-[11px] font-semibold text-muted-strong">
             {models.length}
           </span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           {models.length > 0 ? (
             <TextField value={searchText} onChange={setSearchText}>
-              <Input className="h-8 w-52" placeholder="搜索模型" variant="secondary" />
+              <Input className="h-8 w-full sm:w-52" placeholder="搜索模型" variant="secondary" />
             </TextField>
           ) : null}
-          <Button
-            isDisabled={isBusy}
-            size="sm"
-            type="button"
-            variant="outline"
-            onPress={async () => {
-              const isReady = await onFetchModelList();
-              if (!isReady) return;
-              const fetchedModels = await onFetchRemoteModels();
-              setRemoteModels(fetchedModels);
-              fetchModelsState.open();
-            }}
-          >
-            获取模型列表
-          </Button>
-          <Button
-            isIconOnly
-            aria-label="添加模型"
-            isDisabled={isBusy}
-            size="sm"
-            type="button"
-            variant="primary"
-            onPress={() => {
-              void onOpenAddModel().then((isReady) => {
-                if (isReady) {
-                  addModelState.open();
-                }
-              });
-            }}
-          >
-            <Plus size={16} />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              isDisabled={isBusy}
+              size="sm"
+              type="button"
+              variant="outline"
+              onPress={async () => {
+                const isReady = await onFetchModelList();
+                if (!isReady) return;
+                const fetchedModels = await onFetchRemoteModels();
+                setRemoteModels(fetchedModels);
+                fetchModelsState.open();
+              }}
+            >
+              获取模型列表
+            </Button>
+            <Button
+              isIconOnly
+              aria-label="添加模型"
+              isDisabled={isBusy}
+              size="sm"
+              type="button"
+              variant="primary"
+              onPress={() => {
+                void onOpenAddModel().then((isReady) => {
+                  if (isReady) {
+                    addModelState.open();
+                  }
+                });
+              }}
+            >
+              <Plus size={16} />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -176,20 +178,22 @@ function ProviderModelRow({
 }) {
   return (
     <div className="group rounded-lg bg-canvas px-3 py-2.5">
-      <div className="flex items-center justify-between gap-3">
-        <div className="min-w-0 flex items-center gap-2.5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0 flex items-start gap-2.5">
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-card text-[11px] font-semibold text-muted-strong">
             {model.model_name.charAt(0).toUpperCase()}
           </span>
-          <span className="truncate text-[13px] font-medium text-ink">{model.model_name}</span>
-          <div className="flex shrink-0 items-center gap-1.5">
-            {model.is_global_default ? (
-              <Chip className="bg-primary text-on-primary" size="sm" variant="soft">默认</Chip>
-            ) : null}
-            {model.supports_vision ? (
-              <Chip size="sm" variant="soft">视觉</Chip>
-            ) : null}
-            {!model.enabled ? <Chip size="sm" variant="soft">已禁用</Chip> : null}
+          <div className="min-w-0">
+            <span className="block truncate text-[13px] font-medium text-ink">{model.model_name}</span>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              {model.is_global_default ? (
+                <Chip className="bg-primary text-on-primary" size="sm" variant="soft">默认</Chip>
+              ) : null}
+              {model.supports_vision ? (
+                <Chip size="sm" variant="soft">视觉</Chip>
+              ) : null}
+              {!model.enabled ? <Chip size="sm" variant="soft">已禁用</Chip> : null}
+            </div>
           </div>
         </div>
         <div className="flex shrink-0 gap-1.5">
@@ -197,7 +201,7 @@ function ProviderModelRow({
             <Pencil size={15} />
           </Button>
           <Button isIconOnly aria-label={`删除模型 ${model.model_name}`} size="sm" type="button" variant="danger-soft" onPress={onDelete}>
-            删除
+            <Trash2 size={15} />
           </Button>
         </div>
       </div>
