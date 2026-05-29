@@ -4,7 +4,7 @@
 
 - [x] 1.1 校验本 change 的 `proposal.md`、`design.md`、`specs/api-structured-file-logging/spec.md` 和 `tasks.md` 是否覆盖 #180 的文件落盘、两阶段实现和 OpenSpec-only PR 边界。
 - [x] 1.2 运行 `openspec validate add-api-structured-file-logging --type change --strict --json`。
-- [ ] 1.3 创建只包含本 change OpenSpec artifacts 的 OpenSpec-only PR，等待维护者明确评论“没问题”或批准后再进入实现。
+- [x] 1.3 创建只包含本 change OpenSpec artifacts 的 OpenSpec-only PR，等待维护者明确评论“没问题”或批准后再进入实现。
 
 ## 2. 阶段 1：核心日志基础设施
 
@@ -40,7 +40,7 @@
 - [x] 5.4 补充队列写入和队列满降级测试，验证 access 降级不影响 error/security/audit 的尽量保留策略。
 - [x] 5.4a 补充 logging shutdown 测试，验证 listener 可停止、已入队记录尽量 flush、重复创建/关闭 app 不遗留后台线程、重复 handler 或未关闭文件描述符。
 - [x] 5.5 更新 `apps/api/README.md`、根 `.env.example`、`apps/api/.env.example` 和 `apps/api/.env.*.example` 多环境模板，说明阶段 1 支持的日志配置、文件布局、命名、轮转、脱敏和非目标。
-- [ ] 5.6 运行 `cd apps/api && uv run python -m unittest discover -s src`，并在实现 PR 中说明阶段 1 验证结果。
+- [x] 5.6 运行 `cd apps/api && uv run python -m unittest discover -s src`，并在实现 PR 中说明阶段 1 验证结果。
 
 ## 6. 阶段 1 Review Gate
 
