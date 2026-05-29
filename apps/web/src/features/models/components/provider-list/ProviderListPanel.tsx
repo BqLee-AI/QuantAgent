@@ -1,8 +1,10 @@
+import { Button, Input, TextField, useOverlayState } from '@heroui/react';
 import { useMemo } from 'react';
 
 import type { ModelProviderSummary } from '../../api';
 import { type ProviderPresetDefinition, providerPresets } from '../../provider-presets';
 import type { ProviderListItem } from '../../types';
+import { CreateProviderModal, type CreateProviderDraft } from './CreateProviderModal';
 import { ProviderAvatar } from '../shared/ProviderAvatar';
 
 type ProviderStateFilter = 'all' | 'enabled' | 'default' | 'failed' | 'missing_key';
@@ -17,6 +19,7 @@ interface ProviderListPanelProps {
   providerEnabledOverrides?: Readonly<Record<string, boolean>>;
   /** 当前选中的列表项（preset key 或 provider id） */
   selectedKey: string | null;
+  onCreateProvider: (draft: CreateProviderDraft) => void;
   onSearchChange: (value: string) => void;
   onSelectItem: (item: ProviderListItem) => void;
   searchValue: string;
@@ -27,6 +30,7 @@ interface ProviderListPanelProps {
 export function ProviderListPanel({
   providers,
   isLoading,
+  onCreateProvider,
   providerEnabledOverrides,
   selectedKey,
   onSearchChange,
@@ -35,6 +39,7 @@ export function ProviderListPanel({
   stateFilter,
   onStateFilterChange,
 }: ProviderListPanelProps) {
+  const createModalState = useOverlayState();
   /** 合并预设 + 已配置的供应商，去重 */
   const listItems = useMemo(() => {
     const items: ProviderListItem[] = [];
@@ -49,6 +54,7 @@ export function ProviderListPanel({
         matchedProviderIds.add(matched.id);
       }
       items.push({
+        kind: matched ? 'provider' : 'preset',
         providerId: matched?.id ?? null,
         presetId: preset.id,
         name: matched?.name ?? preset.name,
@@ -60,6 +66,7 @@ export function ProviderListPanel({
     for (const provider of providers) {
       if (matchedProviderIds.has(provider.id)) continue;
       items.push({
+        kind: 'provider',
         providerId: provider.id,
         presetId: findPresetForProvider(provider)?.id ?? 'custom',
         name: provider.name,
@@ -89,34 +96,35 @@ export function ProviderListPanel({
   }, [providers, searchValue, stateFilter]);
 
   return (
-    <section className="flex h-full flex-col overflow-hidden rounded-xl border border-hairline bg-canvas">
+    <section className="flex min-h-[18rem] flex-col overflow-hidden rounded-xl border border-hairline bg-canvas">
       {/* Header */}
-      <div className="border-b border-hairline px-4 py-3">
+      <div className="flex items-center justify-between gap-3 border-b border-hairline px-4 py-3">
         <h2 className="text-[15px] font-semibold text-ink">供应商</h2>
+        <Button size="sm" type="button" variant="primary" onPress={createModalState.open}>
+          新增供应商
+        </Button>
       </div>
 
       {/* Search */}
-      <div className="border-b border-hairline px-4 py-2.5">
-        <input
-          className="h-9 w-full rounded-lg border border-hairline bg-surface-soft px-3 text-[13px] text-ink outline-none placeholder:text-muted focus:border-primary"
-          placeholder="搜索供应商..."
-          value={searchValue}
-          onChange={(e) => onSearchChange(e.target.value)}
-        />
-        <div className="mt-2 flex flex-wrap gap-1.5">
+      <div className="border-b border-hairline px-4 py-3">
+        <TextField value={searchValue} onChange={onSearchChange}>
+          <Input
+            className="w-full"
+            placeholder="搜索供应商..."
+            variant="secondary"
+          />
+        </TextField>
+        <div className="mt-3 flex flex-wrap gap-2">
           {stateFilters.map((filter) => (
-            <button
+            <Button
               key={filter.value}
-              className={
-                stateFilter === filter.value
-                  ? 'rounded-full bg-primary px-2.5 py-1 text-[11px] font-semibold text-on-primary'
-                  : 'rounded-full bg-surface-card px-2.5 py-1 text-[11px] font-semibold text-muted-strong hover:text-ink'
-              }
+              size="sm"
               type="button"
+              variant={stateFilter === filter.value ? 'primary' : 'outline'}
               onClick={() => onStateFilterChange(filter.value)}
             >
               {filter.label}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -134,9 +142,13 @@ export function ProviderListPanel({
             <p className="text-[13px] text-muted">没有匹配的供应商</p>
           </div>
         ) : (
-          <div className="flex flex-col">
+          <div className="flex flex-col py-1">
             {listItems.map((item) => {
-              const itemKey = item.isConfigured ? `p-${item.providerId}` : `preset-${item.presetId}`;
+              const itemKey = item.kind === 'create'
+                ? 'create-provider'
+                : item.isConfigured
+                  ? `p-${item.providerId}`
+                  : `preset-${item.presetId}`;
               const isSelected = selectedKey === itemKey;
               const preset = providerPresets.find((p) => p.id === item.presetId);
 
@@ -154,6 +166,14 @@ export function ProviderListPanel({
           </div>
         )}
       </div>
+
+      <CreateProviderModal
+        existingNames={providers.map((provider) => provider.name)}
+        state={createModalState}
+        onSubmit={(draft) => {
+          onCreateProvider(draft);
+        }}
+      />
     </section>
   );
 }
@@ -203,8 +223,8 @@ function ProviderRow({
     <button
       className={
         isSelected
-          ? 'flex w-full items-center gap-3 border-l-2 border-l-primary bg-surface-soft px-4 py-3 text-left transition-colors'
-          : 'flex w-full items-center gap-3 border-l-2 border-l-transparent px-4 py-3 text-left transition-colors hover:bg-surface-soft'
+          ? 'mx-2 flex w-[calc(100%-1rem)] items-start gap-3 rounded-lg border border-primary/15 bg-surface-soft px-3 py-3 text-left transition-colors'
+          : 'mx-2 flex w-[calc(100%-1rem)] items-start gap-3 rounded-lg border border-transparent px-3 py-3 text-left transition-colors hover:bg-surface-soft'
       }
       type="button"
       onClick={onSelect}
@@ -212,8 +232,8 @@ function ProviderRow({
       <ProviderAvatar name={preset?.draft.name ?? displayName} size={28} />
 
       <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-[13px] font-semibold text-ink">{displayName}</span>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="min-w-0 truncate text-[13px] font-semibold text-ink">{displayName}</span>
           {item.summary?.is_default ? (
             <span className="shrink-0 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-on-primary">
               默认
@@ -225,7 +245,7 @@ function ProviderRow({
             </span>
           ) : null}
         </div>
-        <div className="mt-1 flex min-w-0 items-center gap-2 text-[11px] text-muted">
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-muted">
           <span className={`shrink-0 rounded-full px-2 py-0.5 font-semibold ${statusClass}`}>{statusLabel}</span>
           <span className="shrink-0">{item.summary?.model_count ?? 0} models</span>
           {item.summary?.updated_at ? (

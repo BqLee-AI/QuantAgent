@@ -23,6 +23,7 @@ import {
   useModelProvidersQuery,
 } from '../queries';
 import type { ProviderListItem } from '../types';
+import type { CreateProviderDraft } from '../components/provider-list/CreateProviderModal';
 
 export type ModelsView = 'providers' | 'presets';
 export type ProviderStateFilter = 'all' | 'enabled' | 'default' | 'failed' | 'missing_key';
@@ -41,6 +42,7 @@ export function useModelsPage() {
   const [providerEnabledOverrides, setProviderEnabledOverrides] = useState<Record<string, boolean>>({});
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<ProviderListItem | null>(null);
+  const [createDraft, setCreateDraft] = useState<CreateProviderDraft | null>(null);
 
   const isCreating = selectedItem !== null && !selectedItem.isConfigured;
   const activeProviderId = selectedItem?.isConfigured ? selectedItem.providerId : null;
@@ -53,6 +55,7 @@ export function useModelsPage() {
       const matchedPreset = findPresetForProvider(firstProvider);
       setSelectedKey(`p-${firstProvider.id}`);
       setSelectedItem({
+        kind: 'provider',
         providerId: firstProvider.id,
         presetId: matchedPreset?.id ?? 'custom',
         name: firstProvider.name,
@@ -65,6 +68,7 @@ export function useModelsPage() {
     if (!firstPreset) return;
     setSelectedKey(`preset-${firstPreset.id}`);
     setSelectedItem({
+      kind: 'preset',
       providerId: null,
       presetId: firstPreset.id,
       name: firstPreset.name,
@@ -95,9 +99,28 @@ export function useModelsPage() {
   const remoteModelsMutation = useFetchRemoteProviderModelsMutation();
 
   function handleSelectItem(item: ProviderListItem) {
-    const itemKey = item.isConfigured ? `p-${item.providerId}` : `preset-${item.presetId}`;
+    const itemKey = item.kind === 'create'
+      ? 'create-provider'
+      : item.isConfigured
+        ? `p-${item.providerId}`
+        : `preset-${item.presetId}`;
     setSelectedKey(itemKey);
     setSelectedItem(item);
+    if (item.kind !== 'create') {
+      setCreateDraft(null);
+    }
+  }
+
+  function handleCreateProvider(draft: CreateProviderDraft) {
+    setCreateDraft(draft);
+    setSelectedKey('create-provider');
+    setSelectedItem({
+      kind: 'create',
+      providerId: null,
+      presetId: draft.presetId,
+      name: draft.name,
+      isConfigured: false,
+    });
   }
 
   function handleCreateWithModel(input: CreateModelProviderInput, model: SaveProviderModelInput | null) {
@@ -115,6 +138,7 @@ export function useModelsPage() {
       });
       setSelectedKey(providerKey);
       setSelectedItem({
+        kind: 'provider',
         providerId: provider.id,
         presetId: selectedItem?.presetId ?? matchedPreset?.id ?? 'custom',
         name: provider.name,
@@ -205,6 +229,7 @@ export function useModelsPage() {
           const preset = providerPresets.find((item) => item.id === deletedPresetId);
           setSelectedKey(`preset-${deletedPresetId}`);
           setSelectedItem({
+            kind: 'preset',
             providerId: null,
             presetId: deletedPresetId,
             name: preset?.name ?? selectedItem?.name ?? '自定义',
@@ -228,6 +253,7 @@ export function useModelsPage() {
     activePreset,
     activeProviderId,
     activeView,
+    createDraft,
     createModelForProviderMutation,
     createMutation,
     createProviderModelMutation,
@@ -235,6 +261,7 @@ export function useModelsPage() {
     deleteProviderMutation,
     ensureProviderForTesting,
     handleCreateWithModel,
+    handleCreateProvider,
     handleDeleteProvider,
     handleEnabledChange,
     handleSelectItem,

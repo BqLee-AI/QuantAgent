@@ -11,9 +11,9 @@ export function ModelsPage() {
   const page = useModelsPage();
 
   return (
-    <>
+    <div className="space-y-5">
       {/* Page header */}
-      <section className="mb-5 flex items-end justify-between gap-4">
+      <section className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.12em] text-muted">模型</p>
           <h1 className="mt-1 text-[28px] font-semibold tracking-[-0.03em] text-ink">模型配置</h1>
@@ -21,47 +21,55 @@ export function ModelsPage() {
       </section>
 
       {/* View switcher */}
-      <div className="mb-5 flex gap-2">
-        <Button
-          type="button"
-          variant={page.activeView === 'providers' ? 'primary' : 'outline'}
-          onPress={() => page.setActiveView('providers')}
-        >
-          供应商配置
-        </Button>
-        <Button
-          type="button"
-          variant={page.activeView === 'presets' ? 'primary' : 'outline'}
-          onPress={() => page.setActiveView('presets')}
-        >
-          任务模型预设
-        </Button>
+      <div className="overflow-x-auto pb-1">
+        <div className="inline-flex min-w-full gap-2 rounded-xl border border-hairline bg-canvas p-1 sm:min-w-0">
+          <Button
+            className="flex-1 sm:flex-none"
+            type="button"
+            variant={page.activeView === 'providers' ? 'primary' : 'outline'}
+            onPress={() => page.setActiveView('providers')}
+          >
+            供应商配置
+          </Button>
+          <Button
+            className="flex-1 sm:flex-none"
+            type="button"
+            variant={page.activeView === 'presets' ? 'primary' : 'outline'}
+            onPress={() => page.setActiveView('presets')}
+          >
+            任务模型预设
+          </Button>
+        </div>
       </div>
 
       {/* Error banner */}
       {page.providersQuery.isError ? (
-        <div className="mb-4 rounded-lg border border-trading-down/30 bg-trading-down/5 px-4 py-2.5 text-[13px] text-trading-down">
+        <div className="rounded-lg border border-trading-down/30 bg-trading-down/5 px-4 py-2.5 text-[13px] text-trading-down">
           Provider 列表加载失败：{formatModelApiError(page.providersQuery.error) ?? '未知错误'}
         </div>
       ) : null}
 
       {page.activeView === 'providers' ? (
-        <div className="grid h-[calc(100vh-56px-2*var(--qa-spacing-lg)-120px)] min-h-[480px] grid-cols-[300px_minmax(0,1fr)_360px] gap-4">
-          <ProviderListPanel
-            isLoading={page.providersQuery.isLoading}
-            providerEnabledOverrides={page.providerEnabledOverrides}
-            providers={page.providersQuery.data?.providers ?? []}
-            searchValue={page.providerSearch}
-            stateFilter={page.providerStateFilter}
-            onSearchChange={page.setProviderSearch}
-            onStateFilterChange={page.setProviderStateFilter}
-            selectedKey={page.selectedKey}
-            onSelectItem={page.handleSelectItem}
-          />
+        <div className="grid gap-4 xl:grid-cols-[minmax(18rem,22rem)_minmax(0,1fr)]">
+          <div className="xl:sticky xl:top-0 xl:self-start">
+            <ProviderListPanel
+              isLoading={page.providersQuery.isLoading}
+              onCreateProvider={page.handleCreateProvider}
+              providerEnabledOverrides={page.providerEnabledOverrides}
+              providers={page.providersQuery.data?.providers ?? []}
+              searchValue={page.providerSearch}
+              stateFilter={page.providerStateFilter}
+              onSearchChange={page.setProviderSearch}
+              onStateFilterChange={page.setProviderStateFilter}
+              selectedKey={page.selectedKey}
+              onSelectItem={page.handleSelectItem}
+            />
+          </div>
 
           <ProviderEditorForm
             isCreating={page.isCreating}
             activePreset={page.activePreset}
+            createDraft={page.createDraft}
             enabledOverride={page.selectedKey ? page.providerEnabledOverrides[page.selectedKey] : undefined}
             provider={page.providerQuery.data}
             isLoading={page.providerQuery.isLoading}
@@ -100,12 +108,14 @@ export function ModelsPage() {
               return page.remoteModelsMutation.mutateAsync(provider.id);
             }}
             onUpdateModel={(modelId, input) => page.updateProviderModelMutation.mutate({ input, modelId })}
-          />
-          <ProviderStatusPanel
-            invocations={page.invocationsQuery.data ?? []}
-            invocationsError={page.invocationsQuery.isError}
-            invocationsLoading={page.invocationsQuery.isLoading}
-            provider={page.providerQuery.data}
+            statusPanel={(
+              <ProviderStatusPanel
+                invocations={page.invocationsQuery.data ?? []}
+                invocationsError={page.invocationsQuery.isError}
+                invocationsLoading={page.invocationsQuery.isLoading}
+                provider={page.providerQuery.data}
+              />
+            )}
           />
         </div>
       ) : (
@@ -122,6 +132,6 @@ export function ModelsPage() {
           }
         />
       )}
-    </>
+    </div>
   );
 }
