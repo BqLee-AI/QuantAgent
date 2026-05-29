@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import copy
 from dataclasses import dataclass
 import logging
 import os
@@ -22,6 +23,7 @@ from quantagent.api.observability.queue import QueueWriterRuntime
 _LOGGER_NAME = "quantagent.api"
 _SECURITY_LOGGED_FLAG = "_structured_security_logged"
 _ERROR_LOGGED_EVENTS = "_structured_error_logged_events"
+_UVICORN_ERROR_LOGGER_NAME = "uvicorn.error"
 _RUNTIME_LOCK = threading.Lock()
 _ACTIVE_RUNTIME: "_LoggingRuntime | None" = None
 
@@ -44,26 +46,43 @@ class QueueStructuredFileHandler(logging.Handler):
     def __init__(self, runtime: QueueWriterRuntime, formatter: JsonLinesFormatter) -> None:
         super().__init__()
         self._runtime = runtime
+        self._context_filter = ContextInjectionFilter()
+        self._redaction_filter = SensitiveDataRedactionFilter()
         self.setFormatter(formatter)
-        self.addFilter(ContextInjectionFilter())
-        self.addFilter(SensitiveDataRedactionFilter())
 
     def emit(self, record: logging.LogRecord) -> None:
-        line = self.format(record)
-        stream = getattr(record, "stream", "app")
-        self._runtime.enqueue(stream=stream, line=line, created_at=record.created)
+        structured_record = _prepare_structured_record(record, self._context_filter, self._redaction_filter)
+        line = self.format(structured_record)
+        stream = getattr(structured_record, "stream", "app")
+        self._runtime.enqueue(stream=stream, line=line, created_at=structured_record.created)
 
 
 class InMemoryStructuredHandler(logging.Handler):
     def __init__(self, formatter: JsonLinesFormatter) -> None:
         super().__init__()
         self.records: list[str] = []
+        self._context_filter = ContextInjectionFilter()
+        self._redaction_filter = SensitiveDataRedactionFilter()
         self.setFormatter(formatter)
-        self.addFilter(ContextInjectionFilter())
-        self.addFilter(SensitiveDataRedactionFilter())
 
     def emit(self, record: logging.LogRecord) -> None:
-        self.records.append(self.format(record))
+        structured_record = _prepare_structured_record(record, self._context_filter, self._redaction_filter)
+        self.records.append(self.format(structured_record))
+
+
+def _prepare_structured_record(
+    record: logging.LogRecord,
+    context_filter: ContextInjectionFilter,
+    redaction_filter: SensitiveDataRedactionFilter,
+) -> logging.LogRecord:
+    # 结构化文件日志需要脱敏，但不能污染继续传播给 uvicorn 控制台 handler 的原始 LogRecord。
+    structured_record = copy(record)
+    structured = getattr(record, "structured_data", None)
+    if isinstance(structured, dict):
+        structured_record.structured_data = dict(structured)
+    context_filter.filter(structured_record)
+    redaction_filter.filter(structured_record)
+    return structured_record
 
 
 @dataclass
@@ -78,7 +97,7 @@ class _LoggingRuntime:
         logger = logging.getLogger(_LOGGER_NAME)
         if self.handler in logger.handlers:
             logger.removeHandler(self.handler)
-        uvicorn_error = logging.getLogger("uvicorn.error")
+        uvicorn_error = logging.getLogger(_UVICORN_ERROR_LOGGER_NAME)
         if self.handler in uvicorn_error.handlers:
             uvicorn_error.removeHandler(self.handler)
 
@@ -144,10 +163,11 @@ def configure_api_logging(settings: Settings) -> None:
         logger.propagate = False
         logger.addHandler(handler)
 
-        uvicorn_error = logging.getLogger("uvicorn.error")
+        uvicorn_error = logging.getLogger(_UVICORN_ERROR_LOGGER_NAME)
         uvicorn_error.handlers = [existing for existing in uvicorn_error.handlers if not isinstance(existing, QueueStructuredFileHandler)]
         uvicorn_error.setLevel(config.log_level)
-        uvicorn_error.propagate = False
+        # uvicorn.error 的启动状态需要继续传给 uvicorn 控制台 handler，否则本地 `uv run api` 会像卡在 startup。
+        uvicorn_error.propagate = True
         uvicorn_error.addHandler(handler)
 
         uvicorn_access = logging.getLogger("uvicorn.access")

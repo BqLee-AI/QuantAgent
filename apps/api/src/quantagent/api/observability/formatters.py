@@ -6,6 +6,8 @@ import logging
 import os
 from typing import Any
 
+from quantagent.api.observability.filters import redact_value
+
 
 _RESERVED_PAYLOAD_KEYS = frozenset(
     {
@@ -52,9 +54,18 @@ class JsonLinesFormatter(logging.Formatter):
             "trace_id": structured.get("trace_id"),
         }
 
-        message = record.getMessage()
+        message = _get_redacted_message(record)
         if message and message != payload["event"]:
             payload["message"] = message
 
         payload.update({key: value for key, value in structured.items() if key not in _RESERVED_PAYLOAD_KEYS})
         return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def _get_redacted_message(record: logging.LogRecord) -> str:
+    try:
+        message = record.getMessage()
+    except Exception:
+        # 第三方 logger 可能使用非标准 msg/args 组合；结构化日志不能因此中断 API 启动或请求处理。
+        message = str(record.msg)
+    return redact_value("message", message)

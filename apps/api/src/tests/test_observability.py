@@ -20,7 +20,13 @@ from quantagent.api.observability.files import (
 )
 from quantagent.api.observability.filters import ContextInjectionFilter, SensitiveDataRedactionFilter, redact_value
 from quantagent.api.observability.formatters import JsonLinesFormatter
-from quantagent.api.observability.logging import log_error_event
+from quantagent.api.observability.logging import (
+    InMemoryStructuredHandler,
+    QueueStructuredFileHandler,
+    configure_api_logging,
+    log_error_event,
+    shutdown_api_logging,
+)
 from quantagent.api.observability.queue import QueueWriterRuntime
 
 
@@ -66,6 +72,62 @@ class ObservabilityTestCase(unittest.TestCase):
         self.assertEqual(payload["request_id"], "req-1")
         self.assertEqual(payload["status_code"], 200)
 
+    def test_jsonl_formatter_redacts_rendered_message_without_mutating_record(self) -> None:
+        formatter = JsonLinesFormatter(service="api", env="test", instance_id="api-test", pid=123)
+        record = logging.LogRecord(
+            "quantagent.api",
+            logging.WARNING,
+            __file__,
+            10,
+            "db=%s",
+            ("postgresql://user:pass@db/app",),
+            None,
+        )
+
+        payload = json.loads(formatter.format(record))
+
+        self.assertEqual(payload["message"], "db=[REDACTED]")
+        self.assertEqual(record.msg, "db=%s")
+        self.assertEqual(record.args, ("postgresql://user:pass@db/app",))
+
+    def test_jsonl_formatter_supports_uvicorn_ipv6_percent_style_message(self) -> None:
+        formatter = JsonLinesFormatter(service="api", env="test", instance_id="api-test", pid=123)
+        record = logging.LogRecord(
+            "uvicorn.error",
+            logging.INFO,
+            __file__,
+            10,
+            "Uvicorn running on %s://[%s]:%d (Press CTRL+C to quit)",
+            ("http", "::1", 8000),
+            None,
+        )
+
+        payload = json.loads(formatter.format(record))
+
+        self.assertEqual(payload["logger"], "uvicorn.error")
+        self.assertEqual(payload["message"], "Uvicorn running on [REDACTED] (Press CTRL+C to quit)")
+
+    def test_structured_handler_does_not_mutate_uvicorn_console_record(self) -> None:
+        formatter = JsonLinesFormatter(service="api", env="test", instance_id="api-test", pid=123)
+        handler = InMemoryStructuredHandler(formatter)
+        record = logging.LogRecord(
+            "uvicorn.error",
+            logging.INFO,
+            __file__,
+            10,
+            "Uvicorn running on %s://%s:%d (Press CTRL+C to quit)",
+            ("http", "127.0.0.1", 8000),
+            None,
+        )
+        record.color_message = "Uvicorn running on %s://%s:%d (Press CTRL+C to quit)"
+
+        handler.emit(record)
+
+        self.assertEqual(record.color_message, "Uvicorn running on %s://%s:%d (Press CTRL+C to quit)")
+        self.assertEqual(record.getMessage(), "Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)")
+        payload = json.loads(handler.records[0])
+        self.assertEqual(payload["message"], "Uvicorn running on [REDACTED] (Press CTRL+C to quit)")
+
     def test_context_and_redaction_filters_mask_sensitive_fields(self) -> None:
         token = set_request_context(request_id="req-ctx", trace_id="trace-ctx", method="POST", path="/api/v1/auth/login")
         try:
@@ -87,7 +149,7 @@ class ObservabilityTestCase(unittest.TestCase):
             self.assertEqual(record.structured_data["request_id"], "req-ctx")
             self.assertEqual(record.structured_data["trace_id"], "trace-ctx")
             self.assertEqual(record.structured_data["actor_id"], "actor-1")
-            self.assertEqual(record.msg, "db=[REDACTED]")
+            self.assertEqual(record.msg, "db=postgresql://user:pass@db/app")
         finally:
             clear_request_context(token)
 
@@ -356,6 +418,32 @@ class ObservabilityTestCase(unittest.TestCase):
             AUTH_ENABLED=False,
         )
         self.assertTrue(settings.LOG_USE_MEMORY_SINK)
+
+    def test_configure_logging_keeps_uvicorn_error_console_propagation(self) -> None:
+        from quantagent.api.config.settings import Settings
+
+        shutdown_api_logging()
+        uvicorn_error = logging.getLogger("uvicorn.error")
+        before_handlers = list(uvicorn_error.handlers)
+        before_propagate = uvicorn_error.propagate
+        self.addCleanup(shutdown_api_logging)
+        self.addCleanup(lambda: setattr(uvicorn_error, "handlers", before_handlers))
+        self.addCleanup(lambda: setattr(uvicorn_error, "propagate", before_propagate))
+
+        settings = Settings(
+            _env_file=None,
+            APP_ENV="local",
+            DATABASE_URL=None,
+            RUNTIME_DIR="runtime",
+            LOG_LEVEL="INFO",
+            LOG_USE_MEMORY_SINK=False,
+            AUTH_ENABLED=False,
+        )
+
+        configure_api_logging(settings)
+
+        self.assertTrue(uvicorn_error.propagate)
+        self.assertTrue(any(isinstance(handler, QueueStructuredFileHandler) for handler in uvicorn_error.handlers))
 
 
 if __name__ == "__main__":
