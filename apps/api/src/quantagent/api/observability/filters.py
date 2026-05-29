@@ -87,6 +87,4 @@ class SensitiveDataRedactionFilter(logging.Filter):
                 continue
             record.__dict__[key] = redact_value(key, value)
 
-        if isinstance(record.msg, str):
-            record.msg = redact_value("message", record.msg)
         return True
