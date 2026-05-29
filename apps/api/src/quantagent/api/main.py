@@ -6,7 +6,8 @@ from quantagent.api import __version__
 from quantagent.api.config.settings import Settings, settings
 from quantagent.api.db import initialize_database, shutdown_database
 from quantagent.api.http.exceptions import register_exception_handlers
-from quantagent.api.http.middleware import RequestIdMiddleware
+from quantagent.api.http.middleware import RequestContextMiddleware
+from quantagent.api.observability.logging import configure_api_logging, shutdown_api_logging
 from quantagent.api.routers.v1 import register_api_v1_routes
 from quantagent.core.events import EventBusSettings, build_event_bus_runtime
 
@@ -20,6 +21,7 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
         # 将数据库初始化放在生命周期里，避免测试或脚本在创建应用时就提前建立连接。
         event_bus_runtime = None
         try:
+            configure_api_logging(current_settings)
             initialize_database(app, current_settings)
             event_bus_runtime = build_event_bus_runtime(EventBusSettings.from_settings(current_settings))
             app.state.event_bus_runtime = event_bus_runtime
@@ -32,10 +34,11 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
             finally:
                 app.state.event_bus_runtime = None
                 shutdown_database(app)
+                shutdown_api_logging()
 
     app = FastAPI(title="QuantAgent API", version=__version__, lifespan=lifespan)
     app.state.settings = current_settings
-    app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(RequestContextMiddleware)
     register_exception_handlers(app)
     register_api_v1_routes(app, current_settings)
     return app

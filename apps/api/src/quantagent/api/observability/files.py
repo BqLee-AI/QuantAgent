@@ -1,0 +1,124 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+import threading
+from typing import TextIO
+
+
+SUPPORTED_STREAMS = ("access", "app", "error", "security", "audit")
+
+
+@dataclass(frozen=True)
+class FileLayoutConfig:
+    root_dir: Path
+    service: str
+    env: str
+    instance_id: str
+    pid: int
+    rotate_max_bytes: int
+
+
+def build_stream_directory(root_dir: Path, stream: str, timestamp: datetime) -> Path:
+    return root_dir / stream / timestamp.strftime("%Y/%m/%d")
+
+
+def build_stream_filename(
+    *,
+    service: str,
+    env: str,
+    instance_id: str,
+    pid: int,
+    stream: str,
+    timestamp: datetime,
+    part: int,
+) -> str:
+    filename = f"{service}.{env}.{instance_id}.pid-{pid}.{stream}.{timestamp.strftime('%Y%m%dT%H')}"
+    if part > 0:
+        filename += f".part-{part:03d}"
+    return f"{filename}.jsonl"
+
+
+class StreamFileWriter:
+    def __init__(self, config: FileLayoutConfig, stream: str) -> None:
+        self._config = config
+        self._stream = stream
+        self._file: TextIO | None = None
+        self._active_path: Path | None = None
+        self._active_hour: str | None = None
+        self._active_part = 0
+        self._active_size = 0
+
+    def close(self) -> None:
+        if self._file is not None:
+            self._file.flush()
+            self._file.close()
+            self._file = None
+        self._active_path = None
+        self._active_hour = None
+        self._active_part = 0
+        self._active_size = 0
+
+    def active_path(self) -> Path | None:
+        return self._active_path
+
+    def write_line(self, line: str, created_at: float) -> Path:
+        timestamp = datetime.fromtimestamp(created_at, UTC)
+        hour_slice = timestamp.strftime("%Y%m%dT%H")
+        encoded_size = len(line.encode("utf-8")) + 1
+
+        if self._file is None or self._active_hour != hour_slice:
+            self._open_file(timestamp, part=0)
+        elif self._active_size + encoded_size > self._config.rotate_max_bytes:
+            self._open_file(timestamp, part=self._active_part + 1)
+
+        assert self._file is not None
+        self._file.write(line)
+        self._file.write("\n")
+        self._file.flush()
+        self._active_size += encoded_size
+        assert self._active_path is not None
+        return self._active_path
+
+    def _open_file(self, timestamp: datetime, *, part: int) -> None:
+        self.close()
+        directory = build_stream_directory(self._config.root_dir, self._stream, timestamp)
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / build_stream_filename(
+            service=self._config.service,
+            env=self._config.env,
+            instance_id=self._config.instance_id,
+            pid=self._config.pid,
+            stream=self._stream,
+            timestamp=timestamp,
+            part=part,
+        )
+        self._file = path.open("a", encoding="utf-8")
+        self._active_path = path
+        self._active_hour = timestamp.strftime("%Y%m%dT%H")
+        self._active_part = part
+        self._active_size = path.stat().st_size if path.exists() else 0
+
+
+class StreamFileWriterSet:
+    def __init__(self, config: FileLayoutConfig) -> None:
+        self._config = config
+        self._lock = threading.Lock()
+        self._writers = {stream: StreamFileWriter(config, stream) for stream in SUPPORTED_STREAMS}
+
+    def close(self) -> None:
+        with self._lock:
+            for writer in self._writers.values():
+                writer.close()
+
+    def write(self, *, stream: str, line: str, created_at: float) -> Path:
+        if stream not in self._writers:
+            raise ValueError(f"Unsupported log stream: {stream}")
+        with self._lock:
+            return self._writers[stream].write_line(line, created_at)
+
+    def active_path(self, stream: str) -> Path | None:
+        with self._lock:
+            writer = self._writers[stream]
+            return writer.active_path()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import socket
 from typing import Literal
 
 from dotenv import dotenv_values
@@ -162,6 +163,13 @@ class Settings(CoreSettings):
     API_V1_PREFIX: str = "/api/v1"
     API_HOST: str = Field(default="127.0.0.1", validation_alias=AliasChoices("API_HOST", "HOST"))
     API_PORT: int = Field(default=8000, validation_alias=AliasChoices("API_PORT", "PORT"))
+    LOG_DIR: Path | None = None
+    LOG_INSTANCE_ID: str = Field(default_factory=lambda: socket.gethostname() or "api-local")
+    LOG_ROTATE_MAX_BYTES: int = Field(default=20 * 1024 * 1024, ge=1024)
+    LOG_QUEUE_MAX_SIZE: int = Field(default=10000, ge=16)
+    LOG_ACCESS_DROP_WHEN_FULL: bool = True
+    LOG_SHUTDOWN_DRAIN_TIMEOUT_SECONDS: float = Field(default=2.0, ge=0.1, le=30.0)
+    LOG_USE_MEMORY_SINK: bool = False
     AUTH_ENABLED: bool = True
     AUTH_ADMIN_PASSWORD: str | None = None
     AUTH_SESSION_SECRET: str | None = None
@@ -208,6 +216,13 @@ class Settings(CoreSettings):
             if stripped:
                 normalized.append(stripped)
         return tuple(normalized)
+
+    @field_validator("LOG_DIR", mode="before")
+    @classmethod
+    def normalize_log_dir(cls, value: str | Path | None) -> Path | None:
+        if value in (None, ""):
+            return None
+        return Path(value)
 
     @model_validator(mode="after")
     def validate_auth_settings(self) -> "Settings":
@@ -278,6 +293,11 @@ class Settings(CoreSettings):
             if not self.DISCORD_INTERACTIONS_PUBLIC_KEY:
                 raise ValueError("DISCORD_INTERACTIONS_PUBLIC_KEY is required when Discord interactions are enabled")
 
+        resolved_log_dir = self.LOG_DIR or (self.RUNTIME_DIR / "logs" / "api")
+        # 在启动期固定绝对日志目录，避免后续 cwd 变化导致日志漂移到不同位置。
+        self.LOG_DIR = resolved_log_dir.resolve()
+        if environment == "test":
+            self.LOG_USE_MEMORY_SINK = True
         return self
 
 
