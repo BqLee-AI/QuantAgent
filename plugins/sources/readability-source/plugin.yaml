@@ -2,7 +2,7 @@ id: quantagent.official.source.readability
 name: Readability Link Reader
 type: source
 version: 0.1.0
-entrypoint: readability_source:plugin
+entrypoint: src.readability_source:plugin
 description: Read a single web page URL and extract readable article content.
 execution_mode: pull
 capabilities:

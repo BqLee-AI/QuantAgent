@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from html import unescape
@@ -10,15 +9,30 @@ from typing import Any
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from quantagent.core.sources import PullSourcePlugin, SourceOutput
+from quantagent.plugin_sdk import (
+    BasePlugin,
+    PluginInvokeRequest,
+    PluginInvokeResult,
+    PluginRuntimeError,
+    SourceFetchResult,
+    SourceItemDraft,
+)
 
 
 PLUGIN_ID = "quantagent.official.source.readability"
 
 
-class ReadabilitySource:
-    def fetch(self, cursor: str | None, config: Mapping[str, Any]) -> list[SourceOutput]:
-        del cursor
+class ReadabilitySourcePlugin(BasePlugin):
+    async def invoke(self, request: PluginInvokeRequest) -> PluginInvokeResult:
+        if request.capability != "source.fetch":
+            raise PluginRuntimeError(
+                code="PLUGIN_CAPABILITY_NOT_IMPLEMENTED",
+                message="Readability source only implements source.fetch.",
+                stage="invoke",
+                details={"capability": request.capability},
+            )
+
+        config = _merge_effective_config(self.context.config, request.input)
         url = _require_string(config, "url")
         parsed_url = urlparse(url)
         if parsed_url.scheme not in {"http", "https"}:
@@ -27,26 +41,30 @@ class ReadabilitySource:
         timeout_seconds = _coerce_timeout(config.get("timeout_seconds"))
         min_text_length = _coerce_min_text_length(config.get("min_text_length"))
 
-        request = Request(url, headers=headers)
-        with urlopen(request, timeout=timeout_seconds) as response:
+        request_obj = Request(url, headers=headers)
+        with urlopen(request_obj, timeout=timeout_seconds) as response:
             body = response.read()
             content_type = response.headers.get_content_charset() or "utf-8"
         html = _decode_html(body, content_type)
-        return [_extract_source_output(html, url, min_text_length=min_text_length)]
+        output = SourceFetchResult(
+            items=(_extract_source_item(html, url, min_text_length=min_text_length),),
+            metadata={"source": "readability"},
+        )
+        return PluginInvokeResult(output=output.to_mapping())
 
 
-plugin: PullSourcePlugin = ReadabilitySource()
+plugin = ReadabilitySourcePlugin
 
 
-@dataclass
 class _ParsedDocument:
-    title: str | None = None
-    canonical_url: str | None = None
-    site_name: str | None = None
-    author: str | None = None
-    published_at: datetime | None = None
-    article_chunks: list[str] | None = None
-    body_chunks: list[str] | None = None
+    def __init__(self) -> None:
+        self.title: str | None = None
+        self.canonical_url: str | None = None
+        self.site_name: str | None = None
+        self.author: str | None = None
+        self.published_at: datetime | None = None
+        self.article_chunks: list[str] = []
+        self.body_chunks: list[str] = []
 
 
 class _ReadableHTMLParser(HTMLParser):
@@ -54,7 +72,7 @@ class _ReadableHTMLParser(HTMLParser):
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self.document = _ParsedDocument(article_chunks=[], body_chunks=[])
+        self.document = _ParsedDocument()
         self._title_buffer: list[str] = []
         self._tag_stack: list[str] = []
         self._skip_depth = 0
@@ -123,7 +141,7 @@ class _ReadableHTMLParser(HTMLParser):
             self.document.published_at = _parse_datetime(content)
 
 
-def _extract_source_output(html: str, url: str, *, min_text_length: int) -> SourceOutput:
+def _extract_source_item(html: str, url: str, *, min_text_length: int) -> SourceItemDraft:
     parser = _ReadableHTMLParser()
     parser.feed(html)
     document = parser.document
@@ -134,17 +152,18 @@ def _extract_source_output(html: str, url: str, *, min_text_length: int) -> Sour
         "site_name": document.site_name,
         "content_length": len(content) if content else 0,
     }
-    return SourceOutput(
-        source_plugin_id=PLUGIN_ID,
-        source_type="readability",
+    return SourceItemDraft(
         title=title,
         url=url,
-        canonical_url=document.canonical_url or url,
         content=content,
         author=document.author,
-        published_at=document.published_at,
+        published_at=document.published_at.isoformat() if document.published_at is not None else None,
         raw_payload={"html": html},
-        metadata={key: value for key, value in metadata.items() if value not in (None, "")},
+        metadata={
+            "plugin_id": PLUGIN_ID,
+            "canonical_url": document.canonical_url or url,
+            **{key: value for key, value in metadata.items() if value not in (None, "")},
+        },
     )
 
 
@@ -191,6 +210,14 @@ def _require_string(config: Mapping[str, Any], key: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{key} must be a non-empty string")
     return value.strip()
+
+
+def _merge_effective_config(
+    context_config: Mapping[str, Any],
+    request_input: Mapping[str, Any],
+) -> dict[str, Any]:
+    # 平台传入的 request input 表示本次调用覆盖；插件只消费合并后的有效配置，不保存配置状态。
+    return {**context_config, **request_input}
 
 
 def _coerce_headers(value: object) -> dict[str, str]:

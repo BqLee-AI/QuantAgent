@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import importlib.util
+import asyncio
 import sys
 import unittest
 from pathlib import Path
@@ -8,104 +8,177 @@ from unittest.mock import patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
-CORE_SRC = REPO_ROOT / "packages" / "core" / "src"
-if str(CORE_SRC) not in sys.path:
-    sys.path.insert(0, str(CORE_SRC))
+for src_root in (
+    REPO_ROOT / "packages" / "core" / "src",
+    REPO_ROOT / "packages" / "plugin-sdk" / "src",
+):
+    if str(src_root) not in sys.path:
+        sys.path.insert(0, str(src_root))
 
-from quantagent.core.sources import SourceOutput
+from quantagent.core.registry import RegistryScanner
+from quantagent.core.runtime import PluginRuntimeService
+from quantagent.plugin_sdk import PluginInvokeRequest, SourceFetchResult
 
 
 PLUGIN_ROOT = REPO_ROOT / "plugins" / "sources" / "readability-source"
-PLUGIN_MODULE_PATH = PLUGIN_ROOT / "src" / "readability_source.py"
-FIXTURE_PATH = REPO_ROOT / "packages" / "core" / "tests" / "fixtures" / "readability_article.html"
+FIXTURE_PATH = PLUGIN_ROOT / "tests" / "fixtures" / "readability_article.html"
 
 
 class ReadabilitySourcePluginTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        cls._module_name = "readability_source"
-        cls._previous_module = sys.modules.get(cls._module_name)
-        spec = importlib.util.spec_from_file_location(cls._module_name, PLUGIN_MODULE_PATH)
-        if spec is None or spec.loader is None:
-            raise RuntimeError("Failed to load readability_source module")
-        module = importlib.util.module_from_spec(spec)
-        sys.modules[cls._module_name] = module
-        spec.loader.exec_module(module)
-        cls.module = module
+        plugin, error = asyncio.run(
+            PluginRuntimeService().load_plugin(
+                _readability_record(),
+                request_id="req-readability-test-load",
+                config={},
+                metadata={"origin": "readability-plugin-test"},
+            )
+        )
+        if error is not None or plugin is None:
+            raise AssertionError(f"Failed to load readability plugin through runtime: {error}")
+        cls.plugin = plugin
 
     @classmethod
     def tearDownClass(cls) -> None:
-        sys.modules.pop(getattr(cls, "_module_name", "readability_source"), None)
-        previous = getattr(cls, "_previous_module", None)
-        if previous is not None:
-            sys.modules[cls._module_name] = previous
-        if hasattr(cls, "module"):
-            del cls.module
+        if hasattr(cls, "plugin"):
+            asyncio.run(
+                PluginRuntimeService().stop_plugin(
+                    cls.plugin,
+                    plugin_id="quantagent.official.source.readability",
+                )
+            )
+            del cls.plugin
 
     def test_fetch_extracts_article_content_from_controlled_html(self) -> None:
         html = FIXTURE_PATH.read_text(encoding="utf-8")
         fake_response = _FakeHTTPResponse(html)
 
-        with patch.object(self.module, "urlopen", return_value=fake_response):
-            outputs = self.module.plugin.fetch(
-                None,
-                {
-                    "url": "https://example.com/articles/storage-breakthrough",
-                    "headers": {"User-Agent": "QuantAgentTest/1.0"},
-                    "timeout_seconds": 3,
-                    "min_text_length": 80,
-                },
+        with patch.dict(self.plugin.invoke.__func__.__globals__, {"urlopen": lambda *_args, **_kwargs: fake_response}):
+            result = asyncio.run(
+                self.plugin.invoke(
+                    PluginInvokeRequest(
+                        capability="source.fetch",
+                        request_id="req-readability-test-fetch",
+                        input={
+                            "url": "https://example.com/articles/storage-breakthrough",
+                            "headers": {"User-Agent": "QuantAgentTest/1.0"},
+                            "timeout_seconds": 3,
+                            "min_text_length": 80,
+                        },
+                    )
+                )
             )
 
-        self.assertEqual(len(outputs), 1)
-        output = outputs[0]
-        self.assertIsInstance(output, SourceOutput)
-        self.assertEqual(output.source_plugin_id, "quantagent.official.source.readability")
-        self.assertEqual(output.source_type, "readability")
-        self.assertEqual(output.title, "Markets Rally On Storage Breakthrough")
-        self.assertEqual(output.canonical_url, "https://example.com/articles/storage-breakthrough")
-        self.assertEqual(output.author, "Alex Chen")
-        self.assertIsNotNone(output.published_at)
-        self.assertIn("Battery storage suppliers climbed", output.content or "")
-        self.assertIn("Quant Daily", str(output.metadata))
+        output = SourceFetchResult.from_mapping(result.output)
+        self.assertEqual(len(output.items), 1)
+        item = output.items[0]
+        self.assertEqual(item.metadata["plugin_id"], "quantagent.official.source.readability")
+        self.assertEqual(output.metadata["source"], "readability")
+        self.assertEqual(item.title, "Markets Rally On Storage Breakthrough")
+        self.assertEqual(item.url, "https://example.com/articles/storage-breakthrough")
+        self.assertEqual(item.metadata["canonical_url"], "https://example.com/articles/storage-breakthrough")
+        self.assertEqual(item.author, "Alex Chen")
+        self.assertIsNotNone(item.published_at)
+        self.assertIn("Battery storage suppliers climbed", item.content or "")
+        self.assertIn("Quant Daily", str(item.metadata))
+
+    def test_runtime_invokes_manifest_entrypoint(self) -> None:
+        html = FIXTURE_PATH.read_text(encoding="utf-8")
+        fake_response = _FakeHTTPResponse(html)
+
+        with patch("urllib.request.urlopen", return_value=fake_response):
+            invocation = asyncio.run(
+                PluginRuntimeService().invoke(
+                    _readability_record(),
+                    capability="source.fetch",
+                    request_id="req-readability-runtime",
+                    config={
+                        "url": "https://example.com/articles/storage-breakthrough",
+                        "min_text_length": 80,
+                    },
+                    input={},
+                )
+            )
+
+        self.assertTrue(invocation.ok)
+        self.assertIsNotNone(invocation.result)
+        output = SourceFetchResult.from_mapping(invocation.result.output)
+        self.assertEqual(output.items[0].title, "Markets Rally On Storage Breakthrough")
 
     def test_fetch_rejects_missing_url(self) -> None:
         with self.assertRaisesRegex(ValueError, "url must be a non-empty string"):
-            self.module.plugin.fetch(None, {})
+            asyncio.run(self.plugin.invoke(PluginInvokeRequest(capability="source.fetch", request_id="req-missing-url")))
 
     def test_fetch_rejects_empty_or_blank_url(self) -> None:
         for bad in ("", "   "):
             with self.subTest(url=bad):
                 with self.assertRaisesRegex(ValueError, "url must be a non-empty string"):
-                    self.module.plugin.fetch(None, {"url": bad})
+                    asyncio.run(
+                        self.plugin.invoke(
+                            PluginInvokeRequest(
+                                capability="source.fetch",
+                                request_id="req-blank-url",
+                                input={"url": bad},
+                            )
+                        )
+                    )
 
     def test_fetch_rejects_non_http_schemes(self) -> None:
         with self.assertRaisesRegex(ValueError, "Only http and https schemes are allowed"):
-            self.module.plugin.fetch(None, {"url": "file:///tmp/test.html"})
+            asyncio.run(
+                self.plugin.invoke(
+                    PluginInvokeRequest(
+                        capability="source.fetch",
+                        request_id="req-file-url",
+                        input={"url": "file:///tmp/test.html"},
+                    )
+                )
+            )
 
     def test_fetch_rejects_timeout_over_schema_limit(self) -> None:
         with self.assertRaisesRegex(ValueError, "timeout_seconds must be a positive number no greater than 30"):
-            self.module.plugin.fetch(None, {"url": "https://example.com", "timeout_seconds": 31})
+            asyncio.run(
+                self.plugin.invoke(
+                    PluginInvokeRequest(
+                        capability="source.fetch",
+                        request_id="req-timeout",
+                        input={"url": "https://example.com", "timeout_seconds": 31},
+                    )
+                )
+            )
 
     def test_fetch_falls_back_to_utf8_for_unknown_charset(self) -> None:
         html = FIXTURE_PATH.read_text(encoding="utf-8")
         fake_response = _FakeHTTPResponse(html, charset="x-unknown-charset")
 
-        with patch.object(self.module, "urlopen", return_value=fake_response):
-            outputs = self.module.plugin.fetch(
-                None,
-                {
-                    "url": "https://example.com/articles/storage-breakthrough",
-                },
+        with patch.dict(self.plugin.invoke.__func__.__globals__, {"urlopen": lambda *_args, **_kwargs: fake_response}):
+            result = asyncio.run(
+                self.plugin.invoke(
+                    PluginInvokeRequest(
+                        capability="source.fetch",
+                        request_id="req-unknown-charset",
+                        input={"url": "https://example.com/articles/storage-breakthrough"},
+                    )
+                )
             )
 
-        self.assertEqual(len(outputs), 1)
-        self.assertEqual(outputs[0].title, "Markets Rally On Storage Breakthrough")
+        output = SourceFetchResult.from_mapping(result.output)
+        self.assertEqual(len(output.items), 1)
+        self.assertEqual(output.items[0].title, "Markets Rally On Storage Breakthrough")
 
     def test_readme_documents_plugin_boundary(self) -> None:
         readme = (PLUGIN_ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("只提供 `source.fetch` 能力，不暴露 `tool.read_url`", readme)  # noqa: RUF001
         self.assertIn("不负责 `RawEvent` 入库、去重、`SourceBinding`、`Event Bus`、权限或生命周期", readme)
+
+
+def _readability_record():
+    records = RegistryScanner(
+        official_root=REPO_ROOT / "plugins",
+        runtime_root=REPO_ROOT / "runtime" / "plugins",
+    ).scan()
+    return {item.id: item for item in records}["quantagent.official.source.readability"]
 
 
 class _FakeHeaders:

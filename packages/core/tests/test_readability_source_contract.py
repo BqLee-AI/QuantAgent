@@ -25,7 +25,7 @@ class ReadabilitySourcePluginContractTestCase(unittest.TestCase):
         self.assertEqual(record.status, PluginStatus.VALID)
         self.assertIsNotNone(record.manifest)
         self.assertEqual(record.manifest.capabilities, ("source.fetch",))
-        self.assertEqual(record.manifest.entrypoint, "readability_source:plugin")
+        self.assertEqual(record.manifest.entrypoint, "src.readability_source:plugin")
 
     def test_plugin_schema_declares_minimal_reader_config(self) -> None:
         records = RegistryScanner(
