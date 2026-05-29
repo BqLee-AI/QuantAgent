@@ -11,7 +11,7 @@
 - [ ] 2.1 在 `apps/api/src/quantagent/api/observability/` 新增 API 私有模块，建立 context、logging bootstrap、formatter、filter、file writer、queue writer、events 的职责边界，不修改 route 业务逻辑。
 - [ ] 2.2 实现幂等 `configure_api_logging(settings)`，在 `create_app()` 中显式调用，并确保测试多次创建 app 不重复注册 handler。
 - [ ] 2.2a 在 FastAPI lifespan shutdown 阶段接入幂等 logging shutdown，停止 queue listener、flush 已入队记录并关闭文件 handler，避免测试和进程退出遗留后台线程或文件描述符。
-- [ ] 2.3 扩展 API settings 和 env example，增加 `LOG_DIR`、`LOG_FORMAT`、`LOG_INSTANCE_ID`、`LOG_ROTATE_MAX_BYTES`、`LOG_QUEUE_MAX_SIZE`、`LOG_ACCESS_DROP_WHEN_FULL` 等阶段 1 必需配置，并明确 `LOG_DIR` 默认解析为 `RUNTIME_DIR/logs/api`。
+- [ ] 2.3 扩展 API settings 和 env example，增加 `LOG_DIR`、`LOG_INSTANCE_ID`、`LOG_ROTATE_MAX_BYTES`、`LOG_QUEUE_MAX_SIZE`、`LOG_ACCESS_DROP_WHEN_FULL` 等阶段 1 必需配置，并明确 `LOG_DIR` 默认解析为 `RUNTIME_DIR/logs/api`；日志格式固定为 JSON Lines，不提供多格式切换配置。
 - [ ] 2.4 实现 JSON Lines formatter 和上下文字段注入，确保每条记录一行 JSON，包含 service、env、instance_id、pid、stream、event、request_id、trace_id 等稳定字段。
 - [ ] 2.5 实现敏感字段脱敏 filter，覆盖 authorization、cookie、csrf、password、token、secret、session、api key、database URL 等字段或 header。
 

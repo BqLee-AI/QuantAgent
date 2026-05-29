@@ -27,5 +27,5 @@
 
 - 影响 `apps/api` HTTP 传输层基础设施：`main.py`、HTTP middleware、异常处理、DB readiness/session 失败路径、auth/security 事件和 README。
 - 新增 API 私有模块：`apps/api/src/quantagent/api/observability/`。
-- 新增或扩展 API 专属配置项：日志目录、文件格式、实例 ID、轮转阈值、队列大小、maintenance 安全窗口、磁盘水位、按 stream retention、access 降级开关。
+- 新增或扩展 API 专属配置项：日志目录、实例 ID、轮转阈值、队列大小、maintenance 安全窗口、磁盘水位、按 stream retention、access 降级开关。
 - 不改变业务 API route 契约，不新增数据库表，不引入外部日志平台、OpenTelemetry 或 `packages/core` 共享 observability 抽象。
