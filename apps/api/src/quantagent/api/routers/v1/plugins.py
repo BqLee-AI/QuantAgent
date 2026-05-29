@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
 from quantagent.api.auth import CurrentActor, require_csrf
-from quantagent.api.config.settings import _SOURCE_REPO_ROOT
 from quantagent.api.http.errors import BadRequestError, NotFoundError
 from quantagent.api.http.responses import ApiResponse
 from quantagent.api.schemas.plugins import (
@@ -17,24 +15,23 @@ from quantagent.api.schemas.plugins import (
     PluginRescanResponse,
     PluginScanSummaryResponse,
 )
+from quantagent.api.services.plugin_registry import find_repo_root, get_plugin_registry
 from quantagent.core.registry import (
     PluginError,
     PluginManifest,
     PluginRecord,
     PluginRegistry,
     PluginScanSummary,
-    build_plugin_registry,
 )
 
 
 router = APIRouter(prefix="/plugins", tags=["plugins"])
-_REPO_ROOT = Path.cwd()
 
 
 @router.get("", response_model=ApiResponse[list[PluginRecordResponse]])
 def list_plugins(request: Request) -> ApiResponse[list[PluginRecordResponse]]:
     """返回当前 Registry 视图中的插件列表。"""
-    registry = _get_plugin_registry(request)
+    registry = get_plugin_registry(request)
     records = registry.list_plugins()
     return ApiResponse.success([_record_response(record) for record in records])
 
@@ -42,14 +39,14 @@ def list_plugins(request: Request) -> ApiResponse[list[PluginRecordResponse]]:
 @router.get("/{plugin_id}", response_model=ApiResponse[PluginRecordResponse])
 def get_plugin(plugin_id: str, request: Request) -> ApiResponse[PluginRecordResponse]:
     """按插件 ID 返回单条插件记录。"""
-    record = _require_plugin(_get_plugin_registry(request), plugin_id)
+    record = _require_plugin(get_plugin_registry(request), plugin_id)
     return ApiResponse.success(_record_response(record))
 
 
 @router.get("/{plugin_id}/config-schema", response_model=ApiResponse[dict[str, Any]])
 def get_plugin_config_schema(plugin_id: str, request: Request) -> ApiResponse[dict[str, Any]]:
     """返回插件 manifest 引用的配置 JSON Schema。"""
-    registry = _get_plugin_registry(request)
+    registry = get_plugin_registry(request)
     record = _require_plugin(registry, plugin_id)
     if record.config_schema_path is None:
         raise BadRequestError(
@@ -72,7 +69,7 @@ def rescan_plugins(
     _actor: CurrentActor = Depends(require_csrf),
 ) -> ApiResponse[PluginRescanResponse]:
     """重新扫描插件目录；作为写动作，需要登录态和 CSRF。"""
-    registry = _get_plugin_registry(request)
+    registry = get_plugin_registry(request)
     summary = registry.rescan()
     records = registry.list_plugins()
     return ApiResponse.success(
@@ -81,24 +78,6 @@ def rescan_plugins(
             plugins=[_record_response(record) for record in records],
         )
     )
-
-
-def _get_plugin_registry(request: Request) -> PluginRegistry:
-    """从 app.state 取 Registry，不存在时按当前运行目录创建一个。"""
-    registry = getattr(request.app.state, "plugin_registry", None)
-    if registry is None:
-        settings = request.app.state.settings
-        repo_root = _find_repo_root()
-        runtime_dir = Path(settings.RUNTIME_DIR)
-        if not runtime_dir.is_absolute():
-            runtime_dir = repo_root / runtime_dir
-        registry = build_plugin_registry(
-            official_root=repo_root / "plugins",
-            runtime_root=runtime_dir / "plugins",
-        )
-        # Registry 挂在 app.state 上，后续请求复用同一个扫描视图；rescan action 显式刷新。
-        request.app.state.plugin_registry = registry
-    return registry
 
 
 def _require_plugin(registry: PluginRegistry, plugin_id: str) -> PluginRecord:
@@ -172,29 +151,8 @@ def _record_error_details(record: PluginRecord) -> dict[str, Any]:
 
 
 def _display_path(path: Path) -> str:
-    repo_root = _find_repo_root()
+    repo_root = find_repo_root()
     try:
         return path.resolve().relative_to(repo_root).as_posix()
     except (OSError, RuntimeError, ValueError):
         return path.name
-
-
-@lru_cache(maxsize=1)
-def _find_repo_root() -> Path:
-    """定位 QuantAgent 仓库根, 避免把 apps/api/runtime 误判成项目根。"""
-    candidates: list[Path] = []
-    if _SOURCE_REPO_ROOT is not None:
-        candidates.append(_SOURCE_REPO_ROOT)
-    candidates.extend([Path.cwd(), *Path(__file__).resolve().parents])
-    for candidate in candidates:
-        if _is_repo_root_candidate(candidate):
-            return candidate
-    return _REPO_ROOT
-
-
-def _is_repo_root_candidate(candidate: Path) -> bool:
-    return (
-        (candidate / "pyproject.toml").is_file()
-        and (candidate / "apps" / "api").is_dir()
-        and (candidate / "plugins").is_dir()
-    )

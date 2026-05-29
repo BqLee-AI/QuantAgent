@@ -1349,7 +1349,7 @@ class ApiAppTestCase(unittest.TestCase):
     def test_plugin_list_uses_repo_root_even_when_api_runtime_directory_exists(self) -> None:
         self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
 
-        from quantagent.api.routers.v1 import plugins as plugins_router
+        from quantagent.api.services import plugin_registry as plugin_registry_service
 
         repo_root = next(
             parent for parent in Path(__file__).resolve().parents if (parent / "pyproject.toml").is_file()
@@ -1357,8 +1357,8 @@ class ApiAppTestCase(unittest.TestCase):
         api_runtime_dir = repo_root / "apps" / "api" / "runtime"
         api_runtime_dir.mkdir(parents=True, exist_ok=True)
 
-        plugins_router._find_repo_root.cache_clear()
-        self.addCleanup(plugins_router._find_repo_root.cache_clear)
+        plugin_registry_service.find_repo_root.cache_clear()
+        self.addCleanup(plugin_registry_service.find_repo_root.cache_clear)
 
         with patch("pathlib.Path.cwd", return_value=api_runtime_dir):
             response = self.client.get("/api/v1/plugins")
@@ -1933,8 +1933,8 @@ class ApiAppTestCase(unittest.TestCase):
         class _InvalidPlugin:
             pass
 
-        with patch("quantagent.api.routers.v1.discord_interactions.load_plugin_entrypoint", return_value=_InvalidPlugin()):
-            with patch("quantagent.api.routers.v1.discord_interactions._get_plugin_registry") as get_registry:
+        with patch("quantagent.api.services.discord_interactions.load_plugin_entrypoint", return_value=_InvalidPlugin()):
+            with patch("quantagent.api.services.plugin_registry.get_plugin_registry") as get_registry:
                 get_registry.return_value = SimpleNamespace(
                     get_plugin=lambda _plugin_id: SimpleNamespace(
                         status=PluginStatus.VALID,
@@ -1977,7 +1977,7 @@ class ApiAppTestCase(unittest.TestCase):
             ),
         )
 
-        with patch("quantagent.api.routers.v1.discord_interactions._get_plugin_registry") as get_registry:
+        with patch("quantagent.api.services.plugin_registry.get_plugin_registry") as get_registry:
             get_registry.return_value = SimpleNamespace(get_plugin=lambda _plugin_id: invalid_record)
             with TestClient(app) as client:
                 response = client.post(
@@ -2010,8 +2010,8 @@ class ApiAppTestCase(unittest.TestCase):
         timestamp = str(int(time.time()))
         signature = signing_key.sign(timestamp.encode("utf-8") + body).signature.hex()
 
-        with patch("quantagent.api.routers.v1.discord_interactions.load_plugin_entrypoint", return_value=_InvalidResultPlugin()):
-            with patch("quantagent.api.routers.v1.discord_interactions._get_plugin_registry") as get_registry:
+        with patch("quantagent.api.services.discord_interactions.load_plugin_entrypoint", return_value=_InvalidResultPlugin()):
+            with patch("quantagent.api.services.plugin_registry.get_plugin_registry") as get_registry:
                 get_registry.return_value = SimpleNamespace(
                     get_plugin=lambda _plugin_id: SimpleNamespace(
                         status=PluginStatus.VALID,
@@ -2049,8 +2049,8 @@ class ApiAppTestCase(unittest.TestCase):
         timestamp = str(int(time.time()))
         signature = signing_key.sign(timestamp.encode("utf-8") + body).signature.hex()
 
-        with patch("quantagent.api.routers.v1.discord_interactions.load_plugin_entrypoint", return_value=_MissingResponsePlugin()):
-            with patch("quantagent.api.routers.v1.discord_interactions._get_plugin_registry") as get_registry:
+        with patch("quantagent.api.services.discord_interactions.load_plugin_entrypoint", return_value=_MissingResponsePlugin()):
+            with patch("quantagent.api.services.plugin_registry.get_plugin_registry") as get_registry:
                 get_registry.return_value = SimpleNamespace(
                     get_plugin=lambda _plugin_id: SimpleNamespace(
                         status=PluginStatus.VALID,
