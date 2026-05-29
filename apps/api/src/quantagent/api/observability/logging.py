@@ -21,7 +21,7 @@ from quantagent.api.observability.queue import QueueWriterRuntime
 
 _LOGGER_NAME = "quantagent.api"
 _SECURITY_LOGGED_FLAG = "_structured_security_logged"
-_ERROR_LOGGED_FLAG = "_structured_error_logged"
+_ERROR_LOGGED_EVENTS = "_structured_error_logged_events"
 _RUNTIME_LOCK = threading.Lock()
 _ACTIVE_RUNTIME: "_LoggingRuntime | None" = None
 
@@ -207,10 +207,14 @@ def log_error_event(
     exception_type: str | None = None,
     details: dict[str, Any] | None = None,
 ) -> None:
-    if request is not None and getattr(request.state, _ERROR_LOGGED_FLAG, False):
-        return
     if request is not None:
-        setattr(request.state, _ERROR_LOGGED_FLAG, True)
+        logged_events = getattr(request.state, _ERROR_LOGGED_EVENTS, None)
+        if not isinstance(logged_events, set):
+            logged_events = set()
+            setattr(request.state, _ERROR_LOGGED_EVENTS, logged_events)
+        if event in logged_events:
+            return
+        logged_events.add(event)
     payload: dict[str, Any] = {
         "component": component,
         "failure_type": failure_type,

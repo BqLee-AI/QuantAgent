@@ -101,11 +101,18 @@ class QueueWriterRuntime:
                 queued = self._queue.get_nowait()
             except Empty:
                 return
-            if queued.stream == _STOP_STREAM:
+            try:
+                if queued.stream == _STOP_STREAM:
+                    continue
+                self._write_queued_line(queued)
+            finally:
                 self._queue.task_done()
-                continue
+
+    def _write_queued_line(self, queued: QueuedLogLine) -> None:
+        try:
             self._writer_set.write(stream=queued.stream, line=queued.line, created_at=queued.created_at)
-            self._queue.task_done()
+        except Exception:
+            self.warn_once("writer-error", "structured logging writer failed; record dropped")
 
     def _run(self) -> None:
         try:
@@ -120,7 +127,7 @@ class QueueWriterRuntime:
                 try:
                     # sentinel 只负责唤醒 listener；真正退出取决于 stop 事件和队列 drain 完成。
                     if queued.stream != _STOP_STREAM:
-                        self._writer_set.write(stream=queued.stream, line=queued.line, created_at=queued.created_at)
+                        self._write_queued_line(queued)
                 finally:
                     self._queue.task_done()
         finally:
