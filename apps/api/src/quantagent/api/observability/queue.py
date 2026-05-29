@@ -79,12 +79,12 @@ class QueueWriterRuntime:
                 self.warn_once("critical-fallback-failed", "structured logging fallback write failed")
                 return False
 
-    def stop(self) -> None:
+    def stop(self) -> bool:
         self._stop_requested.set()
         if self._thread.ident is None:
             self._drain_remaining()
             self._writer_set.close()
-            return
+            return True
         # 用 sentinel 主动唤醒 listener，避免测试关闭 app 时为轮询超时白等。
         try:
             self._queue.put_nowait(QueuedLogLine(stream=_STOP_STREAM, line="", created_at=0.0))
@@ -93,10 +93,11 @@ class QueueWriterRuntime:
         self._thread.join(timeout=self._shutdown_timeout_seconds)
         if self._thread.is_alive():
             self.warn_once("shutdown-timeout", "structured logging shutdown timed out before queue drained")
-            return
+            return False
         if self._thread.ident is None:
             self._drain_remaining()
             self._writer_set.close()
+        return True
 
     def warn_once(self, key: str, message: str) -> None:
         with self._warning_lock:

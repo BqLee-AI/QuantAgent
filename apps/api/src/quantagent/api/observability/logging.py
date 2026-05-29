@@ -99,11 +99,12 @@ class _LoggingRuntime:
 
     def shutdown(self) -> None:
         force_closed_paths: set[Path] = set()
+        queue_stopped = True
         if self.queue_runtime is not None:
             force_closed_paths = self.queue_runtime.active_paths()
         if self.queue_runtime is not None:
-            self.queue_runtime.stop()
-        if self.maintenance_runtime is not None:
+            queue_stopped = self.queue_runtime.stop()
+        if queue_stopped and self.maintenance_runtime is not None:
             self.maintenance_runtime.run_shutdown_cleanup(force_closed_paths=force_closed_paths)
         logger = logging.getLogger(_LOGGER_NAME)
         if self.handler in logger.handlers:

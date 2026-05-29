@@ -23,6 +23,7 @@ from quantagent.api.observability.files import (
 from quantagent.api.observability.filters import ContextInjectionFilter, SensitiveDataRedactionFilter, redact_value
 from quantagent.api.observability.formatters import JsonLinesFormatter
 from quantagent.api.observability.logging import (
+    _LoggingRuntime,
     InMemoryStructuredHandler,
     QueueStructuredFileHandler,
     configure_api_logging,
@@ -433,6 +434,92 @@ class ObservabilityTestCase(unittest.TestCase):
         self.assertFalse(runtime.thread.is_alive())
         self.assertTrue(writer_set.closed.is_set())
         self.assertEqual(writer_set.writes, [("app", '{"event":"first"}'), ("app", '{"event":"queued"}')])
+
+    def test_queue_stop_returns_false_when_listener_does_not_finish(self) -> None:
+        class BlockingWriterSet:
+            def __init__(self) -> None:
+                self.started_write = threading.Event()
+                self.release = threading.Event()
+
+            def write(self, *, stream: str, line: str, created_at: float):
+                self.started_write.set()
+                self.release.wait(timeout=2.0)
+                return Path("/tmp/fake.jsonl")
+
+            def active_paths(self) -> set[Path]:
+                return {Path("/tmp/fake.jsonl")}
+
+            def close(self) -> None:
+                return None
+
+        writer_set = BlockingWriterSet()
+        with patch("sys.stderr", new_callable=io.StringIO):
+            runtime = QueueWriterRuntime(
+                writer_set=writer_set,  # type: ignore[arg-type]
+                max_size=1,
+                access_drop_when_full=True,
+                shutdown_timeout_seconds=0.1,
+            )
+            runtime.start()
+            self.assertTrue(runtime.enqueue(stream="app", line='{"event":"first"}', created_at=time.time()))
+            self.assertTrue(writer_set.started_write.wait(timeout=1.0))
+
+            try:
+                self.assertFalse(runtime.stop())
+                self.assertTrue(runtime.thread.is_alive())
+            finally:
+                writer_set.release.set()
+                runtime.thread.join(timeout=1.0)
+
+    def test_logging_shutdown_skips_shutdown_cleanup_when_queue_stop_times_out(self) -> None:
+        class BlockingWriterSet:
+            def __init__(self) -> None:
+                self.started_write = threading.Event()
+                self.release = threading.Event()
+
+            def write(self, *, stream: str, line: str, created_at: float):
+                self.started_write.set()
+                self.release.wait(timeout=2.0)
+                return Path("/tmp/fake.jsonl")
+
+            def active_paths(self) -> set[Path]:
+                return {Path("/tmp/fake.jsonl")}
+
+            def close(self) -> None:
+                return None
+
+        class FakeMaintenanceRuntime:
+            def __init__(self) -> None:
+                self.calls: list[set[Path]] = []
+
+            def run_shutdown_cleanup(self, *, force_closed_paths: set[Path]) -> None:
+                self.calls.append(force_closed_paths)
+
+        writer_set = BlockingWriterSet()
+        maintenance_runtime = FakeMaintenanceRuntime()
+        with patch("sys.stderr", new_callable=io.StringIO):
+            queue_runtime = QueueWriterRuntime(
+                writer_set=writer_set,  # type: ignore[arg-type]
+                max_size=1,
+                access_drop_when_full=True,
+                shutdown_timeout_seconds=0.1,
+            )
+            queue_runtime.start()
+            self.assertTrue(queue_runtime.enqueue(stream="app", line='{"event":"first"}', created_at=time.time()))
+            self.assertTrue(writer_set.started_write.wait(timeout=1.0))
+
+            runtime = _LoggingRuntime(
+                config=None,  # type: ignore[arg-type]
+                queue_runtime=queue_runtime,
+                handler=logging.NullHandler(),
+                maintenance_runtime=maintenance_runtime,  # type: ignore[arg-type]
+            )
+            try:
+                runtime.shutdown()
+                self.assertEqual(maintenance_runtime.calls, [])
+            finally:
+                writer_set.release.set()
+                queue_runtime.thread.join(timeout=1.0)
 
     def test_queue_writer_error_drops_record_and_continues(self) -> None:
         class FlakyWriterSet:
