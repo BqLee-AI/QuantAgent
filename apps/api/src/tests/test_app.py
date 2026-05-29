@@ -1358,7 +1358,11 @@ class ApiAppTestCase(unittest.TestCase):
         from quantagent.api.routers.v1 import plugins as plugins_router
 
         repo_root = next(
-            parent for parent in Path(__file__).resolve().parents if (parent / "pyproject.toml").is_file()
+            parent
+            for parent in Path(__file__).resolve().parents
+            if (parent / "pyproject.toml").is_file()
+            and (parent / "apps" / "api").is_dir()
+            and (parent / "plugins").is_dir()
         )
         api_runtime_dir = repo_root / "apps" / "api" / "runtime"
         api_runtime_dir.mkdir(parents=True, exist_ok=True)
