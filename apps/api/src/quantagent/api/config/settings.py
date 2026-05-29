@@ -177,11 +177,37 @@ class Settings(CoreSettings):
     DISCORD_INTERACTIONS_PUBLIC_KEY: str | None = None
     DISCORD_INTERACTIONS_RESPONSE_TEXT: str = "QuantAgent received your Discord interaction."
     DISCORD_INTERACTIONS_TIMESTAMP_TOLERANCE_SECONDS: int = Field(default=300, ge=0)
+    DISCORD_INTERACTIONS_GUILD_ALLOWLIST: tuple[str, ...] = ()
+    DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST: tuple[str, ...] = ()
 
     @field_validator("AUTH_COOKIE_SAME_SITE", mode="before")
     @classmethod
     def normalize_same_site(cls, value: str | None) -> str:
         return str(value or "lax").lower()
+
+    @field_validator("DISCORD_INTERACTIONS_GUILD_ALLOWLIST", "DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST", mode="before")
+    @classmethod
+    def normalize_discord_allowlist(
+        cls,
+        value: object,
+    ) -> tuple[str, ...]:
+        if value is None:
+            return ()
+        if isinstance(value, str):
+            items = value.split(",")
+        elif isinstance(value, (list, tuple, set, frozenset)):
+            items = list(value)
+        else:
+            raise ValueError("Discord allowlist settings must be a comma-separated string or list of strings")
+
+        normalized: list[str] = []
+        for item in items:
+            if not isinstance(item, str):
+                raise ValueError("Discord allowlist settings must contain only strings")
+            stripped = item.strip()
+            if stripped:
+                normalized.append(stripped)
+        return tuple(normalized)
 
     @model_validator(mode="after")
     def validate_auth_settings(self) -> "Settings":

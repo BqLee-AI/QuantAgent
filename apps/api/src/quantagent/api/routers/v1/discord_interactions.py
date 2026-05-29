@@ -12,6 +12,7 @@ from quantagent.core.plugins import PluginEntrypointLoadError, load_plugin_entry
 from quantagent.core.registry import (
     PluginRegistry,
     PluginStatus,
+    PluginType,
     build_plugin_registry,
 )
 
@@ -55,6 +56,8 @@ async def receive_discord_interaction(request: Request) -> JSONResponse:
         "public_key": public_key,
         "response_text": settings.DISCORD_INTERACTIONS_RESPONSE_TEXT,
         "timestamp_tolerance_seconds": settings.DISCORD_INTERACTIONS_TIMESTAMP_TOLERANCE_SECONDS,
+        "guild_allowlist": list(settings.DISCORD_INTERACTIONS_GUILD_ALLOWLIST),
+        "channel_allowlist": list(settings.DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST),
     }
 
     result = _validate_receive_result(plugin.receive_request(config, headers, body))
@@ -75,6 +78,8 @@ def _load_source_plugin(request: Request, plugin_id: str) -> DiscordSourcePlugin
         raise ServiceUnavailableError("Configured Discord source plugin was not found")
     if record.status != PluginStatus.VALID:
         raise ServiceUnavailableError("Configured Discord source plugin is not valid")
+    if record.manifest is None or record.manifest.type != PluginType.SOURCE:
+        raise ServiceUnavailableError("Configured Discord plugin must be a valid source plugin")
     try:
         plugin = load_plugin_entrypoint(record)
     except PluginEntrypointLoadError as exc:
@@ -99,6 +104,8 @@ def _validate_receive_result(result: object) -> DiscordReceiveResult:
 
     response = getattr(result, "response", None)
     if response is not None and not isinstance(response, Mapping):
+        raise ServiceUnavailableError("Configured Discord source plugin returned an invalid result payload")
+    if getattr(result, "ok") and response is None:
         raise ServiceUnavailableError("Configured Discord source plugin returned an invalid result payload")
     return result  # type: ignore[return-value]
 

@@ -79,6 +79,39 @@ class PluginEntrypointLoaderTestCase(unittest.TestCase):
         with self.assertRaises(PluginEntrypointLoadError):
             load_plugin_entrypoint(record)
 
+    def test_loads_entrypoint_with_sibling_module_dependency(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            official_root = root / "plugins"
+            plugin_dir = official_root / "sources" / "package-like"
+            plugin_dir.mkdir(parents=True)
+            (plugin_dir / "plugin.yaml").write_text(
+                (
+                    "id: quantagent.official.source.package_like\n"
+                    "name: Package Like Plugin\n"
+                    "type: source\n"
+                    "version: 0.1.0\n"
+                    "entrypoint: plugin_impl:plugin\n"
+                    "capabilities:\n"
+                    "  - source.receive\n"
+                    "config_schema: config.schema.json\n"
+                ),
+                encoding="utf-8",
+            )
+            (plugin_dir / "config.schema.json").write_text('{"type":"object"}', encoding="utf-8")
+            (plugin_dir / "helper.py").write_text("VALUE = 42\n", encoding="utf-8")
+            (plugin_dir / "plugin_impl.py").write_text(
+                "import helper\nplugin = {'value': helper.VALUE}\n",
+                encoding="utf-8",
+            )
+
+            registry = PluginRegistry(RegistryScanner(official_root=official_root, runtime_root=root / "runtime"))
+            record = registry.get_plugin("quantagent.official.source.package_like")
+            assert record is not None
+            plugin = load_plugin_entrypoint(record)
+
+        self.assertEqual(plugin, {"value": 42})
+
     def test_rejects_entrypoint_outside_plugin_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

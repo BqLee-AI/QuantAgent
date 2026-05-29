@@ -44,6 +44,7 @@ from quantagent.core.db.base import Base
 from quantagent.core.model_config import FixedModelCallClient, ModelConfigCrypto, ModelTokenUsage
 from quantagent.core.model_config.service import ModelCallResult
 from quantagent.core.registry import PluginRegistry, PluginStatus, RegistryScanner
+from quantagent.core.registry.models import PluginManifest, PluginRecord, PluginSource, PluginType
 from quantagent.core.wallet import (
     AccountMode,
     CashBalanceSnapshot,
@@ -1828,6 +1829,47 @@ class ApiAppTestCase(unittest.TestCase):
             },
         )
 
+    def test_discord_interactions_endpoint_enforces_api_allowlists(self) -> None:
+        signing_key = SigningKey.generate()
+        public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
+        app = create_app(
+            self._settings(
+                DISCORD_INTERACTIONS_ENABLED=True,
+                DISCORD_INTERACTIONS_PUBLIC_KEY=public_key,
+                DISCORD_INTERACTIONS_GUILD_ALLOWLIST=("guild-allowed",),
+            )
+        )
+        body = json.dumps(
+            {
+                "id": "1234567890",
+                "application_id": "app-1",
+                "type": 2,
+                "guild_id": "guild-blocked",
+                "channel_id": "channel-1",
+                "member": {"user": {"id": "user-1"}},
+                "data": {
+                    "name": "notify",
+                    "options": [{"name": "text", "type": 3, "value": "hello from discord"}],
+                },
+            }
+        ).encode("utf-8")
+        timestamp = str(int(time.time()))
+        signature = signing_key.sign(timestamp.encode("utf-8") + body).signature.hex()
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/integrations/discord/interactions",
+                content=body,
+                headers={
+                    "X-Signature-Timestamp": timestamp,
+                    "X-Signature-Ed25519": signature,
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["error"]["code"], "BAD_REQUEST")
+        self.assertEqual(response.json()["error"]["details"]["code"], "GUILD_NOT_ALLOWED")
+
     def test_discord_interactions_endpoint_returns_bad_request_for_unsupported_type(self) -> None:
         signing_key = SigningKey.generate()
         public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
@@ -1894,7 +1936,10 @@ class ApiAppTestCase(unittest.TestCase):
         with patch("quantagent.api.routers.v1.discord_interactions.load_plugin_entrypoint", return_value=_InvalidPlugin()):
             with patch("quantagent.api.routers.v1.discord_interactions._get_plugin_registry") as get_registry:
                 get_registry.return_value = SimpleNamespace(
-                    get_plugin=lambda _plugin_id: SimpleNamespace(status=PluginStatus.VALID)
+                    get_plugin=lambda _plugin_id: SimpleNamespace(
+                        status=PluginStatus.VALID,
+                        manifest=SimpleNamespace(type=PluginType.SOURCE),
+                    )
                 )
                 with TestClient(app) as client:
                     response = client.post(
@@ -1905,6 +1950,44 @@ class ApiAppTestCase(unittest.TestCase):
                             "X-Signature-Ed25519": "00",
                         },
                     )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["error"]["code"], "SERVICE_UNAVAILABLE")
+
+    def test_discord_interactions_endpoint_rejects_non_source_plugin_record(self) -> None:
+        app = create_app(
+            self._settings(
+                DISCORD_INTERACTIONS_ENABLED=True,
+                DISCORD_INTERACTIONS_PUBLIC_KEY="a" * 64,
+            )
+        )
+        invalid_record = PluginRecord(
+            id="quantagent.official.notification.discord_webhook",
+            source=PluginSource.OFFICIAL,
+            path=Path("/tmp/fake-plugin"),
+            status=PluginStatus.VALID,
+            manifest=PluginManifest(
+                id="quantagent.official.notification.discord_webhook",
+                name="Discord Webhook Notification",
+                type=PluginType.NOTIFICATION,
+                version="0.1.0",
+                entrypoint="discord_webhook_plugin:plugin",
+                capabilities=("notification.send",),
+                config_schema="config.schema.json",
+            ),
+        )
+
+        with patch("quantagent.api.routers.v1.discord_interactions._get_plugin_registry") as get_registry:
+            get_registry.return_value = SimpleNamespace(get_plugin=lambda _plugin_id: invalid_record)
+            with TestClient(app) as client:
+                response = client.post(
+                    "/api/v1/integrations/discord/interactions",
+                    content=b'{"type":1}',
+                    headers={
+                        "X-Signature-Timestamp": str(int(time.time())),
+                        "X-Signature-Ed25519": "00",
+                    },
+                )
 
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["error"]["code"], "SERVICE_UNAVAILABLE")
@@ -1930,7 +2013,49 @@ class ApiAppTestCase(unittest.TestCase):
         with patch("quantagent.api.routers.v1.discord_interactions.load_plugin_entrypoint", return_value=_InvalidResultPlugin()):
             with patch("quantagent.api.routers.v1.discord_interactions._get_plugin_registry") as get_registry:
                 get_registry.return_value = SimpleNamespace(
-                    get_plugin=lambda _plugin_id: SimpleNamespace(status=PluginStatus.VALID)
+                    get_plugin=lambda _plugin_id: SimpleNamespace(
+                        status=PluginStatus.VALID,
+                        manifest=SimpleNamespace(type=PluginType.SOURCE),
+                    )
+                )
+                with TestClient(app) as client:
+                    response = client.post(
+                        "/api/v1/integrations/discord/interactions",
+                        content=body,
+                        headers={
+                            "X-Signature-Timestamp": timestamp,
+                            "X-Signature-Ed25519": signature,
+                        },
+                    )
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["error"]["code"], "SERVICE_UNAVAILABLE")
+
+    def test_discord_interactions_endpoint_rejects_success_result_without_response_payload(self) -> None:
+        signing_key = SigningKey.generate()
+        public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
+        app = create_app(
+            self._settings(
+                DISCORD_INTERACTIONS_ENABLED=True,
+                DISCORD_INTERACTIONS_PUBLIC_KEY=public_key,
+            )
+        )
+
+        class _MissingResponsePlugin:
+            def receive_request(self, _config, _headers, _body):
+                return SimpleNamespace(ok=True, code="RECEIVED", message="ok", response=None)
+
+        body = b'{"type":1}'
+        timestamp = str(int(time.time()))
+        signature = signing_key.sign(timestamp.encode("utf-8") + body).signature.hex()
+
+        with patch("quantagent.api.routers.v1.discord_interactions.load_plugin_entrypoint", return_value=_MissingResponsePlugin()):
+            with patch("quantagent.api.routers.v1.discord_interactions._get_plugin_registry") as get_registry:
+                get_registry.return_value = SimpleNamespace(
+                    get_plugin=lambda _plugin_id: SimpleNamespace(
+                        status=PluginStatus.VALID,
+                        manifest=SimpleNamespace(type=PluginType.SOURCE),
+                    )
                 )
                 with TestClient(app) as client:
                     response = client.post(
@@ -2248,6 +2373,8 @@ class ApiAppTestCase(unittest.TestCase):
             "DISCORD_INTERACTIONS_PUBLIC_KEY": None,
             "DISCORD_INTERACTIONS_RESPONSE_TEXT": "QuantAgent received your Discord interaction.",
             "DISCORD_INTERACTIONS_TIMESTAMP_TOLERANCE_SECONDS": 300,
+            "DISCORD_INTERACTIONS_GUILD_ALLOWLIST": (),
+            "DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST": (),
         }
         baseline.update(overrides)
         return Settings(**baseline)

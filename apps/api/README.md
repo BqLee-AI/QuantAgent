@@ -29,6 +29,8 @@ DISCORD_INTERACTIONS_PLUGIN_ID=quantagent.official.source.discord_interaction_we
 DISCORD_INTERACTIONS_PUBLIC_KEY=<discord application public key>
 DISCORD_INTERACTIONS_RESPONSE_TEXT=QuantAgent received your Discord interaction.
 DISCORD_INTERACTIONS_TIMESTAMP_TOLERANCE_SECONDS=300
+DISCORD_INTERACTIONS_GUILD_ALLOWLIST=guild-1,guild-2
+DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST=channel-1,channel-2
 ```
 
 启用后会开放公开 endpoint：
@@ -38,6 +40,7 @@ POST /api/v1/integrations/discord/interactions
 ```
 
 这个 endpoint 直接返回 Discord 原生 interaction response，不走项目统一 `code/data/msg/error` envelope。
+其中 `DISCORD_INTERACTIONS_*ALLOWLIST` 是 API ingress 当前可用的最小运行时边界；插件 `config.schema.json` 里的对应字段主要用于 standalone 场景和后续平台配置接入，不会由当前 API 自动读取。
 
 ### 测试
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 import sys
+from typing import Iterator
 
 from quantagent.core.registry.models import PluginRecord, PluginStatus
 
@@ -30,9 +31,10 @@ def load_plugin_entrypoint(record: PluginRecord) -> object:
         raise PluginEntrypointLoadError("Plugin entrypoint module could not be loaded.")
 
     module = importlib.util.module_from_spec(spec)
-    sys.modules[spec_name] = module
     try:
-        spec.loader.exec_module(module)
+        with _plugin_import_root(plugin_dir):
+            sys.modules[spec_name] = module
+            spec.loader.exec_module(module)
     except Exception as exc:  # pragma: no cover - defensive import boundary
         raise PluginEntrypointLoadError("Plugin entrypoint import failed.") from exc
 
@@ -60,3 +62,24 @@ def _is_path_inside_root(path: Path, root: Path) -> bool:
     except ValueError:
         return False
     return True
+
+
+class _plugin_import_root:
+    """临时把插件根目录加入 import 搜索路径，允许 entrypoint 拆分同目录模块。"""
+
+    def __init__(self, plugin_dir: Path) -> None:
+        self.plugin_dir = str(plugin_dir)
+        self.inserted = False
+
+    def __enter__(self) -> None:
+        if self.plugin_dir not in sys.path:
+            sys.path.insert(0, self.plugin_dir)
+            self.inserted = True
+
+    def __exit__(self, _exc_type, _exc, _tb) -> None:
+        if self.inserted:
+            try:
+                sys.path.remove(self.plugin_dir)
+            except ValueError:
+                return None
+        return None

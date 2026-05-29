@@ -59,6 +59,7 @@ uv run python -m unittest discover -s plugins/sources/discord-interaction-webhoo
 - API 层负责读取原始 body、请求头和运行时配置。
 - API 层通过 Registry + manifest `entrypoint` 加载本插件对象。
 - 本插件负责官方 `Ed25519` 验签、`PING`/command 解析和 interaction response 生成。
+- 当前 API ingress 直接传入已解析的 runtime config；不会自动读取本插件 schema 中的 `public_key_ref`。`public_key_ref` 仍用于 standalone test 或未来平台配置接入。
 
 本地最小配置示例：
 
@@ -67,6 +68,8 @@ DISCORD_INTERACTIONS_ENABLED=true
 DISCORD_INTERACTIONS_PLUGIN_ID=quantagent.official.source.discord_interaction_webhook
 DISCORD_INTERACTIONS_PUBLIC_KEY=<discord-application-public-key>
 DISCORD_INTERACTIONS_RESPONSE_TEXT=QuantAgent received your Discord interaction.
+DISCORD_INTERACTIONS_GUILD_ALLOWLIST=guild-1,guild-2
+DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST=channel-1,channel-2
 ```
 
 然后在 Discord Developer Portal 中把 Interactions Endpoint URL 指向：
