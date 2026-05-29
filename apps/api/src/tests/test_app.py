@@ -193,6 +193,7 @@ class ApiAppTestCase(unittest.TestCase):
         response = self.client.get("/api/v1/health", headers={"X-Request-ID": "req-123"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["X-Request-ID"], "req-123")
+        self.assertRegex(response.headers["X-Trace-ID"], r"^[0-9a-f]{32}$")
         self.assertEqual(response.json(), {"code": 0, "data": {"status": "ok"}, "msg": "ok", "error": None})
 
     def test_version_uses_explicit_envelope_contract(self) -> None:
@@ -537,10 +538,23 @@ class ApiAppTestCase(unittest.TestCase):
         body = response.json()
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.headers["X-Request-ID"], body["error"]["request_id"])
+        self.assertEqual(response.headers["X-Trace-ID"], body["error"]["trace_id"])
         self.assertEqual(body["code"], 40000)
         self.assertEqual(body["error"]["code"], "BAD_REQUEST")
-        self.assertIsNone(body["error"]["trace_id"])
+        self.assertRegex(body["error"]["trace_id"], r"^[0-9a-f]{32}$")
         self.assertEqual(body["msg"], "参数错误")
+
+    def test_traceparent_sets_trace_id_for_error_envelope_and_response_header(self) -> None:
+        self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+        response = self.client.get(
+            "/api/v1/debug/error",
+            headers={"traceparent": "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01"},
+        )
+        body = response.json()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.headers["X-Trace-ID"], "1234567890abcdef1234567890abcdef")
+        self.assertEqual(body["error"]["trace_id"], "1234567890abcdef1234567890abcdef")
 
     def test_validation_error_sanitizes_fields(self) -> None:
         self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
