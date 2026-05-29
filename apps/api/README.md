@@ -42,6 +42,38 @@ POST /api/v1/integrations/discord/interactions
 这个 endpoint 直接返回 Discord 原生 interaction response，不走项目统一 `code/data/msg/error` envelope。
 其中 `DISCORD_INTERACTIONS_*ALLOWLIST` 是 API ingress 当前可用的最小运行时边界；插件 `config.schema.json` 里的对应字段主要用于 standalone 场景和后续平台配置接入，不会由当前 API 自动读取。
 
+### 结构化文件日志
+
+API 会在 `create_app()` 显式初始化 API 私有结构化日志能力，默认写入 `RUNTIME_DIR/logs/api`。如果显式设置 `LOG_DIR`，启动时会先解析为绝对路径，再按 stream 写入：
+
+```text
+LOG_DIR/{stream}/YYYY/MM/DD/{service}.{env}.{instance_id}.pid-{pid}.{stream}.{YYYYMMDDTHH}[.part-NNN].jsonl
+```
+
+当前固定 stream：
+
+- `access`：每个 HTTP 请求一条访问日志。
+- `app`：应用启动、关闭和普通运行事件。
+- `error`：未处理异常、DB readiness / session 失败等错误。
+- `security`：未授权、CSRF 失败、能力拒绝等安全事件。
+- `audit`：受保护写操作上下文等文件审计事件。
+
+当前日志格式固定为 JSON Lines，不提供多格式切换。请求与错误响应会同时返回 `X-Request-ID` 和 `X-Trace-ID`；错误 envelope 中的 `error.trace_id` 会与响应头一致。access 日志默认只记录 path，不记录 query string。
+
+阶段 1 已支持：
+
+- `LOG_DIR`
+- `LOG_INSTANCE_ID`
+- `LOG_ROTATE_MAX_BYTES`
+- `LOG_QUEUE_MAX_SIZE`
+- `LOG_ACCESS_DROP_WHEN_FULL`
+
+阶段 1 非目标：
+
+- 不写数据库，不替代未来 append-only `audit_logs`。
+- 不接入 OpenTelemetry、APM SDK 或外部日志平台。
+- 不记录 request/response body、完整 headers、cookie、token、password、secret、session 或数据库连接串。
+
 ### 测试
 
 ```bash
@@ -151,7 +183,7 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 ### 基本约定
 
 - 默认会返回统一的 `code/data/msg/error` 响应信封。
-- 请求与错误响应都会携带 `X-Request-ID`。
+- 请求与错误响应都会携带 `X-Request-ID` 和 `X-Trace-ID`。
 - `APP_ENV=production` 时不会加载 `/api/v1/debug/*` 路由。
 - HTTP 传输层基础能力放在 `src/quantagent/api/http/`。
 - API 私有 Cookie Session 鉴权放在 `src/quantagent/api/auth/`。
@@ -201,6 +233,11 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 - `DATABASE_URL`：API 数据库连接串；容器内应指向 `db:5432`，宿主机直跑通常指向 `localhost:15432`。
 - `RUNTIME_DIR`：API 运行时目录，容器内通常为 `/app/runtime`，宿主机直跑通常为 `./runtime`。
 - `LOG_LEVEL`：应用日志级别，例如 `DEBUG`、`INFO`、`WARNING`、`ERROR`。
+- `LOG_DIR`：结构化文件日志根目录；未设置时默认解析为 `RUNTIME_DIR/logs/api`，并在启动时固定为绝对路径。
+- `LOG_INSTANCE_ID`：文件命名中的实例标识；未设置时回退到主机名。
+- `LOG_ROTATE_MAX_BYTES`：单个活跃日志文件的大小轮转阈值，默认 `20971520`。
+- `LOG_QUEUE_MAX_SIZE`：结构化日志内存队列大小，默认 `10000`。
+- `LOG_ACCESS_DROP_WHEN_FULL`：队列满时是否优先丢弃 access 记录，默认 `true`。
 - `API_HOST`：直跑 API 时的监听地址，默认 `127.0.0.1`；兼容读取历史变量名 `HOST`。Compose 中不注入该变量，容器内由启动命令监听 `0.0.0.0`。
 - `API_PORT`：直跑 API 时的监听端口，默认 `8000`；兼容读取历史变量名 `PORT`。在根目录 Compose 中，该变量只表示宿主机发布端口，容器内监听端口固定为 `8000`。
 - `API_V1_PREFIX`：API v1 路由前缀，默认 `/api/v1`。
