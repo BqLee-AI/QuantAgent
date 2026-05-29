@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from quantagent.api.observability.context import (
     REQUEST_ID_HEADER,
@@ -48,8 +49,16 @@ def get_trace_id(request: Request) -> str:
     return normalized
 
 
-class RequestContextMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
+class RequestContextMiddleware:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope, receive=receive)
         request_id = normalize_request_id(request.headers.get(REQUEST_ID_HEADER))
         trace_id = resolve_trace_id(request.headers.get("traceparent"), request.headers.get(TRACE_ID_HEADER))
         request.state.request_id = request_id
@@ -63,16 +72,21 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             route=getattr(request.scope.get("route"), "path", None),
         )
 
+        async def send_with_context_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                scope["_quantagent_status_code"] = message["status"]
+                headers = MutableHeaders(scope=message)
+                headers[REQUEST_ID_HEADER] = request_id
+                headers[TRACE_ID_HEADER] = trace_id
+            await send(message)
+
         try:
-            response = await call_next(request)
+            await self.app(scope, receive, send_with_context_headers)
         except Exception:
             log_access_event(request, status_code=500, duration_ms=timing.duration_ms())
             raise
         else:
-            response.headers[REQUEST_ID_HEADER] = request_id
-            response.headers[TRACE_ID_HEADER] = trace_id
-            log_access_event(request, status_code=response.status_code, duration_ms=timing.duration_ms())
-            return response
+            log_access_event(request, status_code=int(scope.get("_quantagent_status_code", 200)), duration_ms=timing.duration_ms())
         finally:
             clear_request_context(token)
 

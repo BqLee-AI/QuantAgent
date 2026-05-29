@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import logging
+from types import SimpleNamespace
 import tempfile
 import threading
 import time
@@ -19,6 +20,7 @@ from quantagent.api.observability.files import (
 )
 from quantagent.api.observability.filters import ContextInjectionFilter, SensitiveDataRedactionFilter, redact_value
 from quantagent.api.observability.formatters import JsonLinesFormatter
+from quantagent.api.observability.logging import log_error_event
 from quantagent.api.observability.queue import QueueWriterRuntime
 
 
@@ -41,6 +43,27 @@ class ObservabilityTestCase(unittest.TestCase):
         self.assertEqual(payload["request_id"], "req-1")
         self.assertEqual(payload["trace_id"], "trace-1")
         self.assertEqual(payload["path"], "/health")
+        self.assertEqual(payload["status_code"], 200)
+
+    def test_jsonl_formatter_keeps_reserved_fields_authoritative(self) -> None:
+        formatter = JsonLinesFormatter(service="api", env="test", instance_id="api-test", pid=123)
+        record = logging.LogRecord("quantagent.api", logging.INFO, __file__, 10, "hello", (), None)
+        record.stream = "access"
+        record.event = "http.request.completed"
+        record.structured_data = {
+            "service": "spoofed",
+            "event": "spoofed.event",
+            "pid": 999,
+            "request_id": "req-1",
+            "status_code": 200,
+        }
+
+        payload = json.loads(formatter.format(record))
+
+        self.assertEqual(payload["service"], "api")
+        self.assertEqual(payload["event"], "http.request.completed")
+        self.assertEqual(payload["pid"], 123)
+        self.assertEqual(payload["request_id"], "req-1")
         self.assertEqual(payload["status_code"], 200)
 
     def test_context_and_redaction_filters_mask_sensitive_fields(self) -> None:
@@ -80,6 +103,18 @@ class ObservabilityTestCase(unittest.TestCase):
         self.assertEqual(payload["password"], "[REDACTED]")
         self.assertEqual(payload["headers"]["x-csrf-token"], "[REDACTED]")
         self.assertEqual(payload["items"][0], "[REDACTED]")
+
+    def test_log_error_event_deduplicates_per_event(self) -> None:
+        request = SimpleNamespace(state=SimpleNamespace())
+        events: list[str] = []
+
+        with patch("quantagent.api.observability.logging.log_structured") as log_structured_mock:
+            log_structured_mock.side_effect = lambda _level, *, event, stream, **_fields: events.append(event)
+            log_error_event(request, event="db.session.missing", component="database", failure_type="missing")
+            log_error_event(request, event="db.session.missing", component="database", failure_type="missing")
+            log_error_event(request, event="http.unhandled", component="http", failure_type="unhandled")
+
+        self.assertEqual(events, ["db.session.missing", "http.unhandled"])
 
     def test_file_layout_and_naming_use_stream_date_pid_and_hour(self) -> None:
         timestamp = time.gmtime(1714554000)
@@ -274,6 +309,40 @@ class ObservabilityTestCase(unittest.TestCase):
         self.assertFalse(runtime.thread.is_alive())
         self.assertTrue(writer_set.closed.is_set())
         self.assertEqual(writer_set.writes, [("app", '{"event":"first"}'), ("app", '{"event":"queued"}')])
+
+    def test_queue_writer_error_drops_record_and_continues(self) -> None:
+        class FlakyWriterSet:
+            def __init__(self) -> None:
+                self.writes: list[tuple[str, str]] = []
+                self.closed = False
+                self.fail_next = True
+
+            def write(self, *, stream: str, line: str, created_at: float):
+                if self.fail_next:
+                    self.fail_next = False
+                    raise OSError("disk unavailable")
+                self.writes.append((stream, line))
+                return Path("/tmp/fake.jsonl")
+
+            def close(self) -> None:
+                self.closed = True
+
+        writer_set = FlakyWriterSet()
+        with patch("sys.stderr", new_callable=io.StringIO):
+            runtime = QueueWriterRuntime(
+                writer_set=writer_set,  # type: ignore[arg-type]
+                max_size=16,
+                access_drop_when_full=True,
+                shutdown_timeout_seconds=1.0,
+            )
+            runtime.start()
+            runtime.enqueue(stream="app", line='{"event":"first"}', created_at=time.time())
+            runtime.enqueue(stream="app", line='{"event":"second"}', created_at=time.time())
+            runtime.stop()
+
+        self.assertFalse(runtime.thread.is_alive())
+        self.assertTrue(writer_set.closed)
+        self.assertEqual(writer_set.writes, [("app", '{"event":"second"}')])
 
     def test_test_settings_use_memory_sink_by_default(self) -> None:
         from quantagent.api.config.settings import Settings

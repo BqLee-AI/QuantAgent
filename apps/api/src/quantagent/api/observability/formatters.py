@@ -7,6 +7,24 @@ import os
 from typing import Any
 
 
+_RESERVED_PAYLOAD_KEYS = frozenset(
+    {
+        "timestamp",
+        "level",
+        "logger",
+        "service",
+        "env",
+        "instance_id",
+        "pid",
+        "stream",
+        "event",
+        "request_id",
+        "trace_id",
+        "message",
+    }
+)
+
+
 class JsonLinesFormatter(logging.Formatter):
     def __init__(self, *, service: str, env: str, instance_id: str, pid: int | None = None) -> None:
         super().__init__()
@@ -38,5 +56,5 @@ class JsonLinesFormatter(logging.Formatter):
         if message and message != payload["event"]:
             payload["message"] = message
 
-        payload.update(structured)
+        payload.update({key: value for key, value in structured.items() if key not in _RESERVED_PAYLOAD_KEYS})
         return json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)

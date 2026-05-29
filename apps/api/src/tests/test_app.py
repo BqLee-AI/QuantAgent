@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 import unittest
@@ -28,8 +29,9 @@ from quantagent.api.auth.session import SESSION_V2, _deserialize_session, _issue
 from quantagent.api.config.settings import Settings, _build_env_file_paths
 from quantagent.api.db import get_db_session
 from quantagent.api.http.errors import ServiceUnavailableError
-from quantagent.api.main import create_app
 from quantagent.api.http.responses import ApiResponse
+from quantagent.api.main import create_app
+from quantagent.api.observability.logging import InMemoryStructuredHandler, shutdown_api_logging
 from quantagent.api.routers.v1.register import (
     API_V1_PUBLIC_ROUTE_ALLOWLIST,
     STANDARD_API_V1_ROUTER_REGISTRATIONS,
@@ -555,6 +557,24 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.headers["X-Trace-ID"], "1234567890abcdef1234567890abcdef")
         self.assertEqual(body["error"]["trace_id"], "1234567890abcdef1234567890abcdef")
+
+    def test_unhandled_error_response_includes_trace_headers(self) -> None:
+        router = APIRouter(prefix="/api/v1/test-unhandled")
+
+        @router.get("/error")
+        def unhandled_error() -> None:
+            raise RuntimeError("boom")
+
+        app = create_app(self._settings(AUTH_ENABLED=False))
+        app.include_router(router)
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.get("/api/v1/test-unhandled/error", headers={"X-Request-ID": "req-unhandled"})
+
+        body = response.json()
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.headers["X-Request-ID"], "req-unhandled")
+        self.assertEqual(response.headers["X-Request-ID"], body["error"]["request_id"])
+        self.assertEqual(response.headers["X-Trace-ID"], body["error"]["trace_id"])
 
     def test_validation_error_sanitizes_fields(self) -> None:
         self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
@@ -1883,6 +1903,17 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertNotIn("/api/v1/debug/error", schema["paths"])
         self.assertNotIn("/api/v1/debug/success", schema["paths"])
         self.assertNotIn("/api/v1/auth/test-actions/runtime-inspect", schema["paths"])
+
+    def test_create_app_does_not_configure_logging_before_lifespan(self) -> None:
+        shutdown_api_logging()
+        logger = logging.getLogger("quantagent.api")
+        before_handlers = list(logger.handlers)
+        self.addCleanup(shutdown_api_logging)
+        self.addCleanup(lambda: setattr(logger, "handlers", before_handlers))
+
+        create_app(self._settings(AUTH_ENABLED=False))
+
+        self.assertFalse(any(isinstance(handler, InMemoryStructuredHandler) for handler in logger.handlers))
 
     def test_db_session_dependency_closes_session_without_auto_commit(self) -> None:
         session = FakeSession()

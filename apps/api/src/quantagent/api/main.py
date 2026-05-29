@@ -14,12 +14,12 @@ from quantagent.api.routers.v1 import register_api_v1_routes
 def create_app(app_settings: Settings | None = None) -> FastAPI:
     """构建 FastAPI 应用，并注册公共中间件、异常处理和路由。"""
     current_settings = app_settings or settings
-    configure_api_logging(current_settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # 将数据库初始化放在生命周期里，避免测试或脚本在创建应用时就提前建立连接。
         try:
+            configure_api_logging(current_settings)
             initialize_database(app, current_settings)
             yield
         finally:
