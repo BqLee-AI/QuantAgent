@@ -14,25 +14,29 @@ from quantagent.core.registry import PluginStatus, RegistryScanner
 
 
 class ReadabilitySourcePluginContractTestCase(unittest.TestCase):
-    def test_registry_scans_official_readability_plugin(self) -> None:
+    PLUGIN_ID = "quantagent.official.source.readability"
+
+    @classmethod
+    def setUpClass(cls) -> None:
         records = RegistryScanner(
             official_root=REPO_ROOT / "plugins",
             runtime_root=REPO_ROOT / "runtime" / "plugins",
         ).scan()
+        cls._by_id = {record.id: record for record in records}
 
-        by_id = {record.id: record for record in records}
-        record = by_id["quantagent.official.source.readability"]
+    def _readability_record(self):
+        self.assertIn(self.PLUGIN_ID, self._by_id, "未在 Registry 扫描结果中找到 Readability 官方插件")
+        return self._by_id[self.PLUGIN_ID]
+
+    def test_registry_scans_official_readability_plugin(self) -> None:
+        record = self._readability_record()
         self.assertEqual(record.status, PluginStatus.VALID)
         self.assertIsNotNone(record.manifest)
         self.assertEqual(record.manifest.capabilities, ("source.fetch",))
         self.assertEqual(record.manifest.entrypoint, "src.readability_source:plugin")
 
     def test_plugin_schema_declares_minimal_reader_config(self) -> None:
-        records = RegistryScanner(
-            official_root=REPO_ROOT / "plugins",
-            runtime_root=REPO_ROOT / "runtime" / "plugins",
-        ).scan()
-        record = {item.id: item for item in records}["quantagent.official.source.readability"]
+        record = self._readability_record()
         schema_text = record.config_schema_path.read_text(encoding="utf-8")
         schema = json.loads(schema_text)
         properties = schema.get("properties", {})

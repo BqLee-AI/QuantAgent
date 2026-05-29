@@ -54,7 +54,7 @@ class ReadabilitySourcePluginTestCase(unittest.TestCase):
         html = FIXTURE_PATH.read_text(encoding="utf-8")
         fake_response = _FakeHTTPResponse(html)
 
-        with patch.dict(self.plugin.invoke.__func__.__globals__, {"urlopen": lambda *_args, **_kwargs: fake_response}):
+        with patch.object(type(self.plugin), "opener", staticmethod(_fake_opener(fake_response))):
             result = asyncio.run(
                 self.plugin.invoke(
                     PluginInvokeRequest(
@@ -87,19 +87,19 @@ class ReadabilitySourcePluginTestCase(unittest.TestCase):
         html = FIXTURE_PATH.read_text(encoding="utf-8")
         fake_response = _FakeHTTPResponse(html)
 
-        with patch("urllib.request.urlopen", return_value=fake_response):
-            invocation = asyncio.run(
-                PluginRuntimeService().invoke(
-                    _readability_record(),
-                    capability="source.fetch",
-                    request_id="req-readability-runtime",
-                    config={
-                        "url": "https://example.com/articles/storage-breakthrough",
-                        "min_text_length": 80,
-                    },
-                    input={},
-                )
+        runtime = _RuntimeServiceWithOpener(fake_response)
+        invocation = asyncio.run(
+            runtime.invoke(
+                _readability_record(),
+                capability="source.fetch",
+                request_id="req-readability-runtime",
+                config={
+                    "url": "https://example.com/articles/storage-breakthrough",
+                    "min_text_length": 80,
+                },
+                input={},
             )
+        )
 
         self.assertTrue(invocation.ok)
         self.assertIsNotNone(invocation.result)
@@ -152,7 +152,7 @@ class ReadabilitySourcePluginTestCase(unittest.TestCase):
         html = FIXTURE_PATH.read_text(encoding="utf-8")
         fake_response = _FakeHTTPResponse(html, charset="x-unknown-charset")
 
-        with patch.dict(self.plugin.invoke.__func__.__globals__, {"urlopen": lambda *_args, **_kwargs: fake_response}):
+        with patch.object(type(self.plugin), "opener", staticmethod(_fake_opener(fake_response))):
             result = asyncio.run(
                 self.plugin.invoke(
                     PluginInvokeRequest(
@@ -179,6 +179,24 @@ def _readability_record():
         runtime_root=REPO_ROOT / "runtime" / "plugins",
     ).scan()
     return {item.id: item for item in records}["quantagent.official.source.readability"]
+
+
+def _fake_opener(response):
+    def opener(*_args, **_kwargs):
+        return response
+
+    return opener
+
+
+class _RuntimeServiceWithOpener(PluginRuntimeService):
+    def __init__(self, response) -> None:
+        super().__init__()
+        self._response = response
+
+    def _load_plugin_module(self, module_name: str, *, plugin_path: Path | None = None):
+        module = super()._load_plugin_module(module_name, plugin_path=plugin_path)
+        module.ReadabilitySourcePlugin.opener = staticmethod(_fake_opener(self._response))
+        return module
 
 
 class _FakeHeaders:

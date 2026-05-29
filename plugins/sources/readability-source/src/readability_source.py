@@ -20,9 +20,12 @@ from quantagent.plugin_sdk import (
 
 
 PLUGIN_ID = "quantagent.official.source.readability"
+_DEFAULT_URLOPEN = urlopen
 
 
 class ReadabilitySourcePlugin(BasePlugin):
+    opener = staticmethod(_DEFAULT_URLOPEN)
+
     async def invoke(self, request: PluginInvokeRequest) -> PluginInvokeResult:
         if request.capability != "source.fetch":
             raise PluginRuntimeError(
@@ -42,7 +45,7 @@ class ReadabilitySourcePlugin(BasePlugin):
         min_text_length = _coerce_min_text_length(config.get("min_text_length"))
 
         request_obj = Request(url, headers=headers)
-        with urlopen(request_obj, timeout=timeout_seconds) as response:
+        with self.opener(request_obj, timeout=timeout_seconds) as response:
             body = response.read()
             content_type = response.headers.get_content_charset() or "utf-8"
         html = _decode_html(body, content_type)
