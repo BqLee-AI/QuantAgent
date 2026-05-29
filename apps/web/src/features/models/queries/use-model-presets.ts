@@ -4,11 +4,11 @@ import { useApis } from '@/app/runtime';
 
 import { modelQueryKeys } from './model-provider.keys';
 
-export function useModelProvidersQuery() {
+export function useModelPresetsQuery() {
   const { models } = useApis();
 
   return useQuery({
-    queryFn: () => models.listProviders(),
-    queryKey: modelQueryKeys.providers(),
+    queryFn: () => models.listModelPresets(),
+    queryKey: modelQueryKeys.presets(),
   });
 }

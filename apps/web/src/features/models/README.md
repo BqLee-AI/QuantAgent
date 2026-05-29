@@ -1,34 +1,37 @@
-# models feature
+## models feature
 
-`features/models` 负责 `/models` 模型供应商控制面：供应商列表、供应商详情编辑、供应商下模型管理、任务模型预设和最近调用摘要。
+负责 `/models` 管理台页面的模型供应商配置、模型列表管理、固定任务模型预设与调用记录展示。
 
-## Route 入口
+入口：
+- route: `src/routes/_app/(workspace)/models/index.tsx`
+- page: `components/page/ModelsPage.tsx`
+- page hook: `hooks/useModelsPage.ts`
 
-- `apps/web/src/routes/_app/(workspace)/models/index.tsx` 只挂载 `ModelsPage`。
-- 页面业务编排入口是 `hooks/use-model-provider-page.ts`。
+当前职责：
+- `api/`: 模型相关 REST contracts 与 endpoint 封装
+- `queries/`: query keys 与 `useQuery` 读取逻辑
+- `mutations/`: `useMutation` 与 invalidate 逻辑
+- `hooks/`: 页面级业务编排、表单业务状态
+- `components/page/`: 页面装配
+- `components/provider-list/`: 供应商列表与筛选
+- `components/provider-form/`: 供应商表单展示
+- `components/provider-models/`: 模型列表与弹窗
+- `components/provider-status/`: 调用记录与状态统计
+- `components/preset-board/`: 固定任务预设板
+- `components/shared/`: 仅限本 feature 复用的纯展示组件
+- `types/`: feature 内部 UI 类型
+- `utils/`: 纯格式化和无副作用 helper
 
-## 公开入口
+不负责：
+- ProviderPolicy 编辑器
+- budget / cost governance
+- 非 `/models` 路由的通用 UI
 
-- 页面组件：`components/ModelsPage.tsx`
-- 页面业务 hook：`hooks/use-model-provider-page.ts`
-- API 对象：`api/model-provider.api.ts` 中的 `ModelProviderApi`
-- API contracts：`api/model-provider.contracts.ts`
+公开入口：
+- `components/page/ModelsPage.tsx`
+- `hooks/useModelsPage.ts`
 
-## 子目录职责
-
-- `api/`：只放 `ModelProviderApi extends BaseApi` 和模型供应商 API contract 类型。
-- `queries/`：只放 TanStack Query keys 和查询 hooks，通过 `useApis()` 使用 runtime 注册的稳定 API 对象。
-- `mutations/`：只放 mutation hooks、query invalidation 和 provider id 本地校验。
-- `hooks/`：只放页面级业务 hook，组合筛选、选中、新建态、query 和 mutation。
-- `components/`：只放展示组件和页面组合组件，接收 props 渲染，不拼 endpoint、不持有 query key。
-- 根目录工具文件：`errors.ts`、`provider-presets.ts` 只保留模型页局部纯逻辑。
-
-## 不负责
-
-- 不实现后端模型策略、ProviderManager、fallback 决策、权限绕过或交易策略判断。
-- 不直接创建 `ApiClient`，不通过 `useAuth()` 暴露的底层 client 调业务 API。
-- 不把 API response envelope、endpoint path、query cache 或 mutation invalidate 放进展示组件。
-
-## 禁止继续平铺
-
-新增模型供应商能力时不要在 feature 根目录继续新增 `api.ts`、`queries.ts`、`types.ts` 或大组件文件。按 `api/`、`queries/`、`mutations/`、`hooks/`、`components/`、`types/`、`utils/` 拆到职责目录；只有纯局部工具且不会继续增长时才可留在根目录。
+不要继续放入：
+- 不要在 route 文件里新增 query、mutation、弹窗状态或业务表单逻辑
+- 不要在 `components/` 里直接调 API、拼 query key 或处理 invalidate
+- 不要把 feature DTO、query、页面状态重新平铺回根目录

@@ -110,3 +110,29 @@ export interface ModelTestConnectionResult {
   success: boolean;
   invocation: ModelInvocation;
 }
+
+export interface RemoteProviderModel {
+  id: string;
+  owned_by: string | null;
+  supports_vision: boolean | null;
+}
+
+export interface ModelProviderApiContract {
+  listProviders(): Promise<ModelProviderList>;
+  getProvider(providerId: number): Promise<ModelProviderDetail>;
+  createProvider(input: CreateModelProviderInput): Promise<ModelProviderDetail>;
+  updateProvider(providerId: number, input: UpdateModelProviderInput): Promise<ModelProviderDetail>;
+  deleteProvider(providerId: number): Promise<{ deleted: boolean }>;
+  setDefaultProvider(providerId: number): Promise<ModelProviderDetail>;
+  testProviderConnection(providerId: number): Promise<ModelTestConnectionResult>;
+  listRemoteProviderModels(providerId: number): Promise<RemoteProviderModel[]>;
+  createProviderModel(providerId: number, input: SaveProviderModelInput): Promise<ModelProviderModel>;
+  updateProviderModel(providerId: number, modelId: number, input: SaveProviderModelInput): Promise<ModelProviderModel>;
+  deleteProviderModel(providerId: number, modelId: number): Promise<{ deleted: boolean }>;
+  listModelPresets(): Promise<ModelPresetBinding[]>;
+  updateModelPreset(presetKey: ModelPresetKey, input: UpdateModelPresetInput): Promise<ModelPresetBinding>;
+  listModelInvocations(options?: {
+    providerId?: number | null;
+    presetKey?: ModelPresetKey | null;
+  }): Promise<ModelInvocation[]>;
+}

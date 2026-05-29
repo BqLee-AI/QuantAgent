@@ -1,6 +1,6 @@
 import { Chip } from '@heroui/react';
 
-import type { ModelInvocation, ModelProviderDetail } from '../api';
+import type { ModelInvocation, ModelProviderDetail } from '../../api';
 import { ModelInvocationTable } from './ModelInvocationTable';
 
 interface ProviderStatusPanelProps {

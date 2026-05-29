@@ -3,7 +3,7 @@ import {
   Table,
 } from '@heroui/react';
 
-import type { ModelInvocation } from '../api';
+import type { ModelInvocation } from '../../api';
 
 interface ModelInvocationTableProps {
   invocations: readonly ModelInvocation[];

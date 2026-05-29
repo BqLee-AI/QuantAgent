@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { ApiError } from '@/shared/api';
 
-import { formatModelApiError } from './errors';
+import { formatModelApiError } from './format-model-api-error';
 
 describe('formatModelApiError', () => {
   it('returns null for non API errors', () => {

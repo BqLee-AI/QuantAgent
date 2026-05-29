@@ -2,7 +2,7 @@ import { createApiClient } from "@/shared/api";
 import { PluginConfigApi } from "@/features/plugins";
 import { AuthApi } from "@/shared/auth/api";
 import type { RuntimeConfig } from "@/shared/config";
-import { ModelProviderApi } from "@/features/models/api";
+import { createModelProviderApi } from "@/features/models/api";
 
 import type { AppRuntime, AuthRuntimeBridge } from "./runtime.types";
 
@@ -22,13 +22,16 @@ export function createAppRuntime({
     onUnauthorized: auth.handleUnauthorized,
     withCredentials: true,
   });
+  const modelProviderApi = createModelProviderApi(apiClient);
 
   return {
     apiClient,
     apis: {
       auth: new AuthApi(apiClient),
       plugins: new PluginConfigApi(apiClient),
-      modelProviders: new ModelProviderApi(apiClient),
+      models: modelProviderApi,
+      // 中文注释：兼容当前 PR 分支里仍在使用 `modelProviders` 的调用点，避免一次重构同时打断旧引用。
+      modelProviders: modelProviderApi,
     },
     realtime: {
       client: null,
