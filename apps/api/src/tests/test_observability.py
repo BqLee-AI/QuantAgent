@@ -776,16 +776,17 @@ class ObservabilityTestCase(unittest.TestCase):
                 datetime_mock.now.return_value = fixed_now
                 datetime_mock.fromtimestamp = datetime.fromtimestamp
                 datetime_mock.strptime = datetime.strptime
-                runtime = LogMaintenanceRuntime(
-                    MaintenanceConfig(
-                        root_dir=root_dir,
-                        min_age_seconds=300,
-                        retention_days=StreamRetentionDays(access=7, app=7, error=7, security=7, audit=7),
-                        max_total_bytes=None,
-                        min_free_bytes=None,
+                with patch("quantagent.api.observability.maintenance._is_pid_running", return_value=True):
+                    runtime = LogMaintenanceRuntime(
+                        MaintenanceConfig(
+                            root_dir=root_dir,
+                            min_age_seconds=300,
+                            retention_days=StreamRetentionDays(access=7, app=7, error=7, security=7, audit=7),
+                            max_total_bytes=None,
+                            min_free_bytes=None,
+                        )
                     )
-                )
-                summary = runtime.run_startup_cleanup()
+                    summary = runtime.run_startup_cleanup()
 
             self.assertEqual(summary.compressed_files, 0)
             self.assertEqual(summary.deleted_files, 0)
@@ -824,6 +825,72 @@ class ObservabilityTestCase(unittest.TestCase):
             compressed_path = closed_path.with_suffix(".jsonl.gz")
             self.assertEqual(summary.compressed_files, 1)
             self.assertFalse(closed_path.exists())
+            self.assertTrue(compressed_path.exists())
+
+    def test_maintenance_startup_compresses_same_day_orphan_file_from_dead_pid(self) -> None:
+        from datetime import UTC, datetime
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            orphan_path = root_dir / "error/2024/05/01/api.test.api-test.pid-43210.error.20240501.jsonl"
+            orphan_path.parent.mkdir(parents=True, exist_ok=True)
+            orphan_path.write_text('{"event":"orphan"}\n', encoding="utf-8")
+            old_mtime = datetime(2024, 5, 1, 8, 5, 0, tzinfo=UTC).timestamp()
+            os.utime(orphan_path, (old_mtime, old_mtime))
+
+            with patch("quantagent.api.observability.maintenance.datetime") as datetime_mock:
+                fixed_now = datetime(2024, 5, 1, 10, 0, 0, tzinfo=UTC)
+                datetime_mock.now.return_value = fixed_now
+                datetime_mock.fromtimestamp = datetime.fromtimestamp
+                datetime_mock.strptime = datetime.strptime
+                with patch("quantagent.api.observability.maintenance._is_pid_running", return_value=False):
+                    runtime = LogMaintenanceRuntime(
+                        MaintenanceConfig(
+                            root_dir=root_dir,
+                            min_age_seconds=60,
+                            retention_days=StreamRetentionDays(access=7, app=7, error=7, security=7, audit=7),
+                            max_total_bytes=None,
+                            min_free_bytes=None,
+                        )
+                    )
+                    summary = runtime.run_startup_cleanup()
+
+            compressed_path = orphan_path.with_suffix(".jsonl.gz")
+            self.assertEqual(summary.compressed_files, 1)
+            self.assertFalse(orphan_path.exists())
+            self.assertTrue(compressed_path.exists())
+
+    def test_maintenance_startup_compresses_same_day_orphan_file_without_waiting_min_age(self) -> None:
+        from datetime import UTC, datetime
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            orphan_path = root_dir / "app/2024/05/01/api.test.api-test.pid-43210.app.20240501.jsonl"
+            orphan_path.parent.mkdir(parents=True, exist_ok=True)
+            orphan_path.write_text('{"event":"orphan"}\n', encoding="utf-8")
+            recent_mtime = datetime(2024, 5, 1, 9, 59, 50, tzinfo=UTC).timestamp()
+            os.utime(orphan_path, (recent_mtime, recent_mtime))
+
+            with patch("quantagent.api.observability.maintenance.datetime") as datetime_mock:
+                fixed_now = datetime(2024, 5, 1, 10, 0, 0, tzinfo=UTC)
+                datetime_mock.now.return_value = fixed_now
+                datetime_mock.fromtimestamp = datetime.fromtimestamp
+                datetime_mock.strptime = datetime.strptime
+                with patch("quantagent.api.observability.maintenance._is_pid_running", return_value=False):
+                    runtime = LogMaintenanceRuntime(
+                        MaintenanceConfig(
+                            root_dir=root_dir,
+                            min_age_seconds=300,
+                            retention_days=StreamRetentionDays(access=7, app=7, error=7, security=7, audit=7),
+                            max_total_bytes=None,
+                            min_free_bytes=None,
+                        )
+                    )
+                    summary = runtime.run_startup_cleanup()
+
+            compressed_path = orphan_path.with_suffix(".jsonl.gz")
+            self.assertEqual(summary.compressed_files, 1)
+            self.assertFalse(orphan_path.exists())
             self.assertTrue(compressed_path.exists())
 
     def test_maintenance_appends_closed_file_when_compressed_target_exists(self) -> None:

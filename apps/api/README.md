@@ -15,6 +15,15 @@ uv sync
 APP_ENV=development uv run api
 ```
 
+本地开发如果 `reload` 残留导致端口被占、服务半死不活或只杀掉了 reloader / worker 其中一个，不要继续手工猜 pid；优先执行：
+
+```bash
+cd apps/api
+uv run api-stop
+```
+
+`api-stop` 会优先读取 `RUNTIME_DIR/data/api/dev-server/` 下记录的 reloader / worker pid，并在缺失 pid 文件时回退到当前 API 监听端口的进程做兜底清理。`uv run api-reset` 当前与 `api-stop` 等价，只保留给本地开发的习惯性口令。
+
 API dotenv 文件按从低到高读取：仓库根目录 `.env`、当前工作目录 `.env`、`apps/api/.env`、`apps/api/.env.local`、`apps/api/.env.<APP_ENV>`、`apps/api/.env.<APP_ENV>.local`。重复变量允许存在，API 目录下的文件会覆盖根 `.env`；真实进程环境变量仍是最高优先级，适合 CI/CD secret、部署 secret 和临时强制覆盖。
 
 `APP_ENV` 先从真实环境变量读取；如果没有，再由根 `.env`、`apps/api/.env`、`apps/api/.env.local` 这几个基础层决定，用于选择对应的 `apps/api/.env.<APP_ENV>` 和 `.local` 文件。协作模板使用 `.example` 后缀，真实 `.env*` 文件不要提交。

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 import gzip
+import os
 from pathlib import Path
 import shutil
 import threading
@@ -260,10 +261,34 @@ def _is_confidently_closed(
         return True
     if parsed.path in active_paths:
         return False
-    if parsed.date_slice == now.strftime("%Y%m%d"):
+    age_seconds = _file_age_seconds(parsed.path, now=now)
+    if age_seconds is None:
         return False
-    age_seconds = max(0.0, (now - datetime.fromtimestamp(parsed.path.stat().st_mtime, UTC)).total_seconds())
+    if parsed.date_slice == now.strftime("%Y%m%d"):
+        # 同一天文件默认视为“可能仍在写入中”；但旧 pid 已消失时，说明该文件已不可能再被当前宿主机进程继续写入。
+        return parsed.pid != os.getpid() and not _is_pid_running(parsed.pid)
     return age_seconds >= min_age_seconds
+
+
+def _file_age_seconds(path: Path, *, now: datetime) -> float | None:
+    try:
+        return max(0.0, (now - datetime.fromtimestamp(path.stat().st_mtime, UTC)).total_seconds())
+    except OSError:
+        return None
+
+
+def _is_pid_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return True
+    return True
 
 
 def _is_expired(
