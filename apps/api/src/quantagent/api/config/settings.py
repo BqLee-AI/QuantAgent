@@ -168,7 +168,7 @@ class Settings(CoreSettings):
     LOG_ROTATE_MAX_BYTES: int = Field(default=20 * 1024 * 1024, ge=1024)
     LOG_QUEUE_MAX_SIZE: int = Field(default=10000, ge=16)
     LOG_ACCESS_DROP_WHEN_FULL: bool = True
-    LOG_ACCESS_RETENTION_DAYS: int = Field(default=7, ge=1)
+    LOG_ACCESS_RETENTION_DAYS: int = Field(default=3, ge=1)
     LOG_APP_RETENTION_DAYS: int = Field(default=14, ge=1)
     LOG_ERROR_RETENTION_DAYS: int = Field(default=30, ge=1)
     LOG_SECURITY_RETENTION_DAYS: int = Field(default=30, ge=1)

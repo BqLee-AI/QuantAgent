@@ -23,10 +23,10 @@ API 默认监听 `127.0.0.1:8000`。`APP_ENV=development` 或 `APP_ENV=local` �
 
 ### 结构化文件日志
 
-API 会在 `create_app()` 显式初始化 API 私有结构化日志能力，默认写入 `RUNTIME_DIR/logs/api`。如果显式设置 `LOG_DIR`，启动时会先解析为绝对路径，再按 stream 写入：
+API 会在 `create_app()` 显式初始化 API 私有结构化日志能力。未显式配置 `LOG_DIR` 且 `RUNTIME_DIR` 缺失或为空时，默认写入仓库根 `runtime/logs/api`；如果显式设置了非空 `RUNTIME_DIR`，则默认写入 `RUNTIME_DIR/logs/api`。如果显式设置 `LOG_DIR`，启动时会先解析为绝对路径，再按 stream 写入：
 
 ```text
-LOG_DIR/{stream}/YYYY/MM/DD/{service}.{env}.{instance_id}.pid-{pid}.{stream}.{YYYYMMDDTHH}[.part-NNN].jsonl
+LOG_DIR/{stream}/YYYY/MM/DD/{service}.{env}.{instance_id}.pid-{pid}.{stream}.{YYYYMMDD}[.part-NNN].jsonl
 ```
 
 当前固定 stream：
@@ -59,9 +59,15 @@ LOG_DIR/{stream}/YYYY/MM/DD/{service}.{env}.{instance_id}.pid-{pid}.{stream}.{YY
 
 - startup 会先做一次补偿清理：只处理可确认已关闭的 `.jsonl` 文件。
 - 已关闭文件会压缩为 `.jsonl.gz`；无法确认关闭状态的文件会跳过，不会强行压缩或删除。
-- retention 按 stream 独立配置，允许 access 短保留，error/security/audit 长保留。
+- retention 按 stream 独立配置，默认 `access=3`、`app=14`、`error=30`、`security=30`、`audit=90`。
 - disk guard 命中 `LOG_MAX_TOTAL_BYTES` 或 `LOG_MIN_FREE_BYTES` 时，优先丢弃 access，尽量保留 error/security/audit。
 - shutdown 会在 queue drain 完成后做一次 maintenance 收口，避免当前进程刚关闭的活跃文件长期留在未压缩状态。
+
+默认路径与覆盖语义：
+
+- `RUNTIME_DIR` 缺失或为空时，shared settings 会探测源码仓库根，并将默认 runtime 固定到仓库根 `runtime`。
+- `RUNTIME_DIR=runtime`、`RUNTIME_DIR=./runtime`、`RUNTIME_DIR=../runtime` 这类非空相对路径仍按当前进程 cwd 解析，不会被强行改写成仓库根相对路径。
+- 生产、容器和 systemd 部署应显式设置 `RUNTIME_DIR` 或 `LOG_DIR` 指向持久卷路径，例如 `/app/runtime` 或 `/var/lib/quantagent/runtime`。
 
 当前非目标：
 
@@ -226,14 +232,14 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 
 - `APP_ENV`：选择 API 运行环境，并决定是否追加读取 `apps/api/.env.<APP_ENV>` 和 `apps/api/.env.<APP_ENV>.local`。
 - `DATABASE_URL`：API 数据库连接串；容器内应指向 `db:5432`，宿主机直跑通常指向 `localhost:15432`。
-- `RUNTIME_DIR`：API 运行时目录，容器内通常为 `/app/runtime`，宿主机直跑通常为 `./runtime`。
+- `RUNTIME_DIR`：API 运行时目录；缺失或为空时默认探测到仓库根 `runtime`，显式非空相对路径仍按 cwd 解析，容器内通常显式设为 `/app/runtime`。
 - `LOG_LEVEL`：应用日志级别，例如 `DEBUG`、`INFO`、`WARNING`、`ERROR`。
 - `LOG_DIR`：结构化文件日志根目录；未设置时默认解析为 `RUNTIME_DIR/logs/api`，并在启动时固定为绝对路径。
 - `LOG_INSTANCE_ID`：文件命名中的实例标识；未设置时回退到主机名。
 - `LOG_ROTATE_MAX_BYTES`：单个活跃日志文件的大小轮转阈值，默认 `20971520`。
 - `LOG_QUEUE_MAX_SIZE`：结构化日志内存队列大小，默认 `10000`。
 - `LOG_ACCESS_DROP_WHEN_FULL`：队列满时是否优先丢弃 access 记录，默认 `true`。
-- `LOG_ACCESS_RETENTION_DAYS`：access stream 保留天数，默认 `7`。
+- `LOG_ACCESS_RETENTION_DAYS`：access stream 保留天数，默认 `3`。
 - `LOG_APP_RETENTION_DAYS`：app stream 保留天数，默认 `14`。
 - `LOG_ERROR_RETENTION_DAYS`：error stream 保留天数，默认 `30`。
 - `LOG_SECURITY_RETENTION_DAYS`：security stream 保留天数，默认 `30`。

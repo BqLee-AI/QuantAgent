@@ -12,7 +12,7 @@ SUPPORTED_STREAMS = ("access", "app", "error", "security", "audit")
 _STREAM_PATTERN = "|".join(SUPPORTED_STREAMS)
 _LOG_FILENAME_PATTERN = re.compile(
     rf"^(?P<service>[^.]+)\.(?P<env>[^.]+)\.(?P<instance_id>.+?)\.pid-(?P<pid>\d+)"
-    rf"\.(?P<stream>{_STREAM_PATTERN})\.(?P<hour_slice>\d{{8}}T\d{{2}})"
+    rf"\.(?P<stream>{_STREAM_PATTERN})\.(?P<date_slice>\d{{8}})"
     rf"(?:\.part-(?P<part>\d{{3}}))?\.jsonl(?P<compressed>\.gz)?$"
 )
 
@@ -35,12 +35,12 @@ class ParsedLogFile:
     instance_id: str
     pid: int
     stream: str
-    hour_slice: str
+    date_slice: str
     part: int
     compressed: bool
 
-    def hour_start(self) -> datetime:
-        return datetime.strptime(self.hour_slice, "%Y%m%dT%H").replace(tzinfo=UTC)
+    def date_start(self) -> datetime:
+        return datetime.strptime(self.date_slice, "%Y%m%d").replace(tzinfo=UTC)
 
 
 def build_stream_directory(root_dir: Path, stream: str, timestamp: datetime) -> Path:
@@ -57,7 +57,7 @@ def build_stream_filename(
     timestamp: datetime,
     part: int,
 ) -> str:
-    filename = f"{service}.{env}.{instance_id}.pid-{pid}.{stream}.{timestamp.strftime('%Y%m%dT%H')}"
+    filename = f"{service}.{env}.{instance_id}.pid-{pid}.{stream}.{timestamp.strftime('%Y%m%d')}"
     if part > 0:
         filename += f".part-{part:03d}"
     return f"{filename}.jsonl"
@@ -74,7 +74,7 @@ def parse_log_file(path: Path) -> ParsedLogFile | None:
         instance_id=match.group("instance_id"),
         pid=int(match.group("pid")),
         stream=match.group("stream"),
-        hour_slice=match.group("hour_slice"),
+        date_slice=match.group("date_slice"),
         part=int(match.group("part") or "0"),
         compressed=bool(match.group("compressed")),
     )
@@ -86,7 +86,7 @@ class StreamFileWriter:
         self._stream = stream
         self._file: TextIO | None = None
         self._active_path: Path | None = None
-        self._active_hour: str | None = None
+        self._active_date: str | None = None
         self._active_part = 0
         self._active_size = 0
 
@@ -96,7 +96,7 @@ class StreamFileWriter:
             self._file.close()
             self._file = None
         self._active_path = None
-        self._active_hour = None
+        self._active_date = None
         self._active_part = 0
         self._active_size = 0
 
@@ -105,10 +105,10 @@ class StreamFileWriter:
 
     def write_line(self, line: str, created_at: float) -> Path:
         timestamp = datetime.fromtimestamp(created_at, UTC)
-        hour_slice = timestamp.strftime("%Y%m%dT%H")
+        date_slice = timestamp.strftime("%Y%m%d")
         encoded_size = len(line.encode("utf-8")) + 1
 
-        if self._file is None or self._active_hour != hour_slice:
+        if self._file is None or self._active_date != date_slice:
             self._open_file(timestamp, part=0)
         elif self._active_size + encoded_size > self._config.rotate_max_bytes:
             self._open_file(timestamp, part=self._active_part + 1)
@@ -136,7 +136,7 @@ class StreamFileWriter:
         )
         self._file = path.open("a", encoding="utf-8")
         self._active_path = path
-        self._active_hour = timestamp.strftime("%Y%m%dT%H")
+        self._active_date = timestamp.strftime("%Y%m%d")
         self._active_part = part
         self._active_size = path.stat().st_size if path.exists() else 0
 

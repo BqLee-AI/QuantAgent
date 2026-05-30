@@ -182,7 +182,7 @@ class ObservabilityTestCase(unittest.TestCase):
 
         self.assertEqual(events, ["db.session.missing", "http.unhandled"])
 
-    def test_file_layout_and_naming_use_stream_date_pid_and_hour(self) -> None:
+    def test_file_layout_and_naming_use_stream_date_pid_and_day(self) -> None:
         timestamp = time.gmtime(1714554000)
         dt = time.strftime("%Y-%m-%dT%H:%M:%S", timestamp)
         from datetime import datetime, UTC
@@ -200,12 +200,12 @@ class ObservabilityTestCase(unittest.TestCase):
         )
 
         self.assertEqual(str(directory), "/tmp/logs/access/2024/05/01")
-        self.assertEqual(filename, "api.test.api-test.pid-321.access.20240501T09.part-002.jsonl")
+        self.assertEqual(filename, "api.test.api-test.pid-321.access.20240501.part-002.jsonl")
         self.assertTrue(dt)
 
     def test_parse_log_file_supports_jsonl_and_gzip(self) -> None:
-        parsed = parse_log_file(Path("api.test.api-test.pid-321.access.20240501T09.part-002.jsonl"))
-        compressed = parse_log_file(Path("api.test.api-test.pid-321.access.20240501T09.jsonl.gz"))
+        parsed = parse_log_file(Path("api.test.api-test.pid-321.access.20240501.part-002.jsonl"))
+        compressed = parse_log_file(Path("api.test.api-test.pid-321.access.20240501.jsonl.gz"))
 
         assert parsed is not None
         assert compressed is not None
@@ -216,7 +216,7 @@ class ObservabilityTestCase(unittest.TestCase):
         self.assertEqual(compressed.part, 0)
         self.assertTrue(compressed.compressed)
 
-    def test_file_writer_rotates_by_size_and_hour(self) -> None:
+    def test_file_writer_rotates_by_size_and_day(self) -> None:
         from datetime import datetime, UTC
 
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -247,9 +247,38 @@ class ObservabilityTestCase(unittest.TestCase):
             )
             writer_set.close()
 
-        self.assertIn(".access.20240501T09.jsonl", first_path.name)
-        self.assertIn(".access.20240501T09.part-001.jsonl", second_path.name)
-        self.assertIn(".access.20240501T10.jsonl", third_path.name)
+        self.assertIn(".access.20240501.jsonl", first_path.name)
+        self.assertIn(".access.20240501.part-001.jsonl", second_path.name)
+        self.assertIn(".access.20240501.part-002.jsonl", third_path.name)
+
+    def test_file_writer_rotates_to_new_file_when_date_changes(self) -> None:
+        from datetime import UTC, datetime
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            writer_set = StreamFileWriterSet(
+                FileLayoutConfig(
+                    root_dir=Path(tmp_dir),
+                    service="api",
+                    env="test",
+                    instance_id="api-test",
+                    pid=123,
+                    rotate_max_bytes=4096,
+                )
+            )
+            first_path = writer_set.write(
+                stream="access",
+                line='{"event":"a"}',
+                created_at=datetime(2024, 5, 1, 23, 59, 0, tzinfo=UTC).timestamp(),
+            )
+            second_path = writer_set.write(
+                stream="access",
+                line='{"event":"b"}',
+                created_at=datetime(2024, 5, 2, 0, 0, 1, tzinfo=UTC).timestamp(),
+            )
+            writer_set.close()
+
+        self.assertIn(".access.20240501.jsonl", first_path.name)
+        self.assertIn(".access.20240502.jsonl", second_path.name)
 
     def test_queue_full_drops_access_and_fallback_writes_error(self) -> None:
         class BlockingWriterSet:
@@ -597,7 +626,7 @@ class ObservabilityTestCase(unittest.TestCase):
     def test_maintenance_skips_active_or_unconfirmed_files_during_startup_cleanup(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             root_dir = Path(tmp_dir)
-            active_path = root_dir / "access/2024/05/01/api.test.api-test.pid-321.access.20240501T09.jsonl"
+            active_path = root_dir / "access/2024/05/01/api.test.api-test.pid-321.access.20240501.jsonl"
             active_path.parent.mkdir(parents=True, exist_ok=True)
             active_path.write_text('{"event":"active"}\n', encoding="utf-8")
             now = time.time()
@@ -632,10 +661,10 @@ class ObservabilityTestCase(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             root_dir = Path(tmp_dir)
-            closed_path = root_dir / "error/2024/05/01/api.test.api-test.pid-321.error.20240501T08.part-001.jsonl"
+            closed_path = root_dir / "error/2024/04/30/api.test.api-test.pid-321.error.20240430.part-001.jsonl"
             closed_path.parent.mkdir(parents=True, exist_ok=True)
             closed_path.write_text('{"event":"error"}\n', encoding="utf-8")
-            old_mtime = datetime(2024, 5, 1, 8, 5, 0, tzinfo=UTC).timestamp()
+            old_mtime = datetime(2024, 4, 30, 8, 5, 0, tzinfo=UTC).timestamp()
             os.utime(closed_path, (old_mtime, old_mtime))
 
             with patch("quantagent.api.observability.maintenance.datetime") as datetime_mock:
@@ -664,8 +693,8 @@ class ObservabilityTestCase(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             root_dir = Path(tmp_dir)
-            access_path = root_dir / "access/2024/05/01/api.test.api-test.pid-321.access.20240501T06.jsonl"
-            error_path = root_dir / "error/2024/05/01/api.test.api-test.pid-321.error.20240501T06.jsonl"
+            access_path = root_dir / "access/2024/05/01/api.test.api-test.pid-321.access.20240501.jsonl"
+            error_path = root_dir / "error/2024/05/01/api.test.api-test.pid-321.error.20240501.jsonl"
             for path in (access_path, error_path):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text('{"event":"x"}\n', encoding="utf-8")
@@ -697,7 +726,7 @@ class ObservabilityTestCase(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             root_dir = Path(tmp_dir)
-            active_path = root_dir / "audit/2024/05/01/api.test.api-test.pid-321.audit.20240501T10.jsonl"
+            active_path = root_dir / "audit/2024/05/01/api.test.api-test.pid-321.audit.20240501.jsonl"
             active_path.parent.mkdir(parents=True, exist_ok=True)
             active_path.write_text('{"event":"audit"}\n', encoding="utf-8")
             mtime = datetime(2024, 5, 1, 10, 0, 0, tzinfo=UTC).timestamp()

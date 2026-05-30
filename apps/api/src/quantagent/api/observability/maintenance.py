@@ -206,7 +206,7 @@ def _is_confidently_closed(
         return True
     if parsed.path in active_paths:
         return False
-    if parsed.hour_slice == now.strftime("%Y%m%dT%H"):
+    if parsed.date_slice == now.strftime("%Y%m%d"):
         return False
     age_seconds = max(0.0, (now - datetime.fromtimestamp(parsed.path.stat().st_mtime, UTC)).total_seconds())
     return age_seconds >= min_age_seconds
@@ -220,7 +220,7 @@ def _is_expired(
 ) -> bool:
     keep_days = retention_days.for_stream(parsed.stream)
     cutoff = now - timedelta(days=keep_days)
-    return parsed.hour_start() < cutoff
+    return parsed.date_start() < cutoff
 
 
 def _merge_summary(left: MaintenanceSummary, right: MaintenanceSummary) -> MaintenanceSummary:
