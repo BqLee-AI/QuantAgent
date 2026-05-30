@@ -14,8 +14,9 @@ class ApiMainTestCase(unittest.TestCase):
             _should_enable_reload(
                 Settings(
                     APP_ENV="production",
-                    AUTH_ADMIN_PASSWORD="prod-password",
-                    AUTH_SESSION_SECRET="prod-secret",
+                    AUTH_ADMIN_PASSWORD="prod-password-for-entrypoint-test",
+                    AUTH_SESSION_SECRET="prod-session-secret-for-entrypoint-test",
+                    AUTH_COOKIE_SECURE=True,
                 )
             )
         )

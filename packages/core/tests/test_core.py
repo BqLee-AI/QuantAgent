@@ -57,7 +57,7 @@ class CorePackageTestCase(unittest.TestCase):
         self.assertIsNotNone(Base.metadata)
         self.assertIn("trading_accounts", Base.metadata.tables)
         self.assertIn("wallet_ledger_entries", Base.metadata.tables)
-        self.assertIn("model_provider_configs", Base.metadata.tables)
+        self.assertIn("model_providers", Base.metadata.tables)
         self.assertIn("model_invocations", Base.metadata.tables)
 
     def test_database_url_is_required_for_default_engine(self) -> None:
