@@ -94,9 +94,6 @@ class QueueWriterRuntime:
         if self._thread.is_alive():
             self.warn_once("shutdown-timeout", "structured logging shutdown timed out before queue drained")
             return False
-        if self._thread.ident is None:
-            self._drain_remaining()
-            self._writer_set.close()
         return True
 
     def warn_once(self, key: str, message: str) -> None:

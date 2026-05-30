@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import shutil
+from threading import Event
 from types import SimpleNamespace
 import tempfile
 import threading
@@ -33,6 +34,7 @@ from quantagent.api.observability.logging import (
 )
 from quantagent.api.observability.maintenance import (
     DiskGuard,
+    DiskGuardState,
     LogMaintenanceRuntime,
     MaintenanceConfig,
     StreamRetentionDays,
@@ -488,6 +490,77 @@ class ObservabilityTestCase(unittest.TestCase):
             self.assertEqual(free_only_state.total_bytes, 0)
             self.assertEqual(free_only_state.free_bytes, usage.free)
 
+    def test_disk_guard_ignores_stat_and_disk_usage_errors(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            (root_dir / "a.log").write_text("1234", encoding="utf-8")
+            retention_days = StreamRetentionDays(access=1, app=1, error=1, security=1, audit=1)
+
+            original_is_file = Path.is_file
+            original_stat = Path.stat
+
+            def flaky_is_file(path: Path) -> bool:
+                return path.name == "a.log" or original_is_file(path)
+
+            def flaky_stat(path: Path, *args, **kwargs):
+                if path.name == "a.log":
+                    raise OSError("stat failed")
+                return original_stat(path, *args, **kwargs)
+
+            with patch.object(Path, "is_file", new=flaky_is_file):
+                with patch.object(Path, "stat", new=flaky_stat):
+                    with patch("quantagent.api.observability.maintenance.shutil.disk_usage", side_effect=OSError("disk usage failed")):
+                        state = _compute_disk_guard_state(
+                            MaintenanceConfig(
+                                root_dir=root_dir,
+                                min_age_seconds=1,
+                                retention_days=retention_days,
+                                max_total_bytes=1,
+                                min_free_bytes=1,
+                            )
+                        )
+
+            self.assertFalse(state.under_pressure)
+            self.assertEqual(state.total_bytes, 0)
+            self.assertEqual(state.free_bytes, 0)
+
+    def test_disk_guard_returns_cached_state_while_async_refresh_runs(self) -> None:
+        refresh_started = Event()
+        release_refresh = Event()
+        call_count = 0
+
+        def mocked_compute(_config: MaintenanceConfig) -> DiskGuardState:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return DiskGuardState(under_pressure=False, total_bytes=0, free_bytes=0, reason=None)
+            refresh_started.set()
+            release_refresh.wait(timeout=1.0)
+            return DiskGuardState(under_pressure=True, total_bytes=10, free_bytes=0, reason="max_total_bytes")
+
+        with patch("quantagent.api.observability.maintenance._compute_disk_guard_state") as compute_mock:
+            compute_mock.side_effect = mocked_compute
+            guard = DiskGuard(
+                config=MaintenanceConfig(
+                    root_dir=Path("/tmp/unused"),
+                    min_age_seconds=1,
+                    retention_days=StreamRetentionDays(access=1, app=1, error=1, security=1, audit=1),
+                    max_total_bytes=1,
+                    min_free_bytes=None,
+                ),
+                check_interval_seconds=0.0,
+            )
+
+            cached = guard.current_state()
+            self.assertFalse(cached.under_pressure)
+            self.assertTrue(refresh_started.wait(timeout=1.0))
+            second = guard.current_state()
+            self.assertIs(second, cached)
+            release_refresh.set()
+            time.sleep(0.05)
+            refreshed = guard.current_state(force=True)
+            self.assertTrue(refreshed.under_pressure)
+
     def test_queue_shutdown_eventually_stops_when_sentinel_cannot_be_enqueued(self) -> None:
         class BlockingWriterSet:
             def __init__(self) -> None:
@@ -751,6 +824,44 @@ class ObservabilityTestCase(unittest.TestCase):
             self.assertEqual(summary.compressed_files, 1)
             self.assertFalse(closed_path.exists())
             self.assertTrue(compressed_path.exists())
+
+    def test_maintenance_compression_failure_cleans_partial_gzip_and_skips(self) -> None:
+        from datetime import UTC, datetime
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            closed_path = root_dir / "error/2024/04/30/api.test.api-test.pid-321.error.20240430.part-001.jsonl"
+            closed_path.parent.mkdir(parents=True, exist_ok=True)
+            closed_path.write_text('{"event":"error"}\n', encoding="utf-8")
+            old_mtime = datetime(2024, 4, 30, 8, 5, 0, tzinfo=UTC).timestamp()
+            os.utime(closed_path, (old_mtime, old_mtime))
+
+            def flaky_copyfileobj(source, target, *args, **kwargs):
+                target.write(b"partial")
+                raise OSError("copy failed")
+
+            with patch("quantagent.api.observability.maintenance.datetime") as datetime_mock:
+                fixed_now = datetime(2024, 5, 1, 10, 0, 0, tzinfo=UTC)
+                datetime_mock.now.return_value = fixed_now
+                datetime_mock.fromtimestamp = datetime.fromtimestamp
+                datetime_mock.strptime = datetime.strptime
+                with patch("quantagent.api.observability.maintenance.shutil.copyfileobj", side_effect=flaky_copyfileobj):
+                    runtime = LogMaintenanceRuntime(
+                        MaintenanceConfig(
+                            root_dir=root_dir,
+                            min_age_seconds=60,
+                            retention_days=StreamRetentionDays(access=7, app=7, error=7, security=7, audit=7),
+                            max_total_bytes=None,
+                            min_free_bytes=None,
+                        )
+                    )
+                    summary = runtime.run_startup_cleanup()
+
+            self.assertEqual(summary.compressed_files, 0)
+            self.assertGreaterEqual(summary.skipped_files, 1)
+            self.assertTrue(closed_path.exists())
+            self.assertFalse(closed_path.with_suffix(".jsonl.gz").exists())
+            self.assertFalse(closed_path.with_suffix(".jsonl.gz.tmp").exists())
 
     def test_maintenance_applies_stream_specific_retention(self) -> None:
         from datetime import UTC, datetime

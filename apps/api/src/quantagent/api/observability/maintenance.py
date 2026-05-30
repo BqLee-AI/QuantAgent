@@ -6,6 +6,7 @@ import gzip
 from pathlib import Path
 import shutil
 import threading
+from threading import Thread
 from time import monotonic
 
 from quantagent.api.observability.files import ParsedLogFile, SUPPORTED_STREAMS, parse_log_file
@@ -59,20 +60,45 @@ class DiskGuard:
     ) -> None:
         self._config = config
         self._check_interval_seconds = check_interval_seconds
+        self._enabled = config.max_total_bytes is not None or config.min_free_bytes is not None
         self._lock = threading.Lock()
         self._state = DiskGuardState(under_pressure=False, total_bytes=0, free_bytes=0)
         self._next_refresh_at = 0.0
+        self._refresh_in_progress = False
+        if self._enabled:
+            self._state = _compute_disk_guard_state(self._config)
+            self._next_refresh_at = monotonic() + self._check_interval_seconds
 
     def current_state(self, *, force: bool = False) -> DiskGuardState:
+        if not self._enabled:
+            return self._state
+        if force:
+            return self._refresh_state()
         now = monotonic()
         with self._lock:
-            if not force and now < self._next_refresh_at:
+            if now < self._next_refresh_at or self._refresh_in_progress:
                 return self._state
+            # access 日志会在请求完成路径查询 disk guard；过期后转成后台刷新，避免同步磁盘遍历阻塞热路径。
+            self._refresh_in_progress = True
+        Thread(target=self._refresh_state_async, name="quantagent-api-disk-guard", daemon=True).start()
+        with self._lock:
+            return self._state
+
+    def _refresh_state(self) -> DiskGuardState:
         state = _compute_disk_guard_state(self._config)
         with self._lock:
             self._state = state
             self._next_refresh_at = monotonic() + self._check_interval_seconds
+            self._refresh_in_progress = False
             return self._state
+
+    def _refresh_state_async(self) -> None:
+        try:
+            self._refresh_state()
+        except Exception:
+            with self._lock:
+                self._next_refresh_at = monotonic() + self._check_interval_seconds
+                self._refresh_in_progress = False
 
 
 class LogMaintenanceRuntime:
@@ -149,30 +175,46 @@ class LogMaintenanceRuntime:
         if compressed_path.exists():
             return MaintenanceSummary(skipped_files=1)
 
-        with parsed.path.open("rb") as source, gzip.open(compressed_path, "wb") as target:
-            shutil.copyfileobj(source, target)
-        parsed.path.unlink(missing_ok=True)
-        return MaintenanceSummary(compressed_files=1)
+        temp_compressed_path = compressed_path.with_suffix(compressed_path.suffix + ".tmp")
+        try:
+            with parsed.path.open("rb") as source, gzip.open(temp_compressed_path, "wb") as target:
+                shutil.copyfileobj(source, target)
+            temp_compressed_path.replace(compressed_path)
+            parsed.path.unlink(missing_ok=True)
+            return MaintenanceSummary(compressed_files=1)
+        except OSError:
+            temp_compressed_path.unlink(missing_ok=True)
+            return MaintenanceSummary(skipped_files=1)
 
 
 def _compute_disk_guard_state(config: MaintenanceConfig) -> DiskGuardState:
     root_dir = config.root_dir
     # 请求路径会周期性查询 disk guard；未启用对应阈值时跳过昂贵的目录遍历和磁盘统计。
     total_bytes = 0
-    if config.max_total_bytes is not None:
-        total_bytes = sum(path.stat().st_size for path in root_dir.rglob("*") if path.is_file()) if root_dir.exists() else 0
+    if config.max_total_bytes is not None and root_dir.exists():
+        for path in root_dir.rglob("*"):
+            try:
+                if path.is_file():
+                    total_bytes += path.stat().st_size
+            except OSError:
+                continue
 
     free_bytes = 0
+    free_bytes_available = False
     if config.min_free_bytes is not None:
         usage_root = root_dir if root_dir.exists() else root_dir.parent
-        free_bytes = shutil.disk_usage(usage_root).free
+        try:
+            free_bytes = shutil.disk_usage(usage_root).free
+            free_bytes_available = True
+        except OSError:
+            free_bytes = 0
 
     reason: str | None = None
     under_pressure = False
     if config.max_total_bytes is not None and total_bytes >= config.max_total_bytes:
         under_pressure = True
         reason = "max_total_bytes"
-    if config.min_free_bytes is not None and free_bytes <= config.min_free_bytes:
+    if config.min_free_bytes is not None and free_bytes_available and free_bytes <= config.min_free_bytes:
         under_pressure = True
         reason = reason or "min_free_bytes"
     return DiskGuardState(
