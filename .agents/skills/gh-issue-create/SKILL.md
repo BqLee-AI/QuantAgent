@@ -29,8 +29,10 @@ metadata:
 7. 需要判断工程质量门槛时读 `.agents/skills/references/engineering-quality-gate.md`
 8. 涉及 `apps/web/**`、前端 feature、route、API 调用、组件或运行时容器时，读 `.agents/skills/references/web-architecture-gate.md`
 9. Web issue 涉及新增 feature、复杂 route、目录增长、shared 能力或文件拆分时，读 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`
-10. 需要对照原则时再读 `references/issue-guidelines.md`
-11. 需要同步或选择标签时再读 `references/label-policy.md`
+10. 涉及 `apps/api/**` 时，读 `.agents/skills/references/api-architecture-gate.md`
+11. 涉及 `packages/core/**` 或 `plugins/**` 时，读 `.agents/skills/references/core-and-plugin-architecture-gate.md`
+12. 需要对照原则时再读 `references/issue-guidelines.md`
+13. 需要同步或选择标签时再读 `references/label-policy.md`
 
 不要创建或引用 `docs/openspec`。本仓库只使用根目录 `openspec/`。
 
@@ -131,6 +133,8 @@ issue 不需要替这些资产全部改完，但必须提醒后续落点。不�
 - 架构 / 分层风险是否具体，是否覆盖前端组件拆分、后端 service/repository/port、DTO/ORM 分层、审计权限或契约影响？
 - Web issue 是否已对照 `web-architecture-gate.md` 写清 runtime/API/query/hook/component/README 边界，而不是把分层决策留给实现者？
 - 复杂 Web issue 是否已对照 `web-file-responsibility-and-feature-structure.md` 写清应拆到哪些文件和目录？
+- API issue 是否已对照 `api-architecture-gate.md` 写清 router/service/repository/DTO/envelope 边界、DB 操作规范和错误处理？
+- Core/Plugin issue 是否已对照 `core-and-plugin-architecture-gate.md` 写清 package 依赖方向、插件分层、DTO 契约和 Registry 边界？
 - OpenSpec 关系是否明确，没有把行为变更伪装成普通 TODO？
 - 若涉及新 package 或目录，是否说明为什么现有 `apps/` / `packages/` 边界接不住？
 

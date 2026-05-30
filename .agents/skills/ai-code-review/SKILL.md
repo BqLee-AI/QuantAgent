@@ -24,7 +24,9 @@ metadata:
 4. 关联 issue、OpenSpec change、设计文档、PRD、PR 评论和 CI 结果
 5. 需要判断工程质量门槛时读 `.agents/skills/references/engineering-quality-gate.md`
 6. 涉及 `apps/web/**` 时，先读 `.agents/skills/references/web-architecture-gate.md`；复杂 feature、route、shared 能力或文件拆分还要读 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`；再读本 skill 的 Web review reference
-7. 按变更路径加载本 skill 的 reference：
+7. 涉及 `apps/api/**` 时，先读 `.agents/skills/references/api-architecture-gate.md`
+8. 涉及 `packages/core/**` 或 `plugins/**` 时，先读 `.agents/skills/references/core-and-plugin-architecture-gate.md`
+9. 按变更路径加载本 skill 的 reference：
    - `apps/web/**`：读 `references/web/overview.md`
    - `apps/api/**`：读 `references/api/overview.md`
    - `packages/core/**`：读 `references/core/overview.md`
@@ -77,7 +79,9 @@ metadata:
 - Web 文件职责规范：`.agents/skills/references/web-file-responsibility-and-feature-structure.md`
 - 前端管理台：`references/web/overview.md`
 - FastAPI API 边界：`references/api/overview.md`
+- API 规划与实现 gate：`.agents/skills/references/api-architecture-gate.md`
 - 共享 core 包：`references/core/overview.md`
+- Core 与 Plugin 规划与实现 gate：`.agents/skills/references/core-and-plugin-architecture-gate.md`
 
 未来新增模块时，只在对应 overview 里加入导航，不把细则塞回 `SKILL.md`。
 
