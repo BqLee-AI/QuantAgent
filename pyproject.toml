@@ -1,6 +1,8 @@
 [tool.uv.workspace]
 members = [
   "apps/api",
+  "apps/scheduler",
+  "apps/worker",
   "packages/core",
   "packages/plugin-sdk",
 ]

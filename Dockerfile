@@ -8,16 +8,20 @@ ENV UV_COMPILE_BYTECODE=1 \
 
 COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/README.md ./apps/api/
+COPY apps/worker/pyproject.toml apps/worker/README.md ./apps/worker/
+COPY apps/scheduler/pyproject.toml apps/scheduler/README.md ./apps/scheduler/
 COPY packages/core/pyproject.toml ./packages/core/
 
-RUN uv sync --locked --no-dev --no-editable --no-install-workspace --package quantagent-api --package quantagent-core
+RUN uv sync --locked --no-dev --no-editable --extra kafka --no-install-workspace --package quantagent-api --package quantagent-core --package quantagent-worker --package quantagent-scheduler
 
 COPY apps/api/src ./apps/api/src
+COPY apps/worker/src ./apps/worker/src
+COPY apps/scheduler/src ./apps/scheduler/src
 COPY packages/core/src ./packages/core/src
 COPY packages/core/alembic.ini ./packages/core/alembic.ini
 COPY packages/core/alembic ./packages/core/alembic
 
-RUN uv sync --locked --no-dev --no-editable --package quantagent-api --package quantagent-core
+RUN uv sync --locked --no-dev --no-editable --extra kafka --package quantagent-api --package quantagent-core --package quantagent-worker --package quantagent-scheduler
 
 FROM python:3.12-slim-bookworm AS runtime
 

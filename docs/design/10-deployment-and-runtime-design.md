@@ -3,13 +3,13 @@
 ## 文档状态
 
 **状态**：正式草案 v0.2  
-**范围**：Docker Compose、服务拆分、镜像策略、环境变量、runtime 目录、插件持久化、开发/生产启动方式、migration、日志、健康检查、Redis 演进  
-**当前约定**：部署目标为 Docker；初版保留 API、worker、scheduler、web 多入口；数据库使用 PostgreSQL；初版 Event Bus 进程内实现，后续演进 Redis  
+**范围**：Docker Compose、服务拆分、镜像策略、环境变量、runtime 目录、插件持久化、开发/生产启动方式、migration、日志、健康检查、消息总线演进  
+**当前约定**：部署目标为 Docker；初版保留 API、worker、scheduler、web 多入口；数据库使用 PostgreSQL；Event Bus 默认使用内存 fake，并通过 optional Kafka profile 提供跨进程运行时  
 **不包含**：Kubernetes、云厂商 Secret Manager、生产级监控告警平台、插件签名系统、真实交易所网络隔离
 
 ## 设计前提
 
-- 项目从 0 到 1 阶段保持单体可运行，但目录和容器边界要支持未来多容器、微服务和 Redis Event Bus。
+- 项目从 0 到 1 阶段保持单体可运行，但目录和容器边界要支持未来多容器、微服务和 Kafka Event Bus 扩展。
 - API、worker、scheduler 是不同运行入口，但可以共用同一个 Python 镜像。
 - Web 是 React + Vite 构建产物，生产环境不应该依赖 Vite dev server。
 - PostgreSQL 是初版必选服务。
@@ -24,7 +24,7 @@
 - Web 生产部署使用静态服务，不跑 Vite dev server。
 - `runtime/` 保存插件、配置、数据、日志和隔离依赖环境，不进入 Git。
 - 运行时依赖必须可重建、可审计、可隔离。
-- 初版 Event Bus 进程内实现，但部署边界要预留 Redis 演进。
+- 普通本地开发默认使用内存 fake；需要跨进程分发时显式启用 Kafka profile。
 
 ## Docker Compose 结构
 
@@ -37,7 +37,7 @@ api
 worker
 scheduler
 web
-redis      # optional profile
+kafka      # optional profile
 ```
 
 启动依赖：
@@ -54,7 +54,7 @@ postgres
 - `api`、`worker`、`scheduler` 共用 Python runtime 镜像，用不同 command 启动。
 - `web` 使用独立前端构建镜像和静态服务。
 - `postgres` 使用持久化 volume。
-- `redis` 作为 optional profile，不默认启用。
+- `kafka` 作为 optional profile，不默认启用。
 - `migrate` 执行 Alembic upgrade 后退出。
 
 ## 镜像策略
@@ -215,16 +215,17 @@ bun run dev
 - 前端 runtime 页面可直接读取聚合健康状态。
 - 服务健康变化必须能进入审计或运行记录。
 
-## Redis Event Bus 演进
+## Kafka Event Bus 运行时
 
-初版 Event Bus 进程内实现，Compose 预留 Redis profile。
+普通本地开发和单元测试默认使用内存 fake。需要跨进程分发时，Compose 提供 `kafka` optional profile。
 
 规则：
 
-- 初版不强制启用 Redis。
-- Compose 可以提供 `redis` service，但放在 optional profile。
-- EventEnvelope、topic、correlation_id、causation_id 保持和 Redis Streams 兼容。
-- 当需要多 worker、可靠队列、跨进程实时推送、outbox replay 时再启用 Redis。
+- 初版不强制启用 Kafka。
+- Compose 可以提供 `kafka` service，但放在 optional profile。
+- `api` 不承担长期 consumer loop；`worker` / `scheduler` 作为 Event Bus composition root。
+- EventEnvelope、topic、correlation_id、causation_id、schema_version 在内存 fake 和 Kafka backend 间保持一致。
+- RawEvent / Event 持久化、outbox、replay、DLQ 数据库记录不在当前 phase。
 
 ## 插件依赖自动安装
 
@@ -239,7 +240,7 @@ bun run dev
 
 ## 当前推荐结论汇总
 
-- Docker Compose 初版包含 `postgres`、`migrate`、`api`、`worker`、`scheduler`、`web`，Redis 作为 optional profile。
+- Docker Compose 初版包含 `postgres`、`migrate`、`api`、`worker`、`scheduler`、`web`，Kafka 作为 optional profile。
 - API、worker、scheduler 共用 Python runtime 镜像，用不同 command 启动。
 - Web 独立构建并使用静态服务，不在生产跑 Vite dev server。
 - runtime 目录按 plugins、config、data、logs、plugin-envs 分开挂载。

@@ -521,6 +521,45 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertNotIn("postgresql+psycopg://", str(body))
         self.assertNotIn("traceback", str(body).lower())
 
+    def test_app_lifespan_closes_event_bus_runtime_on_shutdown(self) -> None:
+        closed = {"value": False}
+
+        class FakeRuntime:
+            async def close(self) -> None:
+                closed["value"] = True
+
+        with patch("quantagent.api.main.build_event_bus_runtime", return_value=FakeRuntime()):
+            app = create_app(self._settings())
+            with TestClient(app):
+                self.assertFalse(closed["value"])
+
+        self.assertTrue(closed["value"])
+
+    def test_app_lifespan_still_cleans_up_when_event_bus_close_fails(self) -> None:
+        close_attempted = {"value": False}
+        shutdown_called = {"value": False}
+
+        class FakeRuntime:
+            async def close(self) -> None:
+                close_attempted["value"] = True
+                raise RuntimeError("close failed")
+
+        def fake_shutdown_database(app) -> None:
+            shutdown_called["value"] = True
+
+        with (
+            patch("quantagent.api.main.build_event_bus_runtime", return_value=FakeRuntime()),
+            patch("quantagent.api.main.shutdown_database", side_effect=fake_shutdown_database),
+        ):
+            app = create_app(self._settings())
+            with self.assertRaisesRegex(RuntimeError, "close failed"):
+                with TestClient(app):
+                    self.assertIsNotNone(app.state.event_bus_runtime)
+
+        self.assertTrue(close_attempted["value"])
+        self.assertTrue(shutdown_called["value"])
+        self.assertIsNone(app.state.event_bus_runtime)
+
     def test_invalid_database_url_fails_app_startup(self) -> None:
         app = create_app(self._settings(DATABASE_URL="not-a-valid-database-url"))
 
