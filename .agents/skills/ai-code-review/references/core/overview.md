@@ -1,6 +1,8 @@
 # packages/core Review Overview
 
-本文件是 `packages/core` 变更的 AI Code Review 索引。先用 changed files 和 diff 识别场景，再加载未来对应细则；当前只定义导航和核心审查问题。
+本文件是 `packages/core` 变更的 AI Code Review 索引。先用 changed files 和 diff 识别场景，再加载对应细则。
+
+现有代码只能作为迁移背景，不是规范来源。审查新增或被修改代码时，以 `packages/core/AGENTS.md`、设计文档、OpenSpec 和共享基础设施目标分层作为边界；如果当前实现与目标边界冲突，按证据标为 finding 或 residual risk。
 
 主要真源：
 
@@ -40,3 +42,9 @@
 - Alembic migration 历史被删除、重排或手改。
 - ORM model 直接作为 API DTO、Event DTO 或 Plugin DTO 返回。
 - 审计和状态流转覆盖历史而不是 append-only。
+
+## 已落地细则
+
+- `backend-core-boundary.md`
+
+其余场景暂时由 overview 索引收束；后续按 #168 继续拆细。

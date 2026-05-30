@@ -1,6 +1,8 @@
 # apps/api Review Overview
 
-本文件是 `apps/api` 变更的 AI Code Review 索引。先用 changed files 和 diff 识别场景，再加载未来对应细则；当前只定义导航和核心审查问题。
+本文件是 `apps/api` 变更的 AI Code Review 索引。先用 changed files 和 diff 识别场景，再加载对应细则。
+
+现有代码只能作为迁移背景，不是规范来源。审查新增或被修改代码时，以 `apps/api/AGENTS.md`、设计文档、OpenSpec 和后端目标分层作为边界；如果当前实现与目标边界冲突，按证据标为 finding 或 residual risk。
 
 主要真源：
 
@@ -37,3 +39,9 @@
 - 新增 route 未通过 `register_api_v1_routes` 统一注册。
 - 错误响应泄露底层异常、连接串、token、secret 或 traceback。
 - debug endpoint 在 `APP_ENV=production` 下仍可见。
+
+## 已落地细则
+
+- `backend-api-boundary.md`
+
+其余场景暂时由 overview 索引收束；后续按 #167 继续拆细。

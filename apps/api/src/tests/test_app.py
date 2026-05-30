@@ -521,6 +521,20 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertNotIn("postgresql+psycopg://", str(body))
         self.assertNotIn("traceback", str(body).lower())
 
+    def test_app_lifespan_closes_event_bus_runtime_on_shutdown(self) -> None:
+        closed = {"value": False}
+
+        class FakeRuntime:
+            async def close(self) -> None:
+                closed["value"] = True
+
+        with patch("quantagent.api.main.build_event_bus_runtime", return_value=FakeRuntime()):
+            app = create_app(self._settings())
+            with TestClient(app):
+                self.assertFalse(closed["value"])
+
+        self.assertTrue(closed["value"])
+
     def test_invalid_database_url_fails_app_startup(self) -> None:
         app = create_app(self._settings(DATABASE_URL="not-a-valid-database-url"))
 

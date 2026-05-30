@@ -1,0 +1,22 @@
+[project]
+name = "quantagent_worker"
+version = "0.1.0"
+description = "QuantAgent worker entrypoint"
+requires-python = ">=3.11"
+dependencies = [
+    "quantagent-core",
+]
+
+[project.scripts]
+quantagent-worker = "quantagent.worker.main:run"
+
+[tool.uv.sources]
+quantagent-core = { workspace = true }
+
+[tool.uv.build-backend]
+module-root = "src"
+module-name = "quantagent.worker"
+
+[build-system]
+requires = ["uv_build>=0.11.14,<0.12"]
+build-backend = "uv_build"

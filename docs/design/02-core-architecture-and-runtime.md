@@ -129,22 +129,31 @@ Event Bus 传递的不是裸 Event，而是 Event Envelope。
 
 ```text
 EventEnvelope
-  event
+  id
   topic
-  correlation_id
-  causation_id
+  payload
   producer
   created_at
-  retry_count
+  correlation_id
+  causation_id
   headers
+  retry_count
+  schema_version
 ```
 
 原因：
 
 - 支持追踪事件因果关系。
 - 支持失败重试。
-- 支持未来从进程内 Event Bus 迁移到 Redis Streams。
+- 支持默认内存 fake 与 Kafka 可选运行时共用同一 wire contract。
 - 支持多个插件订阅同一个事件。
+- `payload` 允许承载 source captured、routing、decision 和 runtime failure 等不同阶段消息，而不强行把裸 `Event` 作为唯一根对象。
+
+当前运行约定：
+
+- 普通本地开发和单元测试默认使用内存 fake，不依赖 Kafka broker。
+- 真实 Kafka 通过显式配置启用，作为 worker / scheduler / future runtime 的跨进程分发 backend。
+- Event Bus 不替代数据库与审计真源；RawEvent / Event 持久化、outbox、replay 和 DLQ 另行演进。
 
 ## Topic 设计
 

@@ -28,6 +28,8 @@ metadata:
    - `apps/web/**`：读 `references/web/overview.md`
    - `apps/api/**`：读 `references/api/overview.md`
    - `packages/core/**`：读 `references/core/overview.md`
+   - 后端变更若同时触及 `apps/api/**` 与 `packages/core/**`，必须同时加载 API 与 core overview；再按 overview 的场景索引选择细则，不用当前实现替代目标边界。
+   - Event Bus、worker、scheduler、Docker 或运行时配置变更通常同时涉及 core 的 Event / State / Audit、Config、Package Boundary，以及 API 的 Lifespan / Readiness；不要只按单一路径审查。
 8. 需要统一输出格式时读 `references/shared/review-output.md`
 
 不要一次性加载所有模块细则。先用 changed files、imports、调用形态和 diff 内容选择相关 reference。

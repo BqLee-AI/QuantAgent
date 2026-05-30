@@ -31,8 +31,8 @@
 | 数据库迁移 | Alembic |
 | 插件 manifest | `plugin.yaml` |
 | 插件配置 schema | Zod authoring + JSON Schema runtime validation |
-| 初版 Event Bus | 进程内实现 |
-| 后续 Event Bus 演进 | Redis |
+| 初版 Event Bus | 内存 fake 默认 + Kafka 可选运行时 |
+| 后续 Event Bus 演进 | Kafka 扩展 outbox / replay / DLQ |
 | 初版插件热重载 | 支持 |
 | 前端插件配置 | 仅支持 schema 驱动表单 |
 
