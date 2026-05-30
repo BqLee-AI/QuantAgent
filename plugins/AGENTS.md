@@ -8,6 +8,7 @@
 
 ## 行为约束
 
+- 涉及 `plugins/**` 的规划、实现和 review 必须读取 `.agents/skills/references/core-and-plugin-architecture-gate.md`，把目标分层落实到 issue、OpenSpec、实现计划或 PR 说明。
 - 官方插件必须通过 `plugin.yaml` 注册，禁止靠核心代码硬编码 class、import 列表或 if/else 注册。
 - 插件 ID 使用 `quantagent.official.*` 命名空间，并声明版本。
 - 插件配置 schema 不得包含真实 secret；敏感字段使用 secret reference。

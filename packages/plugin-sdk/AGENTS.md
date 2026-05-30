@@ -8,6 +8,7 @@
 
 ## 行为约束
 
+- 涉及 `packages/plugin-sdk/**` 的规划、实现和 review 必须读取 `.agents/skills/references/core-and-plugin-architecture-gate.md`，把目标分层落实到 issue、OpenSpec、实现计划或 PR 说明。
 - 不在没有 issue、OpenSpec 或设计文档真源支撑的情况下提前设计完整 SDK。
 - SDK 规则应服务 `plugins/` 和 `runtime/plugins` 的真实插件边界。
 - 插件配置不得要求提交真实 secret；应使用 secret reference 或环境变量引用。

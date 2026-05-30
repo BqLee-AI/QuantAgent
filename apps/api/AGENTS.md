@@ -49,6 +49,7 @@ apps/api/
 
 - 先阅读本文件、`apps/api/README.md`、目标模块现有实现和相关测试。
 - 涉及行为、架构或跨文件契约时，遵循仓库根目录 `AGENTS.md` 中的 OpenSpec 规则；本文件不重复维护 OpenSpec 流程细节。
+- 涉及 `apps/api/**` 的规划、实现和 review 必须读取 `.agents/skills/references/api-architecture-gate.md`，把目标分层落实到 issue、OpenSpec、实现计划或 PR 说明。
 - 发现需求会跨到 `packages/core`、`packages/agent`、`packages/plugin-sdk`、`packages/contracts` 或其他 app 时，先明确边界，再动手实现。
 
 ### API 边界
