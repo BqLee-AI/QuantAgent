@@ -15,7 +15,6 @@ export interface RuntimeApis {
   plugins: PluginConfigApi;
   models: ModelProviderApi;
   modelProviders: ModelProviderApi;
-  plugins: PluginConfigApi;
 }
 
 export interface AppRuntime {
