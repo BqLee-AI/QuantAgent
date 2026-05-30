@@ -1,6 +1,6 @@
 # Core & Plugin Architecture Gate
 
-本文件是 `packages/core` 和 `plugins/**` 在 issue、OpenSpec、implementation、PR 和 Code Review 阶段共用的目标架构门槛。它比 CR 场景细则更靠前：规划和写代码前必须先用它约束 package 边界、插件分层、数据流和运行时行为。
+本文件是 `packages/core`、`packages/plugin-sdk` 和 `plugins/**` 在 issue、OpenSpec、implementation、PR 和 Code Review 阶段共用的目标架构门槛。它比 CR 场景细则更靠前：规划和写代码前必须先用它约束 package 边界、插件分层、数据流和运行时行为。
 
 现有代码只能作为迁移背景，不能自动成为新代码模板。新增或修改代码应向本文件定义的目标边界收敛；未触碰的历史债务可以记录为 residual risk 或后续 issue。
 
@@ -381,8 +381,8 @@ plugins/sources/<plugin-name>/
 ### 验证命令
 
 ```bash
-cd packages/core && uv run python -m pytest tests/
-cd plugins/sources/<plugin-name> && uv run python -m pytest tests/
+cd packages/core && uv run python -m unittest discover -s tests
+cd plugins/sources/<plugin-name> && uv run python -m unittest discover -s tests
 ```
 
 完成后说明改了哪些文件，以及实际跑过哪些验证；如果因为环境缺失无法验证，要明确说明缺口。

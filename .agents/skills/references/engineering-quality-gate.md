@@ -22,7 +22,7 @@
 - 涉及 `apps/web/**` 时，必须读取 `.agents/skills/references/web-architecture-gate.md`。
 - Web 变更涉及新增 feature、复杂 route、目录增长、shared 能力或文件职责拆分时，还必须读取 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`。
 - 涉及 `apps/api/**` 时，必须读取 `.agents/skills/references/api-architecture-gate.md`。
-- 涉及 `packages/core/**` 或 `plugins/**` 时，必须读取 `.agents/skills/references/core-and-plugin-architecture-gate.md`。
+- 涉及 `packages/core/**`、`packages/plugin-sdk/**` 或 `plugins/**` 时，必须读取 `.agents/skills/references/core-and-plugin-architecture-gate.md`。
 
 模块 gate 是规划和实现阶段的规范来源；`ai-code-review/references/**` 只补充审查场景、finding 口径和输出导航。
 

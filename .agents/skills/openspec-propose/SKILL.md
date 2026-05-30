@@ -29,7 +29,7 @@ When ready to implement, run /opsx:apply
 - For `apps/web/**` changes, `.agents/skills/references/web-architecture-gate.md`.
 - For Web feature structure, complex routes, shared capabilities, or file splitting, `.agents/skills/references/web-file-responsibility-and-feature-structure.md`.
 - For `apps/api/**` changes, `.agents/skills/references/api-architecture-gate.md`.
-- For `packages/core/**` or `plugins/**` changes, `.agents/skills/references/core-and-plugin-architecture-gate.md`.
+- For `packages/core/**`, `packages/plugin-sdk/**`, or `plugins/**` changes, `.agents/skills/references/core-and-plugin-architecture-gate.md`.
 
 Generated artifacts must be specific enough for implementation. Do not produce generic proposal/design/tasks text. If the change affects architecture, behavior, contracts, frontend UI, backend services, persistence, permissions, or auditability, the artifacts must record directory/file planning, layered architecture, responsibilities, core models, API/DTO/schema/event/config/database field drafts, reuse points, data flow, failure paths, and validation entrypoints.
 
@@ -55,7 +55,7 @@ For Web changes, artifacts must explicitly apply `web-architecture-gate.md`: rou
    - `.agents/skills/references/web-architecture-gate.md` when affected paths or requested scope involve `apps/web/**`
    - `.agents/skills/references/web-file-responsibility-and-feature-structure.md` when a Web change needs feature structure or file splitting decisions
    - `.agents/skills/references/api-architecture-gate.md` when affected paths involve `apps/api/**`
-   - `.agents/skills/references/core-and-plugin-architecture-gate.md` when affected paths involve `packages/core/**` or `plugins/**`
+   - `.agents/skills/references/core-and-plugin-architecture-gate.md` when affected paths involve `packages/core/**`, `packages/plugin-sdk/**`, or `plugins/**`
    - Related design/PRD/OpenSpec/issue/PR context named by the user or required by the affected boundary
 
    If context conflicts, capture the conflict in the artifacts instead of silently choosing.

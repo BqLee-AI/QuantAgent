@@ -28,7 +28,7 @@ apps/api/src/quantagent/api/
   config/             # 配置
 ```
 
-当 API 变更涉及新增 router、新增 service、目录增长或跨层调用时，必须继续读取 `ai-code-review/references/api/overview.md` 的场景索引。
+当 API 变更涉及新增 router、新增 service、目录增长或跨层调用时，必须继续读取 `.agents/skills/ai-code-review/references/api/overview.md` 的场景索引。
 
 ## 文件职责矩阵
 

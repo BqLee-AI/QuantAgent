@@ -25,7 +25,7 @@ metadata:
 7. 涉及 `apps/web/**`、前端 feature、route、API 调用、组件或运行时容器时，读 `.agents/skills/references/web-architecture-gate.md`
 8. Web PR 涉及复杂 feature、route、shared 能力或目录拆分时，读 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`
 9. 涉及 `apps/api/**` 时，读 `.agents/skills/references/api-architecture-gate.md`
-10. 涉及 `packages/core/**` 或 `plugins/**` 时，读 `.agents/skills/references/core-and-plugin-architecture-gate.md`
+10. 涉及 `packages/core/**`、`packages/plugin-sdk/**` 或 `plugins/**` 时，读 `.agents/skills/references/core-and-plugin-architecture-gate.md`
 11. 需要对照 PR 说明结构时再读 `references/pr-body.md`
 
 不要把未提交、无关或用户已有脏改动混进 PR。当前工作区有无关变更时，先说明并只 stage 自己负责的文件。

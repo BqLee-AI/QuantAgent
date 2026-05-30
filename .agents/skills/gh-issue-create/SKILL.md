@@ -30,7 +30,7 @@ metadata:
 8. 涉及 `apps/web/**`、前端 feature、route、API 调用、组件或运行时容器时，读 `.agents/skills/references/web-architecture-gate.md`
 9. Web issue 涉及新增 feature、复杂 route、目录增长、shared 能力或文件拆分时，读 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`
 10. 涉及 `apps/api/**` 时，读 `.agents/skills/references/api-architecture-gate.md`
-11. 涉及 `packages/core/**` 或 `plugins/**` 时，读 `.agents/skills/references/core-and-plugin-architecture-gate.md`
+11. 涉及 `packages/core/**`、`packages/plugin-sdk/**` 或 `plugins/**` 时，读 `.agents/skills/references/core-and-plugin-architecture-gate.md`
 12. 需要对照原则时再读 `references/issue-guidelines.md`
 13. 需要同步或选择标签时再读 `references/label-policy.md`
 
