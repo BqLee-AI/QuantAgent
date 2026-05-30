@@ -67,6 +67,12 @@ scheduler 使用和 core 一致的 event bus 配置：
 - `kafka`
   需要显式配置 Kafka bootstrap servers
 
+如果需要启用 Kafka backend，安装时要带上 Kafka extra：
+
+```bash
+uv sync --extra kafka --package quantagent-scheduler --package quantagent-core
+```
+
 ## 本地验证
 
 当前最小验证：

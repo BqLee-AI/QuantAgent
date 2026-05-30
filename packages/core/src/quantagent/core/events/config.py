@@ -34,7 +34,8 @@ class EventBusSettings:
                 stage="config",
                 details={"backend": self.backend},
             )
-        if self.backend == "kafka" and not self.kafka_bootstrap_servers:
+        bootstrap_servers = (self.kafka_bootstrap_servers or "").strip()
+        if self.backend == "kafka" and not bootstrap_servers:
             raise EventBusError(
                 code="EVENT_BUS_KAFKA_CONFIG_MISSING",
                 message="Kafka backend requires bootstrap servers.",

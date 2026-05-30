@@ -417,7 +417,8 @@ RuntimeError
 
 - Event 模型。
 - Event Envelope。
-- 进程内 Event Bus。
+- 默认内存 fake Event Bus。
+- Kafka 可选运行时适配。
 - PostgreSQL 连接与 SQLAlchemy ORM 基础结构。
 - Alembic 迁移基础结构。
 - Router Agent 输出结构。
@@ -431,7 +432,7 @@ RuntimeError
 暂缓实现：
 
 - 真实交易执行。
-- Redis Event Bus。
+- RawEvent / Event 持久化、outbox、replay、DLQ 数据库记录。
 - 多服务之间的分布式事务。
 - 复杂插件依赖解析。
 - 插件签名校验。

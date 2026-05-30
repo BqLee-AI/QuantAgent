@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import unittest
+from unittest.mock import patch
 
 from quantagent.core.events import (
     DEFAULT_EVENT_SCHEMA_VERSION,
@@ -90,18 +92,32 @@ class EventBusContractTestCase(unittest.TestCase):
         self.assertEqual(summary["details"]["safe"], "visible")
 
     def test_event_bus_settings_defaults_to_memory(self) -> None:
-        app_settings = Settings(_env_file=None)
-        event_settings = EventBusSettings.from_settings(app_settings)
+        with patch.dict(os.environ, {}, clear=True):
+            app_settings = Settings(_env_file=None)
+            event_settings = EventBusSettings.from_settings(app_settings)
 
-        self.assertEqual(event_settings.backend, "memory")
-        self.assertIsNone(event_settings.kafka_bootstrap_servers)
+            self.assertEqual(event_settings.backend, "memory")
+            self.assertIsNone(event_settings.kafka_bootstrap_servers)
 
     def test_event_bus_settings_require_bootstrap_servers_for_kafka(self) -> None:
-        app_settings = Settings(_env_file=None, EVENT_BUS_BACKEND="kafka")
+        with patch.dict(os.environ, {}, clear=True):
+            app_settings = Settings(_env_file=None, EVENT_BUS_BACKEND="kafka")
 
-        with self.assertRaises(EventBusError) as raised:
-            EventBusSettings.from_settings(app_settings)
-        self.assertEqual(raised.exception.code, "EVENT_BUS_KAFKA_CONFIG_MISSING")
+            with self.assertRaises(EventBusError) as raised:
+                EventBusSettings.from_settings(app_settings)
+            self.assertEqual(raised.exception.code, "EVENT_BUS_KAFKA_CONFIG_MISSING")
+
+    def test_event_bus_settings_reject_whitespace_bootstrap_servers(self) -> None:
+        with patch.dict(os.environ, {}, clear=True):
+            app_settings = Settings(
+                _env_file=None,
+                EVENT_BUS_BACKEND="kafka",
+                EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS="   ",
+            )
+
+            with self.assertRaises(EventBusError) as raised:
+                EventBusSettings.from_settings(app_settings)
+            self.assertEqual(raised.exception.code, "EVENT_BUS_KAFKA_CONFIG_MISSING")
 
 
 if __name__ == "__main__":

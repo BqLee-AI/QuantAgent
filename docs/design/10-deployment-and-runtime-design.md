@@ -3,7 +3,7 @@
 ## 文档状态
 
 **状态**：正式草案 v0.2  
-**范围**：Docker Compose、服务拆分、镜像策略、环境变量、runtime 目录、插件持久化、开发/生产启动方式、migration、日志、健康检查、Redis 演进  
+**范围**：Docker Compose、服务拆分、镜像策略、环境变量、runtime 目录、插件持久化、开发/生产启动方式、migration、日志、健康检查、消息总线演进  
 **当前约定**：部署目标为 Docker；初版保留 API、worker、scheduler、web 多入口；数据库使用 PostgreSQL；Event Bus 默认使用内存 fake，并通过 optional Kafka profile 提供跨进程运行时  
 **不包含**：Kubernetes、云厂商 Secret Manager、生产级监控告警平台、插件签名系统、真实交易所网络隔离
 

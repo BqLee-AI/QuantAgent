@@ -31,6 +31,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
+        required: false
       migrate:
         condition: service_completed_successfully
         required: false
@@ -48,6 +51,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
+        required: false
       migrate:
         condition: service_completed_successfully
         required: false
@@ -91,6 +97,7 @@ services:
     image: bitnami/kafka:4.0.0
     profiles:
       - kafka
+    # 本地 Kafka profile 默认是易失运行时，不为 topic/offset 提供持久化卷。
     environment:
       KAFKA_CFG_NODE_ID: 0
       KAFKA_CFG_PROCESS_ROLES: controller,broker
@@ -104,6 +111,11 @@ services:
       KAFKA_CFG_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_CFG_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_CFG_NUM_PARTITIONS: 1
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics.sh --bootstrap-server 127.0.0.1:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
 volumes:
   quantagent-db:

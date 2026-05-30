@@ -25,10 +25,13 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
             app.state.event_bus_runtime = event_bus_runtime
             yield
         finally:
-            if event_bus_runtime is not None:
-                await event_bus_runtime.close()
-            app.state.event_bus_runtime = None
-            shutdown_database(app)
+            try:
+                if event_bus_runtime is not None:
+                    # Event bus 关闭失败也不能阻断数据库清理，避免 API 生命周期留下悬挂资源。
+                    await event_bus_runtime.close()
+            finally:
+                app.state.event_bus_runtime = None
+                shutdown_database(app)
 
     app = FastAPI(title="QuantAgent API", version=__version__, lifespan=lifespan)
     app.state.settings = current_settings

@@ -2,6 +2,8 @@
 
 `quantagent.core.events` 是 QuantAgent Event Bus V1 的共享基础设施边界。它的目标不是把业务流程塞进一个“总线工具箱”，而是统一消息 envelope、topic、backend、发布/订阅入口和平台侧转换边界，让 API、worker、scheduler 和后续 runtime service 能用同一套 contract 工作。
 
+如果你只使用默认 `memory` backend，不需要 Kafka 客户端依赖；只有在启用 Kafka backend 时才需要安装 `quantagent-core[kafka]` 或等价 workspace extra。
+
 ## 职责
 
 这个目录当前负责：
@@ -141,6 +143,12 @@ consumer = runtime.consumer
   适合本地开发、单元测试、无 Kafka 环境
 - `kafka`
   适合跨进程 worker / scheduler / future runtime
+
+Kafka backend 依赖说明：
+
+```bash
+uv sync --extra kafka --package quantagent-core
+```
 
 ### 2. 发布普通事件
 

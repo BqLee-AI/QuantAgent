@@ -1047,7 +1047,6 @@ name = "quantagent-core"
 version = "0.1.0"
 source = { editable = "packages/core" }
 dependencies = [
-    { name = "aiokafka" },
     { name = "alembic" },
     { name = "cryptography" },
     { name = "psycopg", extra = ["binary"] },
@@ -1057,9 +1056,14 @@ dependencies = [
     { name = "sqlalchemy" },
 ]
 
+[package.optional-dependencies]
+kafka = [
+    { name = "aiokafka" },
+]
+
 [package.metadata]
 requires-dist = [
-    { name = "aiokafka", specifier = ">=0.12.0" },
+    { name = "aiokafka", marker = "extra == 'kafka'", specifier = ">=0.12.0" },
     { name = "alembic", specifier = ">=1.17.2" },
     { name = "cryptography", specifier = ">=46.0.3" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.3.2" },
@@ -1068,6 +1072,7 @@ requires-dist = [
     { name = "quantagent-plugin-sdk", editable = "packages/plugin-sdk" },
     { name = "sqlalchemy", specifier = ">=2.0.44" },
 ]
+provides-extras = ["kafka"]
 
 [[package]]
 name = "quantagent-plugin-sdk"

@@ -96,6 +96,12 @@ class KafkaEventBusConsumer(EventBusConsumer):
         group_id: str,
         handler: EventBusHandler,
     ) -> None:
+        """执行一次单条消息拉取并返回。
+
+        当前 consumer 只用于 V1 smoke/integration 边界验证：一次 `subscribe(...)`
+        最多处理一条消息，然后显式返回，避免在 API / 测试里隐式启动长期循环。
+        真正的常驻消费循环应由 worker/scheduler 后续在更外层生命周期中托管。
+        """
         if not isinstance(group_id, str) or not group_id.strip():
             raise EventBusError(
                 code="EVENT_GROUP_ID_INVALID",
@@ -106,6 +112,7 @@ class KafkaEventBusConsumer(EventBusConsumer):
         consumer = await self._get_consumer(validated_topics, group_id=group_id)
 
         try:
+            # V1 有意只 poll 一条消息，用于 smoke/contract 验证，而不是在这里内置长期消费循环。
             message = await asyncio.wait_for(consumer.getone(), timeout=1.0)
         except asyncio.TimeoutError:
             return
