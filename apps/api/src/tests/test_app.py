@@ -889,6 +889,17 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(settings.LOG_LEVEL, "ERROR")
         self.assertEqual(settings.APP_ENV, "Production")
 
+    def test_blank_runtime_dir_uses_default_before_log_dir_resolution(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            APP_ENV="test",
+            RUNTIME_DIR="",
+            LOG_DIR="",
+            AUTH_ENABLED=False,
+        )
+
+        self.assertEqual(settings.LOG_DIR, (settings.RUNTIME_DIR / "logs" / "api").resolve())
+
     def test_env_file_paths_do_not_assume_repo_root_when_source_layout_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)

@@ -4,6 +4,7 @@ import io
 import json
 import logging
 import os
+import shutil
 from types import SimpleNamespace
 import tempfile
 import threading
@@ -30,7 +31,13 @@ from quantagent.api.observability.logging import (
     log_error_event,
     shutdown_api_logging,
 )
-from quantagent.api.observability.maintenance import DiskGuard, LogMaintenanceRuntime, MaintenanceConfig, StreamRetentionDays
+from quantagent.api.observability.maintenance import (
+    DiskGuard,
+    LogMaintenanceRuntime,
+    MaintenanceConfig,
+    StreamRetentionDays,
+    _compute_disk_guard_state,
+)
 from quantagent.api.observability.queue import QueueWriterRuntime
 
 
@@ -423,6 +430,63 @@ class ObservabilityTestCase(unittest.TestCase):
             contents = "\n".join(path.read_text(encoding="utf-8") for path in written_files if path.suffix == ".jsonl")
             self.assertIn('"event":"error"', contents)
             self.assertNotIn('"event":"access"', contents)
+
+    def test_disk_guard_skips_unconfigured_expensive_checks(self) -> None:
+        config = MaintenanceConfig(
+            root_dir=Path("/tmp/unused"),
+            min_age_seconds=1,
+            retention_days=StreamRetentionDays(access=1, app=1, error=1, security=1, audit=1),
+            max_total_bytes=None,
+            min_free_bytes=None,
+        )
+
+        with patch("quantagent.api.observability.maintenance.shutil.disk_usage", side_effect=AssertionError("disk_usage should not run")):
+            with patch.object(Path, "rglob", side_effect=AssertionError("rglob should not run")):
+                state = _compute_disk_guard_state(config)
+
+        self.assertFalse(state.under_pressure)
+        self.assertEqual(state.total_bytes, 0)
+        self.assertEqual(state.free_bytes, 0)
+
+    def test_disk_guard_uses_only_threshold_specific_stats(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            (root_dir / "a.log").write_text("1234", encoding="utf-8")
+            retention_days = StreamRetentionDays(access=1, app=1, error=1, security=1, audit=1)
+
+            with patch("quantagent.api.observability.maintenance.shutil.disk_usage", side_effect=AssertionError("disk_usage should not run")):
+                total_only_state = _compute_disk_guard_state(
+                    MaintenanceConfig(
+                        root_dir=root_dir,
+                        min_age_seconds=1,
+                        retention_days=retention_days,
+                        max_total_bytes=1,
+                        min_free_bytes=None,
+                    )
+                )
+
+            self.assertTrue(total_only_state.under_pressure)
+            self.assertEqual(total_only_state.reason, "max_total_bytes")
+            self.assertGreater(total_only_state.total_bytes, 0)
+            self.assertEqual(total_only_state.free_bytes, 0)
+
+            usage = shutil.disk_usage(root_dir)
+            with patch.object(Path, "rglob", side_effect=AssertionError("rglob should not run")):
+                with patch("quantagent.api.observability.maintenance.shutil.disk_usage", return_value=usage):
+                    free_only_state = _compute_disk_guard_state(
+                        MaintenanceConfig(
+                            root_dir=root_dir,
+                            min_age_seconds=1,
+                            retention_days=retention_days,
+                            max_total_bytes=None,
+                            min_free_bytes=usage.free + 1,
+                        )
+                    )
+
+            self.assertTrue(free_only_state.under_pressure)
+            self.assertEqual(free_only_state.reason, "min_free_bytes")
+            self.assertEqual(free_only_state.total_bytes, 0)
+            self.assertEqual(free_only_state.free_bytes, usage.free)
 
     def test_queue_shutdown_eventually_stops_when_sentinel_cannot_be_enqueued(self) -> None:
         class BlockingWriterSet:

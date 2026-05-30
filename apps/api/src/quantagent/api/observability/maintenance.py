@@ -157,21 +157,28 @@ class LogMaintenanceRuntime:
 
 def _compute_disk_guard_state(config: MaintenanceConfig) -> DiskGuardState:
     root_dir = config.root_dir
-    total_bytes = sum(path.stat().st_size for path in root_dir.rglob("*") if path.is_file()) if root_dir.exists() else 0
-    usage_root = root_dir if root_dir.exists() else root_dir.parent
-    usage = shutil.disk_usage(usage_root)
+    # 请求路径会周期性查询 disk guard；未启用对应阈值时跳过昂贵的目录遍历和磁盘统计。
+    total_bytes = 0
+    if config.max_total_bytes is not None:
+        total_bytes = sum(path.stat().st_size for path in root_dir.rglob("*") if path.is_file()) if root_dir.exists() else 0
+
+    free_bytes = 0
+    if config.min_free_bytes is not None:
+        usage_root = root_dir if root_dir.exists() else root_dir.parent
+        free_bytes = shutil.disk_usage(usage_root).free
+
     reason: str | None = None
     under_pressure = False
     if config.max_total_bytes is not None and total_bytes >= config.max_total_bytes:
         under_pressure = True
         reason = "max_total_bytes"
-    if config.min_free_bytes is not None and usage.free <= config.min_free_bytes:
+    if config.min_free_bytes is not None and free_bytes <= config.min_free_bytes:
         under_pressure = True
         reason = reason or "min_free_bytes"
     return DiskGuardState(
         under_pressure=under_pressure,
         total_bytes=total_bytes,
-        free_bytes=usage.free,
+        free_bytes=free_bytes,
         reason=reason,
     )
 
