@@ -172,12 +172,17 @@ class LogMaintenanceRuntime:
             return MaintenanceSummary(skipped_files=1)
 
         compressed_path = parsed.path.with_suffix(parsed.path.suffix + ".gz")
-        if compressed_path.exists():
-            return MaintenanceSummary(skipped_files=1)
-
         temp_compressed_path = compressed_path.with_suffix(compressed_path.suffix + ".tmp")
         try:
-            with parsed.path.open("rb") as source, gzip.open(temp_compressed_path, "wb") as target:
+            if compressed_path.exists():
+                # 已存在同名 gzip 时保留历史内容，再追加一个 gzip member，避免关闭的 jsonl 永久残留。
+                with compressed_path.open("rb") as existing, temp_compressed_path.open("wb") as target:
+                    shutil.copyfileobj(existing, target)
+                gzip_mode = "ab"
+            else:
+                gzip_mode = "wb"
+
+            with parsed.path.open("rb") as source, gzip.open(temp_compressed_path, gzip_mode) as target:
                 shutil.copyfileobj(source, target)
             temp_compressed_path.replace(compressed_path)
             parsed.path.unlink(missing_ok=True)

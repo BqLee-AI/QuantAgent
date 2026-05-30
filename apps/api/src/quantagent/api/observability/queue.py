@@ -41,6 +41,7 @@ class QueueWriterRuntime:
         self._warning_lock = threading.Lock()
         self._warned_messages: set[str] = set()
         self._dropped_access_records = 0
+        self._closed_paths: set[Path] = set()
 
     @property
     def dropped_access_records(self) -> int:
@@ -52,6 +53,9 @@ class QueueWriterRuntime:
 
     def active_paths(self) -> set[Path]:
         return self._writer_set.active_paths()
+
+    def closed_paths(self) -> set[Path]:
+        return set(self._closed_paths)
 
     def start(self) -> None:
         if not self._thread.is_alive():
@@ -83,7 +87,7 @@ class QueueWriterRuntime:
         self._stop_requested.set()
         if self._thread.ident is None:
             self._drain_remaining()
-            self._writer_set.close()
+            self._closed_paths.update(self._writer_set.close())
             return True
         # 用 sentinel 主动唤醒 listener，避免测试关闭 app 时为轮询超时白等。
         try:
@@ -152,4 +156,4 @@ class QueueWriterRuntime:
                 finally:
                     self._queue.task_done()
         finally:
-            self._writer_set.close()
+            self._closed_paths.update(self._writer_set.close())

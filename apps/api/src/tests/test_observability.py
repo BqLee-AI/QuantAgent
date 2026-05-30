@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gzip
 import io
 import json
 import logging
@@ -825,6 +826,42 @@ class ObservabilityTestCase(unittest.TestCase):
             self.assertFalse(closed_path.exists())
             self.assertTrue(compressed_path.exists())
 
+    def test_maintenance_appends_closed_file_when_compressed_target_exists(self) -> None:
+        from datetime import UTC, datetime
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            closed_path = root_dir / "error/2024/04/30/api.test.api-test.pid-321.error.20240430.jsonl"
+            compressed_path = closed_path.with_suffix(".jsonl.gz")
+            closed_path.parent.mkdir(parents=True, exist_ok=True)
+            closed_path.write_text('{"event":"new"}\n', encoding="utf-8")
+            with gzip.open(compressed_path, "wt", encoding="utf-8") as compressed:
+                compressed.write('{"event":"old"}\n')
+            old_mtime = datetime(2024, 4, 30, 8, 5, 0, tzinfo=UTC).timestamp()
+            os.utime(closed_path, (old_mtime, old_mtime))
+
+            with patch("quantagent.api.observability.maintenance.datetime") as datetime_mock:
+                fixed_now = datetime(2024, 5, 1, 10, 0, 0, tzinfo=UTC)
+                datetime_mock.now.return_value = fixed_now
+                datetime_mock.fromtimestamp = datetime.fromtimestamp
+                datetime_mock.strptime = datetime.strptime
+                runtime = LogMaintenanceRuntime(
+                    MaintenanceConfig(
+                        root_dir=root_dir,
+                        min_age_seconds=60,
+                        retention_days=StreamRetentionDays(access=7, app=7, error=7, security=7, audit=7),
+                        max_total_bytes=None,
+                        min_free_bytes=None,
+                    )
+                )
+                summary = runtime.run_startup_cleanup()
+
+            self.assertEqual(summary.compressed_files, 1)
+            self.assertFalse(closed_path.exists())
+            self.assertTrue(compressed_path.exists())
+            with gzip.open(compressed_path, "rt", encoding="utf-8") as compressed:
+                self.assertEqual(compressed.read(), '{"event":"old"}\n{"event":"new"}\n')
+
     def test_maintenance_compression_failure_cleans_partial_gzip_and_skips(self) -> None:
         from datetime import UTC, datetime
 
@@ -926,6 +963,112 @@ class ObservabilityTestCase(unittest.TestCase):
             self.assertEqual(summary.compressed_files, 1)
             self.assertFalse(active_path.exists())
             self.assertTrue(active_path.with_suffix(".jsonl.gz").exists())
+
+    def test_logging_shutdown_compresses_paths_created_during_queue_drain(self) -> None:
+        from datetime import UTC, datetime
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            writer_set = StreamFileWriterSet(
+                FileLayoutConfig(
+                    root_dir=root_dir,
+                    service="api",
+                    env="test",
+                    instance_id="api-test",
+                    pid=321,
+                    rotate_max_bytes=1024 * 1024,
+                )
+            )
+            queue_runtime = QueueWriterRuntime(
+                writer_set=writer_set,
+                max_size=16,
+                access_drop_when_full=True,
+                shutdown_timeout_seconds=2.0,
+            )
+            maintenance_runtime = LogMaintenanceRuntime(
+                MaintenanceConfig(
+                    root_dir=root_dir,
+                    min_age_seconds=300,
+                    retention_days=StreamRetentionDays(access=7, app=7, error=7, security=7, audit=7),
+                    max_total_bytes=None,
+                    min_free_bytes=None,
+                )
+            )
+            runtime = _LoggingRuntime(
+                config=SimpleNamespace(),  # type: ignore[arg-type]
+                queue_runtime=queue_runtime,
+                handler=logging.NullHandler(),
+                maintenance_runtime=maintenance_runtime,
+            )
+            queue_runtime.start()
+
+            with patch("quantagent.api.observability.maintenance.datetime") as datetime_mock:
+                fixed_now = datetime(2024, 5, 1, 10, 1, 0, tzinfo=UTC)
+                datetime_mock.now.return_value = fixed_now
+                datetime_mock.fromtimestamp = datetime.fromtimestamp
+                datetime_mock.strptime = datetime.strptime
+                queue_runtime.enqueue(stream="access", line='{"event":"access"}', created_at=fixed_now.timestamp())
+                runtime.shutdown()
+
+            active_path = root_dir / "access/2024/05/01/api.test.api-test.pid-321.access.20240501.jsonl"
+            self.assertFalse(active_path.exists())
+            self.assertTrue(active_path.with_suffix(".jsonl.gz").exists())
+
+    def test_logging_shutdown_merges_same_day_same_pid_file_after_container_restart(self) -> None:
+        from datetime import UTC, datetime
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            active_path = root_dir / "app/2024/05/01/api.local.api-local-dev.pid-1.app.20240501.jsonl"
+            compressed_path = active_path.with_suffix(".jsonl.gz")
+            active_path.parent.mkdir(parents=True, exist_ok=True)
+            with gzip.open(compressed_path, "wt", encoding="utf-8") as compressed:
+                compressed.write('{"event":"previous-run"}\n')
+            writer_set = StreamFileWriterSet(
+                FileLayoutConfig(
+                    root_dir=root_dir,
+                    service="api",
+                    env="local",
+                    instance_id="api-local-dev",
+                    pid=1,
+                    rotate_max_bytes=1024 * 1024,
+                )
+            )
+            queue_runtime = QueueWriterRuntime(
+                writer_set=writer_set,
+                max_size=16,
+                access_drop_when_full=True,
+                shutdown_timeout_seconds=2.0,
+            )
+            maintenance_runtime = LogMaintenanceRuntime(
+                MaintenanceConfig(
+                    root_dir=root_dir,
+                    min_age_seconds=300,
+                    retention_days=StreamRetentionDays(access=7, app=7, error=7, security=7, audit=7),
+                    max_total_bytes=None,
+                    min_free_bytes=None,
+                )
+            )
+            runtime = _LoggingRuntime(
+                config=SimpleNamespace(),  # type: ignore[arg-type]
+                queue_runtime=queue_runtime,
+                handler=logging.NullHandler(),
+                maintenance_runtime=maintenance_runtime,
+            )
+            queue_runtime.start()
+
+            with patch("quantagent.api.observability.maintenance.datetime") as datetime_mock:
+                fixed_now = datetime(2024, 5, 1, 10, 1, 0, tzinfo=UTC)
+                datetime_mock.now.return_value = fixed_now
+                datetime_mock.fromtimestamp = datetime.fromtimestamp
+                datetime_mock.strptime = datetime.strptime
+                self.assertTrue(queue_runtime.enqueue(stream="app", line='{"event":"current-run"}', created_at=fixed_now.timestamp()))
+                runtime.shutdown()
+
+            self.assertFalse(active_path.exists())
+            self.assertTrue(compressed_path.exists())
+            with gzip.open(compressed_path, "rt", encoding="utf-8") as compressed:
+                self.assertEqual(compressed.read(), '{"event":"previous-run"}\n{"event":"current-run"}\n')
 
 
 if __name__ == "__main__":

@@ -104,6 +104,7 @@ class _LoggingRuntime:
             force_closed_paths = self.queue_runtime.active_paths()
         if self.queue_runtime is not None:
             queue_stopped = self.queue_runtime.stop()
+            force_closed_paths.update(self.queue_runtime.closed_paths())
         if queue_stopped and self.maintenance_runtime is not None:
             self.maintenance_runtime.run_shutdown_cleanup(force_closed_paths=force_closed_paths)
         logger = logging.getLogger(_LOGGER_NAME)

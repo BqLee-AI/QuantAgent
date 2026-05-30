@@ -90,7 +90,8 @@ class StreamFileWriter:
         self._active_part = 0
         self._active_size = 0
 
-    def close(self) -> None:
+    def close(self) -> Path | None:
+        closed_path = self._active_path
         if self._file is not None:
             self._file.flush()
             self._file.close()
@@ -99,6 +100,7 @@ class StreamFileWriter:
         self._active_date = None
         self._active_part = 0
         self._active_size = 0
+        return closed_path
 
     def active_path(self) -> Path | None:
         return self._active_path
@@ -147,10 +149,13 @@ class StreamFileWriterSet:
         self._lock = threading.Lock()
         self._writers = {stream: StreamFileWriter(config, stream) for stream in SUPPORTED_STREAMS}
 
-    def close(self) -> None:
+    def close(self) -> set[Path]:
         with self._lock:
+            closed_paths: set[Path] = set()
             for writer in self._writers.values():
-                writer.close()
+                if (closed_path := writer.close()) is not None:
+                    closed_paths.add(closed_path)
+            return closed_paths
 
     def write(self, *, stream: str, line: str, created_at: float) -> Path:
         if stream not in self._writers:

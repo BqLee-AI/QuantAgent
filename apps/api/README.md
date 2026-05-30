@@ -133,7 +133,7 @@ Compose 不注入 `HOST` 或 `PORT`，避免宿主机 shell 变量覆盖 API 配
 
 为了保留 dotenv 优先级，Compose 不为 API 服务提供 `APP_ENV`、`DATABASE_URL`、`RUNTIME_DIR`、`LOG_LEVEL` 回退注入。首次启动前应创建 `apps/api/.env`，并把容器侧 `DATABASE_URL` 配成 `db:5432`、`RUNTIME_DIR` 配成 `/app/runtime`。
 
-`./apps/api:/app/apps/api` 挂载主要用于让容器内可见 API dotenv 覆盖文件；`./runtime:/app/runtime` 挂载前请确认宿主机 `runtime/` 目录已存在，避免 Docker 创建 root-owned 空目录影响后续写入。
+`api` service 会通过 `PYTHONPATH=/app/apps/api/src:/app/packages/core/src:/app/packages/plugin-sdk/src` 优先加载挂载源码，避免本地 Compose 仍使用镜像内旧 wheel；`./apps/api:/app/apps/api`、`./packages/core:/app/packages/core` 和 `./packages/plugin-sdk:/app/packages/plugin-sdk` 因此用于本地开发源码覆盖。`./runtime:/app/runtime` 挂载前请确认宿主机 `runtime/` 目录已存在，避免 Docker 创建 root-owned 空目录影响后续写入。
 
 如果修改了 `POSTGRES_DB`、`POSTGRES_USER` 或 `POSTGRES_PASSWORD`，需要同步调整 `apps/api/.env*` 中给 API 容器使用的 `DATABASE_URL` 和根 `.env` 中给迁移服务使用的 `MIGRATION_DATABASE_URL`。
 
