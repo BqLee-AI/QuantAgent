@@ -57,6 +57,9 @@ def _resolve_env_roots(
     source_repo_root: Path | None = _SOURCE_REPO_ROOT,
     source_api_app_dir: Path | None = _SOURCE_API_APP_DIR,
 ) -> tuple[Path | None, Path | None]:
+    if cwd.name == "api" and cwd.parent.name == "apps":
+        return cwd.parents[1], cwd
+
     if source_repo_root is not None and source_api_app_dir is not None:
         source_api_dir = source_repo_root / "apps/api"
         if source_api_dir == source_api_app_dir:
@@ -65,9 +68,6 @@ def _resolve_env_roots(
     cwd_api_dir = cwd / "apps/api"
     if cwd_api_dir.is_dir():
         return cwd, cwd_api_dir
-
-    if cwd.name == "api" and cwd.parent.name == "apps":
-        return cwd.parents[1], cwd
 
     if source_repo_root is not None and source_api_app_dir is not None:
         return source_repo_root, source_api_app_dir
@@ -173,7 +173,7 @@ class Settings(CoreSettings):
     AUTH_SESSION_REFRESH_THRESHOLD_SECONDS: int = Field(default=1800, ge=0)
     AUTH_CSRF_HEADER_NAME: str = "X-CSRF-Token"
     DISCORD_INTERACTIONS_ENABLED: bool = False
-    DISCORD_INTERACTIONS_PLUGIN_ID: str = "quantagent.official.source.discord_interaction_webhook"
+    DISCORD_INTERACTIONS_PLUGIN_ID: str = "quantagent.official.notification.discord"
     DISCORD_INTERACTIONS_PUBLIC_KEY: str | None = None
     DISCORD_INTERACTIONS_RESPONSE_TEXT: str = "QuantAgent received your Discord interaction."
     DISCORD_INTERACTIONS_TIMESTAMP_TOLERANCE_SECONDS: int = Field(default=300, ge=0)

@@ -1,26 +1,25 @@
 ## Why
 
-Issue #110 需要在不改动核心 Runtime / API / 审批边界的前提下，补齐第一版官方 Discord 实验性收发能力。当前仓库只有插件注册骨架和 source 占位插件，没有可运行、可独立测试的 Discord 官方插件样板，继续直接实现代码会让插件边界、接收方式和验收口径停留在对话里。
+Issue #110 需要在不改动核心 Runtime / 审批边界的前提下，补齐第一版官方 Discord 实验性收发能力。当前仓库已经有可运行的发送与接收样板，但它们被拆成两个官方插件，和本轮会议收敛出的“尽量完善为一个 Discord 插件”方向冲突。如果不先统一真源，后续 reviewer、实现和测试会继续在“两插件”与“单插件”之间分叉。
 
 ## What Changes
 
-- 新增一个 OpenSpec change，定义第一版 Discord 官方实验性插件组的边界：发送走 `notification` 插件，接收走 `source` 插件。
-- 明确接收路径固定为 `Webhook Push`，并要求第一版标准化终点停在插件内 DTO，不接入核心 Event Bus、审批回流或统一聊天通道。
-- 要求两个插件都通过 `plugin.yaml` 注册，配置使用 secret reference，主要代码改动控制在 `plugins/` 范围内。
-- 为发送和接收分别定义独立 mock / fixture / standalone test harness 与结构化错误边界。
-- 要求 README 明确实验范围、支持能力、敏感配置和非目标，避免实现中顺带扩展核心契约。
+- 将第一版 Discord 官方实验能力从“发送插件 + 接收插件”收敛为“一个官方 Discord 插件”。
+- 该插件仍通过单个 `plugin.yaml` 和单个 `config.schema.json` 进入 Registry，并在同一插件边界内承接发送与接收两类低风险能力。
+- 插件目录、README、standalone smoke/test 和配置契约统一收敛到一个官方插件目录下。
+- API ingress 与 Registry 校验不再依赖“Discord 接收必须是 `source` 类型插件”的旧假设，而改为校验受支持 capability 与插件处理器。
+- 保持主要业务代码仍尽量落在 `plugins/` 内；如果必须动 API 或 core，只允许做最小兼容性收口，不扩展新的 plugin type 或通用 webhook 框架。
 
 ## Capabilities
 
-### New Capabilities
-- `discord-experimental-plugins`: 定义 QuantAgent 第一版官方 Discord 实验性发送与接收插件的边界、配置、安全约束和独立验收要求。
-
 ### Modified Capabilities
-- `plugin-registry-v1`: 补充官方 Discord 实验插件作为通过 `plugin.yaml` 注册进入 Registry 的新样板能力，但不改变 Registry V1 的既有要求。
+
+- `discord-experimental-plugins`: 定义 QuantAgent 第一版官方 Discord 实验插件从双插件拆分收敛为单插件的边界、配置、安全约束和独立验收要求。
+- `plugin-registry-v1`: 补充单个官方 Discord 插件作为 Registry V1 样板能力，但不新增第二套 manifest、第二套 schema 或新的核心注册机制。
 
 ## Impact
 
-- `plugins/notifications/**` 与 `plugins/sources/**`：后续落位官方 Discord 发送与接收插件。
-- `packages/core/tests/test_registry.py` 或等价 Python 测试入口：后续验证新插件 manifest / schema 可被 Registry 扫描。
-- `docs/design/03-plugin-system-and-registry.md` 与 `docs/design/06-source-plugin-design.md`：本 change 复用其边界，但不在本轮改动核心设计或运行时协议。
-- OpenSpec-only 审核通过前，不进入实现代码、依赖升级、API 路由或核心 runtime 改动。
+- `plugins/notifications/**`：第一版官方 Discord 插件统一落在官方 notification 插件目录下。
+- `apps/api/src/quantagent/api/services/discord_interactions.py` 与相关测试：收敛旧的 source-type 假设。
+- `packages/core/tests/test_registry.py` 与相关测试：更新官方 Discord 插件扫描期望。
+- `openspec/changes/enable-real-discord-interaction-webhook/**`：同步对齐真实 ingress 对单插件的调用边界。

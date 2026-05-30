@@ -46,31 +46,36 @@ QuantAgent SHALL 提供一个可配置给 Discord Developer Portal 的真实 HTT
 - **THEN** 系统返回明确的不支持结果
 - **AND** 不会伪装成成功处理
 
-### Requirement: API ingress MUST invoke the source plugin via manifest entrypoint
+### Requirement: API ingress MUST invoke the single Discord plugin via manifest entrypoint
 
-真实 Discord interaction ingress SHALL 通过 Registry record 和 `plugin.yaml` 中的 `entrypoint` 定位 source plugin，而不是在核心代码里硬编码 Discord 插件 import。
+真实 Discord interaction ingress SHALL 通过 Registry record 和 `plugin.yaml` 中的 `entrypoint` 定位单个官方 Discord 插件，而不是在核心代码里硬编码 Discord 插件 import。
 
-#### Scenario: API resolves the configured source plugin from Registry
+#### Scenario: API resolves the configured Discord plugin from Registry
 - **WHEN** endpoint 需要处理一条 Discord interaction 请求
-- **THEN** API 层根据已配置的 plugin id 在 Registry 中定位一个合法的 source plugin record
+- **THEN** API 层根据已配置的 plugin id 在 Registry 中定位一个合法的 Discord plugin record
 - **AND** 通过该 record 的 manifest entrypoint 加载插件对象
+
+#### Scenario: API validates receive capability without relying on source type
+- **WHEN** endpoint 校验目标 Discord 插件是否合法可接收请求
+- **THEN** 它校验 manifest capability 集合与 `receive_request` handler
+- **AND** 它不再把 `type == source` 作为唯一前置条件
 
 #### Scenario: Missing or invalid plugin configuration fails safely
 - **WHEN** endpoint 配置的 plugin id 不存在、记录非法或 entrypoint 无法加载
 - **THEN** 系统返回结构化失败结果
 - **AND** 错误结果不暴露本地路径、secret 原文或内部 traceback
 
-### Requirement: The Discord source plugin MUST support official interaction verification and parsing
+### Requirement: The Discord plugin MUST support official interaction verification and parsing
 
-Discord source plugin SHALL 支持 Discord 官方 interaction 请求的验签、最小解析和插件内 DTO 产出。
+Discord 官方插件 SHALL 支持 Discord 官方 interaction 请求的验签、最小解析和插件内 DTO 产出。
 
 #### Scenario: Valid application command produces a plugin DTO
-- **WHEN** source plugin 收到一条通过官方签名校验的合法 application command interaction
+- **WHEN** Discord 插件收到一条通过官方签名校验的合法 application command interaction
 - **THEN** 插件产出标准化 DTO
 - **AND** DTO 至少包含 interaction 标识、来源标识、文本内容和 payload 摘要
 
 #### Scenario: Plugin no longer depends on HMAC fixture as production behavior
-- **WHEN** 真实 Discord interaction 请求进入 source plugin
+- **WHEN** 真实 Discord interaction 请求进入插件
 - **THEN** 插件生产路径使用 Discord 官方 `Ed25519` 校验
 - **AND** HMAC fixture 如继续存在也只能作为测试夹具而不是生产协议
 

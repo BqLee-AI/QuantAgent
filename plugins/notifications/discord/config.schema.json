@@ -1,0 +1,57 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "webhook_secret_ref": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Secret reference that resolves to the full Discord webhook URL."
+    },
+    "timeout_seconds": {
+      "type": "number",
+      "minimum": 0.1,
+      "default": 5,
+      "description": "Request timeout used for Discord webhook send requests."
+    },
+    "public_key_ref": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Reference to the Discord application public key for standalone receive tests."
+    },
+    "public_key": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Resolved Discord application public key injected by the host for real ingress."
+    },
+    "response_text": {
+      "type": "string",
+      "minLength": 1,
+      "default": "QuantAgent received your Discord interaction.",
+      "description": "Minimal response text returned for supported application commands."
+    },
+    "timestamp_tolerance_seconds": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 300,
+      "description": "Accepted freshness window for Discord signature timestamps."
+    },
+    "guild_allowlist": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": [],
+      "description": "Optional guild allowlist for Discord interactions."
+    },
+    "channel_allowlist": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": [],
+      "description": "Optional channel allowlist for Discord interactions."
+    }
+  }
+}

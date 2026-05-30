@@ -9,14 +9,10 @@ from quantagent.api.config.settings import Settings
 from quantagent.api.http.errors import BadRequestError, NotFoundError, ServiceUnavailableError, UnauthorizedError
 from quantagent.api.services import plugin_registry as plugin_registry_service
 from quantagent.core.plugins import PluginEntrypointLoadError, load_plugin_entrypoint
-from quantagent.core.registry import (
-    PluginRegistry,
-    PluginStatus,
-    PluginType,
-)
+from quantagent.core.registry import PluginRegistry, PluginStatus
 
 
-class DiscordSourcePlugin(Protocol):
+class DiscordReceivePlugin(Protocol):
     def receive_request(
         self,
         config: Mapping[str, Any],
@@ -53,7 +49,7 @@ class DiscordInteractionIngressService:
         if not public_key:
             raise ServiceUnavailableError("Discord interactions public key is not configured")
 
-        plugin = self._load_source_plugin(self._settings.DISCORD_INTERACTIONS_PLUGIN_ID)
+        plugin = self._load_receive_plugin(self._settings.DISCORD_INTERACTIONS_PLUGIN_ID)
         result = _validate_receive_result(
             plugin.receive_request(
                 _build_plugin_config(self._settings, public_key=public_key),
@@ -66,19 +62,22 @@ class DiscordInteractionIngressService:
 
         return DiscordInteractionHttpResult(status_code=200, content=_validated_response_content(result))
 
-    def _load_source_plugin(self, plugin_id: str) -> DiscordSourcePlugin:
+    def _load_receive_plugin(self, plugin_id: str) -> DiscordReceivePlugin:
         record = self._registry.get_plugin(plugin_id)
         if record is None:
-            raise ServiceUnavailableError("Configured Discord source plugin was not found")
+            raise ServiceUnavailableError("Configured Discord plugin was not found")
         if record.status != PluginStatus.VALID:
-            raise ServiceUnavailableError("Configured Discord source plugin is not valid")
-        if record.manifest is None or record.manifest.type != PluginType.SOURCE:
-            raise ServiceUnavailableError("Configured Discord plugin must be a valid source plugin")
+            raise ServiceUnavailableError("Configured Discord plugin is not valid")
+        if record.manifest is None:
+            raise ServiceUnavailableError("Configured Discord plugin is not valid")
+        # 会议收口为单 Discord 插件后，接收入口不再由 source type 代理，而由 capability + handler 收口。
+        if "notification.receive" not in record.manifest.capabilities:
+            raise ServiceUnavailableError("Configured Discord plugin does not expose notification.receive capability")
         try:
             plugin = load_plugin_entrypoint(record)
         except PluginEntrypointLoadError as exc:
-            raise ServiceUnavailableError("Configured Discord source plugin could not be loaded") from exc
-        return _validate_source_plugin(plugin)
+            raise ServiceUnavailableError("Configured Discord plugin could not be loaded") from exc
+        return _validate_receive_plugin(plugin)
 
 
 def get_discord_interaction_ingress_service(request: Request) -> DiscordInteractionIngressService:
@@ -116,31 +115,31 @@ def _map_plugin_failure(result: DiscordReceiveResult) -> DiscordInteractionHttpR
     raise BadRequestError(result.message, details={"code": result.code})
 
 
-def _validate_source_plugin(plugin: object) -> DiscordSourcePlugin:
+def _validate_receive_plugin(plugin: object) -> DiscordReceivePlugin:
     receive_request = getattr(plugin, "receive_request", None)
     if not callable(receive_request):
-        raise ServiceUnavailableError("Configured Discord source plugin does not expose a receive_request handler")
+        raise ServiceUnavailableError("Configured Discord plugin does not expose a receive_request handler")
     return plugin  # type: ignore[return-value]
 
 
 def _validate_receive_result(result: object) -> DiscordReceiveResult:
     if not isinstance(getattr(result, "ok", None), bool):
-        raise ServiceUnavailableError("Configured Discord source plugin returned an invalid result payload")
+        raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
     if not isinstance(getattr(result, "code", None), str) or not getattr(result, "code").strip():
-        raise ServiceUnavailableError("Configured Discord source plugin returned an invalid result payload")
+        raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
     if not isinstance(getattr(result, "message", None), str) or not getattr(result, "message").strip():
-        raise ServiceUnavailableError("Configured Discord source plugin returned an invalid result payload")
+        raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
 
     response = getattr(result, "response", None)
     if response is not None and not isinstance(response, Mapping):
-        raise ServiceUnavailableError("Configured Discord source plugin returned an invalid result payload")
+        raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
     if getattr(result, "ok") and response is None:
-        raise ServiceUnavailableError("Configured Discord source plugin returned an invalid result payload")
+        raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
     return result  # type: ignore[return-value]
 
 
 def _validated_response_content(result: DiscordReceiveResult) -> Mapping[str, Any]:
     response = result.response
     if response is None:
-        raise ServiceUnavailableError("Configured Discord source plugin returned an invalid result payload")
+        raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
     return response

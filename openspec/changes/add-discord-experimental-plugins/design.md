@@ -1,70 +1,149 @@
 ## Context
 
-当前仓库已经有 Plugin Registry V1 的 OpenSpec 和最小实现，明确了官方插件必须通过 `plugin.yaml` 注册，并且 `source`、`notification` 是固定插件类型。与此同时，`plugins/` 目录里还没有任何 Discord 官方插件样板，`packages/plugin-sdk` 也仍是占位状态。Issue #110 及其评论已经把范围收敛到“以实验性插件组的方式，在 `plugins/` 内证明 Discord 能发、能收、能单独测试”，因此这次设计重点不是集成 Discord 平台，而是把最小插件协议、目录结构、测试和非目标写清楚，避免实现中扩到核心 HTTP、审批或事件流。
+当前仓库已经有 Plugin Registry V1 的最小实现，也已经在 `plugins/` 下落了 Discord 发送与接收样板。但这条链路是按“双插件拆分”推进的：发送落在 `notification`，接收落在 `source`。本轮会议收敛的新要求是“尽量完善为一个插件”，而 Issue #110 本身只要求“能收发、尽量只改 `plugins/`、可单独测试”，并没有强制拆成两个插件。
+
+更上游的 `official-plugin-v1-main-chain` 也把 Discord 表述为单数语义的 Discord 插件。因此，本 change 的目标不是重新发明插件类型体系，而是把 Discord 的第一版实验交付从两个官方插件收口成一个官方插件，同时保持现有 Registry、API ingress 和测试仍可最小闭环。
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- 在 OpenSpec 中固定第一版 Discord 官方实验性插件组的拆分方式：一个 `notification` 发送插件，一个 `source` 接收插件。
-- 固定接收实现路径为 `Webhook Push`，并明确接收成功后只标准化到插件内 DTO。
-- 要求两个插件都通过 `plugin.yaml` + `config.schema.json` 注册和描述配置，且敏感字段必须走 secret reference。
-- 要求两个插件都提供独立 mock / fixture / standalone test harness，覆盖成功路径和结构化失败路径。
-- 限制主要实现代码在 `plugins/` 内，避免为了支持 Discord 而修改核心 Runtime / API / 审批 / 执行契约。
+- 在 OpenSpec 中固定第一版 Discord 官方实验能力采用单插件交付，而不是两个独立插件。
+- 保持 Discord 插件仍通过单个 `plugin.yaml`、单个 `config.schema.json` 和单个 plugin id 进入 Registry。
+- 让该插件在同一边界内承接低风险发送和低风险接收能力，并提供统一 README、standalone tests 和 smoke 脚本。
+- 允许 API ingress 和测试以 capability/handler 为准调用 Discord 接收逻辑，而不是依赖旧的 source-type 假设。
+- 保持主要实现代码仍优先收敛在 `plugins/` 内；API 与 core 只做最小兼容改造。
 
 **Non-Goals:**
 
-- 不定义统一聊天通道模型、核心入站消息契约或新的 Event Bus 接入协议。
+- 不新增新的 plugin type，不把 Registry 改成多主类型模型。
+- 不引入统一聊天通道模型、核心入站消息契约或新的 Event Bus 接入协议。
 - 不实现 Discord bot polling、gateway stream、富交互组件、附件、多 guild 管理或社区运营能力。
 - 不要求第一版接收能力直接打通审批回流、自动执行、实时通道或系统主事件流。
-- 不新增 plugin SDK、核心 loader、动态 HTTP 路由挂载或运行时依赖安装机制。
+- 不把 Discord 插件扩成策略、审批或交易执行入口。
 
 ## Decisions
 
-### 1. 发送与接收拆成两个官方插件
+### 1. 第一版 Discord 官方实验能力收敛为一个官方插件
 
-第一版 SHALL 拆成两个官方插件，而不是一个混合插件或一个目录内的多 manifest 特例：
+第一版 SHALL 使用一个官方 Discord 插件，而不是“发送插件 + 接收插件”两个独立插件。
 
-- `notification` 插件负责 Discord 发送。
-- `source` 插件负责 Discord 接收。
+该插件采用：
 
-这样做的原因是现有设计文档已经把 `notification` 和 `source` 作为固定插件类型，Issue #110 也明确要求优先复用既有类型边界。替代方案是一个单插件组双入口或由 `source` 顺带承担发送，这会模糊类型职责，也不利于独立测试，因此不采用。
+- 一个官方插件目录
+- 一个 `plugin.yaml`
+- 一个 `config.schema.json`
+- 一个 plugin id
 
-### 2. 接收路径固定为 Webhook Push
+这样做的原因是：
 
-第一版 Discord 接收 SHALL 走 `Webhook Push` 路径，用 mock inbound payload 和请求头上下文完成插件内验证。替代方案是 bot polling 或 gateway stream，但这两条路径都会引入额外状态管理、频率控制或长连接治理，明显超出本 issue 的实验范围，因此不采用。
+- 会议评审希望把同一渠道的收发能力尽量收敛，而不是维持测试期的临时拆分。
+- Issue #110 真正关心的是“插件能单独测试、能够收发消息”，并未要求必须分成两个插件。
+- `official-plugin-v1-main-chain` 把 Discord 表述为单数插件，更接近当前方向。
 
-### 3. 标准化终点停在插件内 DTO
+替代方案是保留两个插件，再通过 README 或插件组概念把它们包装成“一个能力”。这个方案仍会让 Registry、测试、API 配置和 reviewer 心智维持双实体，不采用。
 
-接收插件 SHALL 只把合法 inbound payload 解析为插件内标准化 DTO，并返回结构化成功/失败结果。它 MUST NOT 在本轮直接定义系统级 `RawEvent`、SourceBinding 对象、API DTO 或 Event Bus 接入。这样可以证明“能收、能解析、能报错”，同时避免为了 Discord 接收反向设计核心契约。替代方案是直接对齐 `RawEvent`，但当前仓库还没有为 push source 建立稳定实现路径，会把本轮 spec 扩大到核心 source 运行时，因此不采用。
+### 2. 单插件仍沿用既有 plugin type，不扩展新的类型模型
 
-### 4. 配置只暴露最小 secret reference 与 allowlist
+本轮单插件 SHALL 继续沿用既有 plugin type 体系，不新增 `communication`、`chat` 或其他新类型。为保持最小兼容，Discord 插件 SHOULD 挂在 `notification` 类型下，并通过 capabilities 与处理器暴露接收能力。
 
-两个插件的 `config.schema.json` SHALL 只描述本轮验收需要的最小配置：
+原因：
 
-- 发送侧至少需要 webhook secret reference。
-- 接收侧至少需要签名校验所需 secret/public key reference，以及可选 guild/channel allowlist。
+- 当前 Registry、API schema 和设计文档都假设 `type` 是单值枚举。
+- 为了 Discord 第一版去扩展新的 plugin type，会把范围扩大到 Registry、管理台、API 契约和更多设计文档。
+- Discord 接收在本轮仍被限制为低风险交互与通知入口，不需要借此重写整个 source/runtime 模型。
 
-schema MUST NOT 内嵌真实 secret、真实 webhook URL 或私有频道信息。替代方案是直接让 README 约定原始环境变量名而不做 schema 约束，但这会削弱 Registry 扫描和后续配置治理，因此不采用。
+代价是：接收能力不再等价于“所有接收类插件都必须是 `source` 类型”。本轮通过 capability 与显式 handler 校验收口，而不是继续用 type 代理行为。
 
-### 5. 主要实现代码控制在 plugins 内，核心系统只允许“被动复用”
+### 3. API ingress 以 capability/handler 校验 Discord 接收能力
 
-本 change SHALL 要求主要实现代码、README、fixtures 和 tests 都落在 `plugins/` 范围内。可以被动复用现有 Python 测试 harness 或 Registry 扫描能力，但 MUST NOT 为了 Discord 插件去修改核心 Runtime / API / 审批 / 执行契约。如果实现过程中发现接收路径必须依赖稳定 HTTP 挂载点、统一聊天通道或核心入站模型，则应停止扩 scope，并先补新的 OpenSpec change。
+真实 Discord ingress SHALL 不再把“目标插件必须是 `source` 类型”作为唯一门槛，而改为：
 
-### 6. 验收默认依赖 mock / fixture，不阻塞于真实 Discord
+- 通过配置定位单一 Discord plugin id
+- 确认 record 合法可加载
+- 确认插件暴露 `receive_request(...)` 处理器
+- 确认 manifest capability 集合包含 Discord 接收所需能力
 
-默认验收 SHALL 依赖插件级 mock / fixture / standalone tests。真实 Discord 手工 smoke 可以作为补充验证，但 MUST NOT 成为默认阻塞条件。这样做可以避免本 change 把外部环境、凭证和网络波动引入 OpenSpec 验收门槛。
+这样符合本轮“单插件但可接收”的目标，也避免把接收逻辑重新拆回第二个 manifest。
+
+### 4. 配置契约统一到一个 schema
+
+单插件 `config.schema.json` SHALL 同时描述发送与接收需要的最小配置：
+
+- 发送侧：`webhook_secret_ref`、`timeout_seconds`
+- 接收侧：`public_key_ref` / `public_key`、`response_text`、allowlist、timestamp tolerance
+
+schema MUST NOT 内嵌真实 secret、真实 webhook URL、真实私钥或私有 guild/channel 信息。
+
+### 5. 目录与文件规划
+
+单插件实现 SHOULD 统一收敛到一个官方目录，例如：
+
+```text
+plugins/notifications/discord/
+  plugin.yaml
+  config.schema.json
+  README.md
+  discord_plugin.py
+  smoke_send.py
+  smoke_receive.py
+  tests/
+```
+
+文件职责：
+
+- `plugin.yaml`：单插件 manifest 真源
+- `config.schema.json`：统一配置契约
+- `discord_plugin.py`：发送与接收处理器、DTO、结构化结果
+- `smoke_send.py` / `smoke_receive.py`：各自独立补充验证入口
+- `tests/`：发送、接收和结构化失败路径测试
+
+### 6. 兼容性迁移允许最小破坏性收口
+
+本 change 允许把旧的发送/接收双插件收敛为新的官方 plugin id `quantagent.official.notification.discord`。测试、README、API 默认配置和 Registry 扫描期望需要同步更新。
+
+本轮不承诺向后兼容保留两个旧 plugin id；它们属于实验性样板，允许按新真源直接收口。
+
+## Data / Failure Flow
+
+发送路径：
+
+```text
+validated config + secret ref
+  -> Discord plugin send_text
+  -> webhook request
+  -> structured send result
+```
+
+接收路径：
+
+```text
+API ingress
+  -> configured Discord plugin id
+  -> Registry record + entrypoint loader
+  -> plugin.receive_request(config, headers, body)
+  -> signature validation + payload parse
+  -> interaction response + plugin DTO
+```
+
+关键失败路径：
+
+- plugin id 不存在 / record 非法
+- 插件无 `receive_request` handler
+- manifest capability 不符合预期
+- webhook secret 缺失或不可解析
+- Discord 公钥配置缺失
+- 签名、时间戳、allowlist、payload 校验失败
+
+这些失败都必须返回结构化结果，且不得泄露 secret、公钥原文、完整 payload 或内部路径。
 
 ## Risks / Trade-offs
 
-- [Risk] 只做到插件内 DTO，可能让 reviewer 觉得“接收还没真正接进系统”。
-  -> Mitigation：在 proposal、spec 和 README 中明确本轮目标是实验性插件样板，不是系统级入站契约。
+- [Risk] 把接收能力放到 `notification` 类型下，会弱化“接收即 source”这条旧心智。
+  -> Mitigation：在 spec、README 和 API 注释中明确，这是 Discord 单插件的定向兼容，不是对所有 push source 的普遍结论。
 
-- [Risk] Webhook Push 与未来真实 Discord 接入路径可能不同。
-  -> Mitigation：将其明确标记为第一版最小实验路径；如果后续需要 polling/gateway，再另开 change 收敛。
+- [Risk] 单插件 schema 会同时包含发送与接收字段，看上去比拆分方案更宽。
+  -> Mitigation：字段仍然只覆盖第一版最小能力，不顺手加入 Bot token、guild 管理或 followup API。
 
-- [Risk] 当前仓库没有成熟 plugin SDK，插件实现接口可能带有临时性。
-  -> Mitigation：spec 只约束插件目录、manifest、config schema、测试和行为边界，不提前发明长期 SDK 契约。
-
-- [Risk] 为了验证接收路径，实施者可能尝试改 API 路由或核心 loader。
-  -> Mitigation：tasks 明确把“发现必须改核心契约则停止并转新 change”作为 review gate，而不是施工细节。
+- [Risk] 旧测试和默认配置大量写死旧 plugin id。
+  -> Mitigation：本轮显式更新默认配置、Registry 测试和 ingress 测试，把实验性旧 id 一次性收口。

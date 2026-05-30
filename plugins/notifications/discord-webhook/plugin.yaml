@@ -1,9 +1,0 @@
-id: quantagent.official.notification.discord_webhook
-name: Discord Webhook Notification
-type: notification
-version: 0.1.0
-entrypoint: discord_webhook_plugin:plugin
-description: Experimental official Discord webhook notification plugin.
-capabilities:
-  - notification.send
-config_schema: config.schema.json

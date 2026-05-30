@@ -1,112 +1,90 @@
 ## Context
 
-当前 Discord source 插件只做到“插件内接收和解析”，README 也明确说明还不支持真实 Discord interaction webhook 端到端联调。要把它变成真实可用能力，不只是把 HMAC 换成 `Ed25519`，还必须同时补齐三类缺口：
+当前 Discord 真实 ingress 已经具备：
 
-- Discord 官方要求的 HTTP 请求头校验和 `PING` 握手。
-- 一个可以挂到 Discord Developer Portal 的稳定 HTTP ingress。
-- 一个不依赖硬编码 import 的最小插件加载路径，让 API 层仍然通过 `plugin.yaml` 和 Registry 边界调用 source plugin。
+- Discord 官方 `Ed25519` 请求签名校验
+- `PING` 握手
+- 最小 `APPLICATION_COMMAND` 响应
+- 通过 Registry + entrypoint loader 调用插件
 
-官方文档当前要求：Discord 通过 `X-Signature-Ed25519` 和 `X-Signature-Timestamp` 发送签名，请求失败时应返回 `401`；配置 Interactions Endpoint URL 时，Discord 会先发送 `type: 1` 的 `PING`，服务端需要返回 `200` 和 `{"type":1}`。对正常 interaction，请求必须在 3 秒内给出首个响应。以上要求来自 Discord 官方文档《Interactions Overview》和《Receiving and Responding to Interactions》。
+但它把目标插件硬限定为独立 `source` 类型插件，而本轮会议结论要求 Discord 收发尽量收敛成一个插件。由于单插件方案不会顺手扩展新的 plugin type，本 change 需要把 ingress 的调用条件从“source plugin”改成“单个 Discord 插件的接收能力”，同时保持 API、loader 和失败边界最小稳定。
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- 提供一个真实可配置的 Discord Interactions HTTP ingress，让 Discord Developer Portal 能成功验证并发送请求。
-- 让现有官方 Discord source plugin 支持官方 `Ed25519` 签名校验，而不是仅支持 HMAC fixture。
-- 保持插件注册边界不变：API 层通过 Registry record + manifest entrypoint 定位插件，不在核心代码里写死 Discord class/import。
-- 为合法 `PING` 和最小支持的 interaction type 返回 Discord 可接受的响应格式。
-- 为这条真实接收路径补齐最小测试、README 和 smoke 验证说明。
+- 让真实 Discord interaction ingress 对接单个官方 Discord 插件。
+- 保持官方验签、`PING`、最小 command 首响和 plugin loader 边界不变。
+- 用 capability/handler 校验代替 source-type 硬限制。
+- 更新文档、默认 plugin id 和测试期望，使其与单插件方案一致。
 
 **Non-Goals:**
 
-- 不在本轮把接收结果接入 Event Bus、`RawEvent`、审批回流、自动执行或统一聊天通道。
-- 不在本轮支持 gateway、bot polling、message component、autocomplete、modal submit 或 followup message 全链路。
-- 不引入完整 plugin runtime、动态热重载或任意插件 HTTP 路由系统；只补真实 Discord webhook 所需的最小加载能力。
-- 不在本轮实现公网部署、反向代理或隧道服务自动化。
+- 不引入通用 webhook ingress 框架。
+- 不把接收结果接入 Event Bus、`RawEvent`、审批回流、自动执行或统一聊天通道。
+- 不扩展新的 plugin type 或多 manifest/plugin bundle 模型。
+- 不支持 gateway、polling、message component、autocomplete、modal submit 或 followup message 全链路。
 
 ## Decisions
 
-### 1. 使用公开 API v1 路由承接 Discord 回调
+### 1. 公开 API ingress 路由保持不变
 
-真实 Discord interaction ingress 将落在 `apps/api`，作为公开 `POST` 路由由 `register_api_v1_routes` 统一注册。路由本身只负责：
+真实 Discord interaction ingress 仍然落在 `apps/api` 的公开 `POST` 路由，由 `register_api_v1_routes` 统一注册。HTTP 边界、异常映射和 Request ID 链路保持现状，不把 webhook server 下沉到插件目录。
 
-- 读取原始 body 和 Discord 签名头。
-- 读取 API 层配置。
-- 通过 Registry + loader 获取目标 source plugin。
-- 调用插件并把结果映射成 HTTP 响应。
+### 2. API ingress 不再要求目标插件是 `source` type
 
-这样符合 `apps/api` 的传输层职责，也避免在插件目录内自行启动 HTTP server。替代方案是让插件目录自己跑一个独立 webhook server，但这会绕过现有 API 边界和 Request ID / 异常处理链，因此不采用。
+本轮 SHALL 移除“Discord interaction ingress 只能加载 `PluginType.SOURCE` record”的旧限制，改为检查：
 
-### 2. 入口路径固定为单一 Discord interaction endpoint
+- record 存在且 `VALID`
+- entrypoint 可加载
+- manifest capability 集合包含接收所需 capability
+- 插件对象暴露 `receive_request(...)`
 
-本轮使用单一公开 endpoint，例如 `/api/v1/integrations/discord/interactions`。它不暴露“任意 plugin id 路径参数”，也不直接作为通用 webhook ingress。原因是当前仓库没有通用 push source ingress 规范，若直接抽象成通用 webhook 框架，范围会快速扩展到更多 source 类型。
+原因是单插件方案下，Discord 插件会沿用既有 `notification` 类型，但仍需承接低风险接收能力。
 
-替代方案是直接设计 `/api/v1/webhooks/{provider}/{binding_id}` 这类通用入口，但这会提前引入 SourceBinding、路由分发和更多长期契约，因此不采用。
+### 3. 单插件接收能力继续通过显式 handler 暴露
 
-### 3. 插件调用必须走 manifest entrypoint，而不是硬编码 Discord import
+Discord 插件继续通过 `receive_request(config, headers, body)` 暴露接收处理器，API ingress 不负责验签与解析，只负责：
 
-当前 `packages/core` 只有 Registry 扫描，没有运行时加载 entrypoint 的能力。为满足“插件只能通过 `plugin.yaml` 和 Registry 进入系统”的仓库约束，本轮新增一个最小 loader：
+- 读取原始 body 和 Discord 签名头
+- 读取 API 层配置
+- 加载目标插件
+- 调用插件并把结果映射成 HTTP 响应
 
-- 输入：一个 `PluginRecord`。
-- 行为：解析 `manifest.entrypoint`，以插件目录为模块搜索根导入目标模块，再读取导出的 `plugin` 对象。
-- 限制：只允许加载 `VALID` 状态记录，且只服务于这条 ingress 路径。
+这样能保持插件边界清楚，也避免 API 侧重回“硬编码 Discord 解析器”。
 
-替代方案是 API 路由直接 `import plugins.sources.discord-interaction-webhook...`。这虽然实现更快，但违反仓库关于插件注册和硬编码 import 的长期规则，因此不采用。
+### 4. 默认 plugin id 与 README 需要同步收口
 
-### 4. 接收插件升级为官方验签 + 真实 interaction 结果
+API 默认配置、README、测试和 smoke 文档 SHALL 使用新的单插件官方 plugin id，不再引用旧的 source 插件 id。
 
-现有插件 `receive_request(...)` 返回 `ReceiveResult` 和 DTO，但真实 Discord endpoint 还需要一个可直接映射到 HTTP 响应的结果结构。本轮将插件升级为：
+### 5. 失败边界保持不变
 
-- 使用 `X-Signature-Ed25519` 和 `X-Signature-Timestamp` 校验原始 body。
-- 接受 Developer Portal 提供的 application public key 作为配置引用值。
-- 识别 `PING` (`type=1`) 并返回 `PONG` 响应意图。
-- 对支持的 `APPLICATION_COMMAND` (`type=2`) 继续产出标准化 DTO，同时返回一个最小 interaction response 意图。
+以下失败语义保持现状：
 
-这里不继续沿用 HMAC fixture 作为生产行为，但测试中仍可保留 fixture 或新增真实签名测试向量。替代方案是把官方验签写死在 API 路由，再把插件只当纯 parser。这个方案会让 source plugin 丢失接收和鉴权职责，因此不采用。
+- 签名、时间戳错误 -> `401` / 未授权结果
+- 不支持的 interaction type -> 明确 `400`
+- plugin id 不存在、record 非法、entrypoint 无法加载、handler 缺失 -> `503` / 服务不可用
 
-### 5. 首版命令响应使用立即返回的最小文本消息
+新增的非显然点是：plugin 合法性不再由 `type == source` 代理，而由 capability 与 handler 共同约束。
 
-对成功处理的 `APPLICATION_COMMAND`，本轮返回一个合法的最小 interaction response，而不是 `DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE`。原因是 deferred 路径需要后续 callback 或 followup message 设施，而当前仓库没有对应能力。
+## Directory / File Planning
 
-因此首版采用立即返回消息的策略，例如 `type=4` 并附带一条最小文本确认消息；如需要限制频道噪音，可以把消息设置为 ephemeral。Discord 官方文档当前允许在 interaction response data 中使用 `flags: 64` 发送仅用户可见的 ephemeral 消息。
+受影响文件：
 
-替代方案是返回 `type=5` 延迟响应。但在当前没有 followup/edit-original 基础设施的前提下，这只会留下半成品，因此不采用。
-
-### 6. 配置通过 API 环境变量 + 插件 config 双层收敛
-
-真实 ingress 需要至少两类配置：
-
-- API 层：是否启用 endpoint、目标 plugin id、Discord public key 引用或值。
-- 插件层：allowlist、最小响应文案、timestamp tolerance 等行为配置。
-
-API 层配置来自环境变量，避免硬编码真实值；插件层继续通过 `config.schema.json` 描述可审计字段。由于 Discord public key 不是敏感 secret，但仍不应写死到源码或样例中，因此可继续通过“reference + env 提供映射值”的形式传递给插件。
+- `apps/api/src/quantagent/api/services/discord_interactions.py`
+  负责 API 私有编排与单插件合法性校验
+- `apps/api/src/tests/test_app.py`
+  更新旧 plugin id / type 的测试假设
+- `apps/api/src/quantagent/api/config/settings.py`
+  更新默认 Discord plugin id
+- `apps/api/README.md`
+  更新真实接收配置示例
+- 单插件目录下的 README / smoke 文档
 
 ## Risks / Trade-offs
 
-- [Risk] 只为 Discord ingress 引入最小 loader，后续可能与更完整 plugin runtime 方案重复。
-  -> Mitigation：把 loader 明确限制为“最小 entrypoint 解析能力”，不提前设计动态生命周期和通用运行时。
+- [Risk] API ingress 改为 capability/handler 校验后，未来其他插件可能想复用这条例外路径。
+  -> Mitigation：在代码注释和 spec 中明确，这只是 Discord 单插件的定向兼容，不是通用 webhook runtime。
 
-- [Risk] 当前 source 设计文档强调 push source 最终应进入 `RawEvent` / Event Bus，本轮仍停在插件内 DTO + 最小响应。
-  -> Mitigation：在 spec 和 README 中明确这是“真实 ingress 第一刀”，不等同于系统级 push source 全链路落地。
-
-- [Risk] 公开 webhook endpoint 会引入噪音探测、重放和日志脱敏压力。
-  -> Mitigation：严格校验签名和 timestamp，失败统一返回 `401` 或结构化错误，不记录完整原始 body 或公钥原文。
-
-- [Risk] Discord 文档后续可能扩展 interaction 类型或响应约束。
-  -> Mitigation：首版只承诺 `PING` 和最小 `APPLICATION_COMMAND`；其他类型显式返回不支持，后续再按官方文档增量扩展。
-
-## Migration Plan
-
-1. 先提交 OpenSpec-only PR，确认 endpoint 路径、最小响应策略和 loader 边界。
-2. 实现 API 路由、配置、loader 和插件升级。
-3. 在本地或测试环境暴露一个可被 Discord Developer Portal 访问的 HTTPS 地址。
-4. 在 Developer Portal 配置 Interactions Endpoint URL，验证 `PING` 成功。
-5. 再执行最小 slash command 或等价 interaction smoke test。
-6. 若回滚，移除 endpoint 配置并撤销 Developer Portal URL；保留旧的 standalone fixture 测试。
-
-## Open Questions
-
-- 首版成功响应文案是否统一使用固定确认文本，还是允许通过插件配置覆盖。
-- 首版是否只支持 `APPLICATION_COMMAND`，还是同时接受 `MESSAGE_COMPONENT` 并返回明确不支持结果。
-- API 层保存公钥值时使用独立环境变量，还是复用未来统一 secret/provider 抽象。
+- [Risk] 单插件默认挂在 `notification` 类型下，会让“接收能力”的可发现性变弱。
+  -> Mitigation：通过 manifest capability 和 README 清楚声明接收能力，并在 API 配置与测试中显式引用。

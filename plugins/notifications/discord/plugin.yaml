@@ -1,0 +1,10 @@
+id: quantagent.official.notification.discord
+name: Discord Notification
+type: notification
+version: 0.1.0
+entrypoint: discord_plugin:plugin
+description: Experimental official Discord plugin with low-risk send and receive capabilities.
+capabilities:
+  - notification.send
+  - notification.receive
+config_schema: config.schema.json

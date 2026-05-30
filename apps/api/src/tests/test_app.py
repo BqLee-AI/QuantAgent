@@ -871,6 +871,27 @@ class ApiAppTestCase(unittest.TestCase):
 
         self.assertEqual(env_files, (workspace / ".env",))
 
+    def test_env_file_paths_from_apps_api_cwd_include_repo_root_env(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            api_dir = workspace / "apps/api"
+            api_dir.mkdir(parents=True)
+
+            env_files = _build_env_file_paths(
+                cwd=api_dir,
+                source_repo_root=workspace,
+                source_api_app_dir=api_dir,
+            )
+
+        self.assertEqual(
+            env_files,
+            (
+                workspace / ".env",
+                api_dir / ".env",
+                api_dir / ".env.local",
+            ),
+        )
+
     def test_same_site_none_requires_secure_cookie(self) -> None:
         with self.assertRaisesRegex(ValueError, "AUTH_COOKIE_SAME_SITE=none requires AUTH_COOKIE_SECURE=true"):
             Settings(
@@ -1938,7 +1959,7 @@ class ApiAppTestCase(unittest.TestCase):
                 get_registry.return_value = SimpleNamespace(
                     get_plugin=lambda _plugin_id: SimpleNamespace(
                         status=PluginStatus.VALID,
-                        manifest=SimpleNamespace(type=PluginType.SOURCE),
+                        manifest=SimpleNamespace(capabilities=("notification.receive",)),
                     )
                 )
                 with TestClient(app) as client:
@@ -1954,7 +1975,7 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["error"]["code"], "SERVICE_UNAVAILABLE")
 
-    def test_discord_interactions_endpoint_rejects_non_source_plugin_record(self) -> None:
+    def test_discord_interactions_endpoint_rejects_plugin_without_receive_capability(self) -> None:
         app = create_app(
             self._settings(
                 DISCORD_INTERACTIONS_ENABLED=True,
@@ -1962,16 +1983,16 @@ class ApiAppTestCase(unittest.TestCase):
             )
         )
         invalid_record = PluginRecord(
-            id="quantagent.official.notification.discord_webhook",
+            id="quantagent.official.notification.discord",
             source=PluginSource.OFFICIAL,
             path=Path("/tmp/fake-plugin"),
             status=PluginStatus.VALID,
             manifest=PluginManifest(
-                id="quantagent.official.notification.discord_webhook",
-                name="Discord Webhook Notification",
+                id="quantagent.official.notification.discord",
+                name="Discord Notification",
                 type=PluginType.NOTIFICATION,
                 version="0.1.0",
-                entrypoint="discord_webhook_plugin:plugin",
+                entrypoint="discord_plugin:plugin",
                 capabilities=("notification.send",),
                 config_schema="config.schema.json",
             ),
@@ -2015,7 +2036,7 @@ class ApiAppTestCase(unittest.TestCase):
                 get_registry.return_value = SimpleNamespace(
                     get_plugin=lambda _plugin_id: SimpleNamespace(
                         status=PluginStatus.VALID,
-                        manifest=SimpleNamespace(type=PluginType.SOURCE),
+                        manifest=SimpleNamespace(capabilities=("notification.receive",)),
                     )
                 )
                 with TestClient(app) as client:
@@ -2054,7 +2075,7 @@ class ApiAppTestCase(unittest.TestCase):
                 get_registry.return_value = SimpleNamespace(
                     get_plugin=lambda _plugin_id: SimpleNamespace(
                         status=PluginStatus.VALID,
-                        manifest=SimpleNamespace(type=PluginType.SOURCE),
+                        manifest=SimpleNamespace(capabilities=("notification.receive",)),
                     )
                 )
                 with TestClient(app) as client:
@@ -2369,7 +2390,7 @@ class ApiAppTestCase(unittest.TestCase):
             "AUTH_ADMIN_PASSWORD": "test-admin-password",
             "AUTH_SESSION_SECRET": "test-session-secret-0123456789abcdef",
             "DISCORD_INTERACTIONS_ENABLED": False,
-            "DISCORD_INTERACTIONS_PLUGIN_ID": "quantagent.official.source.discord_interaction_webhook",
+            "DISCORD_INTERACTIONS_PLUGIN_ID": "quantagent.official.notification.discord",
             "DISCORD_INTERACTIONS_PUBLIC_KEY": None,
             "DISCORD_INTERACTIONS_RESPONSE_TEXT": "QuantAgent received your Discord interaction.",
             "DISCORD_INTERACTIONS_TIMESTAMP_TOLERANCE_SECONDS": 300,

@@ -1,48 +1,45 @@
 ## ADDED Requirements
 
-### Requirement: 官方 Discord 实验插件必须沿用现有插件类型边界
+### Requirement: 官方 Discord 实验能力必须以单个官方插件注册
 
-QuantAgent SHALL 通过两个官方插件实现第一版 Discord 实验性收发能力：发送使用 `notification` 插件类型，接收使用 `source` 插件类型。
+QuantAgent SHALL 通过一个官方 Discord 插件实现第一版实验性收发能力，而不是通过两个独立官方插件分别承接发送和接收。
 
-#### Scenario: 发送与接收分别以官方插件注册
-- **WHEN** 仓库实现第一版 Discord 官方实验插件组
-- **THEN** 至少存在一个 `notification` 类型的 Discord 发送插件
-- **AND** 至少存在一个 `source` 类型的 Discord 接收插件
-- **AND** 两个插件都通过各自目录内的 `plugin.yaml` 注册进入系统
+#### Scenario: 单个官方 Discord 插件进入系统
+- **WHEN** 仓库实现第一版 Discord 官方实验能力
+- **THEN** 至少存在一个官方 Discord 插件通过 `plugin.yaml` 注册进入系统
+- **AND** 该插件拥有单个 plugin id、单个 manifest 和单个 config schema
 
-#### Scenario: 第一版不通过混合插件绕过类型边界
+#### Scenario: 第一版不再维持发送/接收双插件拆分
 - **WHEN** 实现者为第一版 Discord 能力选择插件组织方式
-- **THEN** 发送能力不能通过 `source` 插件顺带承担
-- **AND** 接收能力不能通过 `notification` 插件顺带承担
+- **THEN** 发送能力和接收能力都由同一个官方 Discord 插件承接
 - **AND** 核心代码不能通过硬编码 class、import 列表或 if/else 注册 Discord 插件
 
-#### Scenario: 官方 Discord 插件提供最小目录结构样板
+#### Scenario: 官方 Discord 插件提供统一目录样板
 - **WHEN** 开发者查看第一版 Discord 官方实验插件目录
-- **THEN** 每个插件目录至少包含 `plugin.yaml`、`config.schema.json`、`README.md` 和最小实现/测试文件
-- **AND** 发送插件落在 `plugins/notifications/` 下
-- **AND** 接收插件落在 `plugins/sources/` 下
+- **THEN** 该目录至少包含 `plugin.yaml`、`config.schema.json`、`README.md` 和最小实现/测试文件
+- **AND** 发送与接收的 smoke/test 入口在同一官方插件目录下可定位
 
-### Requirement: Discord 发送插件提供最小可测发送路径
+### Requirement: Discord 单插件提供最小可测发送路径
 
-Discord 发送插件 SHALL 提供最小可独立测试的消息发送能力，并限制在低风险通知边界内。
+Discord 单插件 SHALL 提供最小可独立测试的消息发送能力，并限制在低风险通知边界内。
 
 #### Scenario: 有效配置可发送最小文本消息
-- **WHEN** 发送插件收到有效配置和一条最小文本消息
+- **WHEN** Discord 插件收到有效配置和一条最小文本消息
 - **THEN** 插件可以向 Discord webhook 或等价 mock endpoint 发起发送请求
 - **AND** 该请求不依赖核心 Runtime、审批流或真实交易执行链路
 
 #### Scenario: 发送失败以结构化结果返回
 - **WHEN** webhook 配置缺失、上游返回失败、请求超时或网络异常
-- **THEN** 发送插件返回结构化失败结果
+- **THEN** Discord 插件返回结构化失败结果
 - **AND** 失败结果包含适合测试和审计的错误摘要
 - **AND** 失败结果不暴露 secret 原文、webhook URL 全量值或私有频道信息
 
-### Requirement: Discord 接收插件使用 Webhook Push 最小路径
+### Requirement: Discord 单插件提供 Webhook Push 最小接收路径
 
-Discord 接收插件 SHALL 以 `Webhook Push` 作为第一版唯一接收路径，并在插件边界内完成鉴权和最小解析。
+Discord 单插件 SHALL 在同一插件边界内提供 `Webhook Push` 接收能力，并完成鉴权和最小解析。
 
 #### Scenario: 合法 inbound payload 可被接收
-- **WHEN** 接收插件收到合法请求头上下文、有效配置和合法 Discord inbound payload
+- **WHEN** Discord 插件收到合法请求头上下文、有效配置和合法 Discord inbound payload
 - **THEN** 插件可以完成鉴权与最小解析
 - **AND** 插件返回表示接收成功的结果
 
@@ -54,10 +51,10 @@ Discord 接收插件 SHALL 以 `Webhook Push` 作为第一版唯一接收路径�
 
 ### Requirement: Discord 接收结果只标准化到插件内 DTO
 
-第一版 Discord 接收插件 SHALL 将成功接收的入站消息标准化为插件内 DTO，而不是直接接入核心事件流。
+第一版 Discord 单插件 SHALL 将成功接收的入站消息标准化为插件内 DTO，而不是直接接入核心事件流。
 
 #### Scenario: 合法消息被解析为插件内 DTO
-- **WHEN** 接收插件成功处理一条合法 inbound payload
+- **WHEN** Discord 插件成功处理一条合法 inbound payload
 - **THEN** 输出结果包含插件内标准化 DTO
 - **AND** DTO 至少能表达消息标识、来源标识、消息文本和原始 payload 摘要
 
@@ -67,32 +64,31 @@ Discord 接收插件 SHALL 以 `Webhook Push` 作为第一版唯一接收路径�
 - **AND** 该结果不定义新的系统级 `RawEvent`、统一聊天通道或审批回流契约
 - **AND** 如需引入这些核心契约，必须先通过新的 OpenSpec change 审核
 
-### Requirement: Discord 插件配置必须通过 schema 描述且隔离敏感值
+### Requirement: Discord 单插件配置必须通过统一 schema 描述且隔离敏感值
 
-两个 Discord 官方插件 SHALL 使用 `config.schema.json` 描述最小配置，并通过 secret reference 表达敏感字段。
+第一版 Discord 官方实验插件 SHALL 使用单个 `config.schema.json` 描述最小配置，并通过 secret reference 表达敏感字段。
 
-#### Scenario: 发送插件配置只暴露最小发送所需字段
-- **WHEN** 实现者查看 Discord 发送插件的配置 schema
+#### Scenario: 统一 schema 暴露发送与接收所需最小字段
+- **WHEN** 实现者查看 Discord 插件的配置 schema
 - **THEN** schema 至少描述 webhook 相关 secret reference 字段
-- **AND** schema 不包含真实 webhook URL、token 或私有频道值
+- **AND** schema 至少描述签名校验所需 public key 或 reference 字段
+- **AND** schema 可以描述最小 allowlist 与响应文本配置
 
-#### Scenario: 接收插件配置只暴露最小接收所需字段
-- **WHEN** 实现者查看 Discord 接收插件的配置 schema
-- **THEN** schema 至少描述签名校验所需 secret/public key reference
-- **AND** schema 可以描述最小 allowlist 配置
-- **AND** schema 不包含真实 signing secret、token 或私有 guild/channel 信息
+#### Scenario: 统一 schema 不暴露敏感值
+- **WHEN** 实现者查看 Discord 插件的配置 schema
+- **THEN** schema 不包含真实 webhook URL、token、私钥或私有 guild/channel 值
 
 ### Requirement: Discord 实验插件必须可以独立 mock 验证
 
 第一版 Discord 官方实验插件 SHALL 提供不依赖系统级联调的独立验证路径。
 
-#### Scenario: 发送插件可以通过 mock endpoint 验证
-- **WHEN** 开发者运行发送插件的独立测试
+#### Scenario: 发送能力可以通过 mock endpoint 验证
+- **WHEN** 开发者运行 Discord 插件的发送测试
 - **THEN** 测试可以通过 mock HTTP endpoint 或等价 fixture 验证 payload 构造和成功发送路径
 - **AND** 测试可以验证超时与上游失败的结构化错误
 
-#### Scenario: 接收插件可以通过 fixture 验证
-- **WHEN** 开发者运行接收插件的独立测试
+#### Scenario: 接收能力可以通过 fixture 验证
+- **WHEN** 开发者运行 Discord 插件的接收测试
 - **THEN** 测试可以通过 mock inbound payload 和签名/鉴权 fixture 验证接收路径
 - **AND** 测试不依赖真实 Discord 环境即可证明“能收、能解析、能报错”
 

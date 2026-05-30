@@ -10,8 +10,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _load_module():
-    module_path = Path(__file__).resolve().parent / "discord_webhook_plugin.py"
-    module_name = "discord_webhook_plugin_smoke"
+    module_path = Path(__file__).resolve().parent / "discord_plugin.py"
+    module_name = "discord_plugin_smoke_send"
     spec = importlib.util.spec_from_file_location(module_name, module_path)
     module = importlib.util.module_from_spec(spec)
     assert spec is not None and spec.loader is not None
@@ -56,7 +56,7 @@ def main() -> int:
         print("DISCORD_WEBHOOK_TIMEOUT_SECONDS must be a number.")
         return 2
 
-    plugin = module.DiscordWebhookNotificationPlugin()
+    plugin = module.DiscordPlugin()
     result = plugin.send_text(
         {"webhook_secret_ref": "discord.webhooks.primary", "timeout_seconds": timeout_seconds},
         message,
