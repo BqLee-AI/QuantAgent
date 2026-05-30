@@ -1070,6 +1070,64 @@ class ObservabilityTestCase(unittest.TestCase):
             with gzip.open(compressed_path, "rt", encoding="utf-8") as compressed:
                 self.assertEqual(compressed.read(), '{"event":"previous-run"}\n{"event":"current-run"}\n')
 
+    def test_logging_shutdown_compresses_same_day_size_rotated_parts(self) -> None:
+        from datetime import UTC, datetime
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root_dir = Path(tmp_dir)
+            writer_set = StreamFileWriterSet(
+                FileLayoutConfig(
+                    root_dir=root_dir,
+                    service="api",
+                    env="test",
+                    instance_id="api-test",
+                    pid=321,
+                    rotate_max_bytes=24,
+                )
+            )
+            queue_runtime = QueueWriterRuntime(
+                writer_set=writer_set,
+                max_size=16,
+                access_drop_when_full=True,
+                shutdown_timeout_seconds=2.0,
+            )
+            maintenance_runtime = LogMaintenanceRuntime(
+                MaintenanceConfig(
+                    root_dir=root_dir,
+                    min_age_seconds=300,
+                    retention_days=StreamRetentionDays(access=7, app=7, error=7, security=7, audit=7),
+                    max_total_bytes=None,
+                    min_free_bytes=None,
+                )
+            )
+            runtime = _LoggingRuntime(
+                config=SimpleNamespace(),  # type: ignore[arg-type]
+                queue_runtime=queue_runtime,
+                handler=logging.NullHandler(),
+                maintenance_runtime=maintenance_runtime,
+            )
+            queue_runtime.start()
+
+            with patch("quantagent.api.observability.maintenance.datetime") as datetime_mock:
+                fixed_now = datetime(2024, 5, 1, 10, 1, 0, tzinfo=UTC)
+                datetime_mock.now.return_value = fixed_now
+                datetime_mock.fromtimestamp = datetime.fromtimestamp
+                datetime_mock.strptime = datetime.strptime
+                for index in range(3):
+                    self.assertTrue(
+                        queue_runtime.enqueue(
+                            stream="access",
+                            line=f'{{"event":"access","index":{index}}}',
+                            created_at=fixed_now.timestamp(),
+                        )
+                    )
+                runtime.shutdown()
+
+            jsonl_paths = sorted((root_dir / "access/2024/05/01").glob("*.jsonl"))
+            gzip_paths = sorted((root_dir / "access/2024/05/01").glob("*.jsonl.gz"))
+            self.assertEqual(jsonl_paths, [])
+            self.assertEqual(len(gzip_paths), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -148,6 +148,7 @@ class StreamFileWriterSet:
         self._config = config
         self._lock = threading.Lock()
         self._writers = {stream: StreamFileWriter(config, stream) for stream in SUPPORTED_STREAMS}
+        self._closed_paths: set[Path] = set()
 
     def close(self) -> set[Path]:
         with self._lock:
@@ -155,13 +156,19 @@ class StreamFileWriterSet:
             for writer in self._writers.values():
                 if (closed_path := writer.close()) is not None:
                     closed_paths.add(closed_path)
+            self._closed_paths.update(closed_paths)
             return closed_paths
 
     def write(self, *, stream: str, line: str, created_at: float) -> Path:
         if stream not in self._writers:
             raise ValueError(f"Unsupported log stream: {stream}")
         with self._lock:
-            return self._writers[stream].write_line(line, created_at)
+            writer = self._writers[stream]
+            before_path = writer.active_path()
+            path = writer.write_line(line, created_at)
+            if before_path is not None and before_path != path:
+                self._closed_paths.add(before_path)
+            return path
 
     def active_path(self, stream: str) -> Path | None:
         with self._lock:
@@ -175,3 +182,7 @@ class StreamFileWriterSet:
                 for writer in self._writers.values()
                 if (path := writer.active_path()) is not None
             }
+
+    def closed_paths(self) -> set[Path]:
+        with self._lock:
+            return set(self._closed_paths)

@@ -55,7 +55,8 @@ class QueueWriterRuntime:
         return self._writer_set.active_paths()
 
     def closed_paths(self) -> set[Path]:
-        return set(self._closed_paths)
+        writer_closed_paths = self._writer_set.closed_paths() if hasattr(self._writer_set, "closed_paths") else set()
+        return writer_closed_paths | set(self._closed_paths)
 
     def start(self) -> None:
         if not self._thread.is_alive():
