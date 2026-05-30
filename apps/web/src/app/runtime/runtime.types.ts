@@ -1,6 +1,5 @@
 import type { ApiClient, ApiClientConfig } from "@/shared/api";
 import type { AuthApi } from "@/shared/auth/api";
-import type { PluginConfigApi } from "@/features/plugins";
 import type { ModelProviderApi } from "@/features/models/api";
 import type { PluginConfigApi } from "@/features/plugins";
 
@@ -15,7 +14,6 @@ export interface RuntimeApis {
   auth: AuthApi;
   plugins: PluginConfigApi;
   modelProviders: ModelProviderApi;
-  plugins: PluginConfigApi;
 }
 
 export interface AppRuntime {
