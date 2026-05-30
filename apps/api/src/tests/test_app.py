@@ -1537,9 +1537,13 @@ class ApiAppTestCase(unittest.TestCase):
                 f"/api/v1/models/invocations?provider_id={provider_id}&preset_key=global_default"
             )
 
-            encrypted_value = client.app.state.db_session_factory().execute(
-                Base.metadata.tables["model_providers"].select()
-            ).mappings().one()["encrypted_api_key"]
+            session = client.app.state.db_session_factory()
+            try:
+                encrypted_value = session.execute(
+                    Base.metadata.tables["model_providers"].select()
+                ).mappings().one()["encrypted_api_key"]
+            finally:
+                session.close()
 
         save_body = save_response.json()
         self.assertEqual(save_response.status_code, 200)
