@@ -79,4 +79,3 @@ QuantAgent local Docker Compose configuration SHALL not cause root `.env` values
 - **WHEN** the API is started through Docker Compose
 - **THEN** the API can still receive a container-reachable `DATABASE_URL` such as a `db:5432` URL
 - **AND** host-local API execution can still use a host-reachable `DATABASE_URL` such as a `localhost:15432` URL
-

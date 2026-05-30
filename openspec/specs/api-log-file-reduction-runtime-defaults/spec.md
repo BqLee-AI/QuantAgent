@@ -103,4 +103,3 @@ API runtime documentation SHALL distinguish local defaults from production deplo
 - **AND** documentation states that non-empty relative `RUNTIME_DIR` values keep cwd-relative semantics
 - **AND** production documentation recommends explicitly setting `RUNTIME_DIR` or `LOG_DIR` to a persistent volume path
 - **AND** stdout-only structured logging is documented as a non-goal of this change
-

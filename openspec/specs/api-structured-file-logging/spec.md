@@ -221,4 +221,3 @@ The change SHALL update documentation and tests so the logging contract is revie
 - **THEN** they use temporary directories
 - **AND** they do not write test logs into the real `runtime/` directory
 - **AND** the API test command `cd apps/api && uv run python -m unittest discover -s src` covers the relevant behavior
-
