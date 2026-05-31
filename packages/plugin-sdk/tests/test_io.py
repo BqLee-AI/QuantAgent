@@ -3,13 +3,22 @@ from __future__ import annotations
 import unittest
 
 from quantagent.plugin_sdk import (
+    AnalysisInput,
+    AnalysisResult,
+    BrokerExecuteInput,
+    BrokerExecuteResult,
     DTO_VALIDATION_ERROR_CODE,
+    EvidenceExtractResult,
+    EvidenceItem,
+    EvidenceSearchResult,
     NotificationSendInput,
     NotificationSendResult,
     PluginRuntimeError,
     SourceFetchInput,
     SourceFetchResult,
     SourceItemDraft,
+    StrategyDraftInput,
+    StrategyDraftResult,
     freeze_json_mapping,
 )
 
@@ -178,6 +187,152 @@ class PluginSdkIoDtoTestCase(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, DTO_VALIDATION_ERROR_CODE)
         self.assertEqual(raised.exception.details["key_type"], "int")
+
+    def test_evidence_item_roundtrip(self) -> None:
+        original = EvidenceItem(
+            title="Evidence title",
+            url="https://example.com/evidence",
+            snippet="This is a snippet",
+            score=0.9,
+            source="Example Source",
+            published_at="2026-05-31T00:00:00Z",
+            favicon_url="https://example.com/favicon.ico",
+            metadata={"provider": "tavily"},
+        )
+        mapped = original.to_mapping()
+        restored = EvidenceItem.from_mapping(mapped)
+        self.assertEqual(restored.title, "Evidence title")
+        self.assertEqual(restored.url, "https://example.com/evidence")
+        self.assertEqual(restored.score, 0.9)
+        self.assertEqual(restored.metadata["provider"], "tavily")
+
+    def test_evidence_search_result_roundtrip(self) -> None:
+        original = EvidenceSearchResult(
+            query="test query",
+            results=(
+                EvidenceItem(title="Test", url="https://example.com", score=0.9),
+                EvidenceItem(title="Another", url="https://example.org", score=0.8),
+            ),
+            metadata={"provider": "tavily"},
+        )
+        mapped = original.to_mapping()
+        restored = EvidenceSearchResult.from_mapping(mapped)
+        self.assertEqual(restored.query, "test query")
+        self.assertEqual(len(restored.results), 2)
+        self.assertEqual(restored.results[0].title, "Test")
+        self.assertEqual(restored.metadata["provider"], "tavily")
+
+    def test_evidence_extract_result_roundtrip(self) -> None:
+        original = EvidenceExtractResult(
+            url="https://example.com/article",
+            title="Article Title",
+            content="Article content",
+            raw_content="<html>Raw HTML</html>",
+            metadata={"extracted_at": "2026-05-31"},
+        )
+        mapped = original.to_mapping()
+        restored = EvidenceExtractResult.from_mapping(mapped)
+        self.assertEqual(restored.url, "https://example.com/article")
+        self.assertEqual(restored.title, "Article Title")
+        self.assertEqual(restored.content, "Article content")
+        self.assertEqual(restored.metadata["extracted_at"], "2026-05-31")
+
+    def test_analysis_input_roundtrip(self) -> None:
+        original = AnalysisInput(
+            evidences=(
+                {"title": "Evidence 1", "url": "https://example.com/1"},
+                {"title": "Evidence 2", "url": "https://example.com/2"},
+            ),
+            query="What is the market trend?",
+            metadata={"context": "investment"},
+        )
+        mapped = original.to_mapping()
+        restored = AnalysisInput.from_mapping(mapped)
+        self.assertEqual(len(restored.evidences), 2)
+        self.assertEqual(restored.evidences[0]["title"], "Evidence 1")
+        self.assertEqual(restored.query, "What is the market trend?")
+        self.assertEqual(restored.metadata["context"], "investment")
+
+    def test_analysis_result_roundtrip(self) -> None:
+        original = AnalysisResult(
+            summary="Market is bullish",
+            key_facts=("Fact 1", "Fact 2"),
+            market_impact="High",
+            direction="up",
+            confidence=0.85,
+            uncertainty=("Risk factor 1",),
+            evidence_refs=("ref1", "ref2"),
+            metadata={"model": "gpt-4"},
+        )
+        mapped = original.to_mapping()
+        restored = AnalysisResult.from_mapping(mapped)
+        self.assertEqual(restored.summary, "Market is bullish")
+        self.assertEqual(restored.key_facts, ("Fact 1", "Fact 2"))
+        self.assertEqual(restored.confidence, 0.85)
+        self.assertEqual(restored.metadata["model"], "gpt-4")
+
+    def test_strategy_draft_input_roundtrip(self) -> None:
+        original = StrategyDraftInput(
+            analysis={"summary": "Bullish market", "confidence": 0.9},
+            metadata={"strategy_type": "momentum"},
+        )
+        mapped = original.to_mapping()
+        restored = StrategyDraftInput.from_mapping(mapped)
+        self.assertEqual(restored.analysis["summary"], "Bullish market")
+        self.assertEqual(restored.metadata["strategy_type"], "momentum")
+
+    def test_strategy_draft_result_roundtrip(self) -> None:
+        original = StrategyDraftResult(
+            action="buy",
+            symbol="AAPL",
+            direction="long",
+            time_horizon="1w",
+            rationale="Strong earnings",
+            risk_notes=("Market volatility", "Sector risk"),
+            confidence=0.8,
+            requires_approval=True,
+            metadata={"risk_level": "medium"},
+        )
+        mapped = original.to_mapping()
+        restored = StrategyDraftResult.from_mapping(mapped)
+        self.assertEqual(restored.action, "buy")
+        self.assertEqual(restored.symbol, "AAPL")
+        self.assertEqual(restored.risk_notes, ("Market volatility", "Sector risk"))
+        self.assertEqual(restored.confidence, 0.8)
+        self.assertEqual(restored.metadata["risk_level"], "medium")
+
+    def test_broker_execute_input_roundtrip(self) -> None:
+        original = BrokerExecuteInput(
+            action="buy",
+            symbol="AAPL",
+            quantity=100.0,
+            order_type="limit",
+            price=150.0,
+            dry_run=True,
+            metadata={"account": "demo"},
+        )
+        mapped = original.to_mapping()
+        restored = BrokerExecuteInput.from_mapping(mapped)
+        self.assertEqual(restored.action, "buy")
+        self.assertEqual(restored.symbol, "AAPL")
+        self.assertEqual(restored.quantity, 100.0)
+        self.assertEqual(restored.dry_run, True)
+        self.assertEqual(restored.metadata["account"], "demo")
+
+    def test_broker_execute_result_roundtrip(self) -> None:
+        original = BrokerExecuteResult(
+            status="validated",
+            estimated_order={"symbol": "AAPL", "quantity": 100, "price": 150.0},
+            validation_errors=(),
+            audit_hints=("Check account balance",),
+            metadata={"broker": "ibkr"},
+        )
+        mapped = original.to_mapping()
+        restored = BrokerExecuteResult.from_mapping(mapped)
+        self.assertEqual(restored.status, "validated")
+        self.assertEqual(restored.estimated_order["symbol"], "AAPL")
+        self.assertEqual(restored.audit_hints, ("Check account balance",))
+        self.assertEqual(restored.metadata["broker"], "ibkr")
 
 
 if __name__ == "__main__":

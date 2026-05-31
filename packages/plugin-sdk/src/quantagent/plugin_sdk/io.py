@@ -536,10 +536,10 @@ class StrategyDraftInput:
 class StrategyDraftResult:
     """策略草稿插件的输出结果"""
     action: str
+    rationale: str
     symbol: str | None = None
     direction: str | None = None
     time_horizon: str | None = None
-    rationale: str
     risk_notes: tuple[str, ...] = field(default_factory=tuple)
     confidence: float | None = None
     requires_approval: bool = True
