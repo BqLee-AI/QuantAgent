@@ -94,6 +94,27 @@ class DiscordPluginSendTestCase(unittest.TestCase):
         self.assertEqual(result.code, "INVALID_MESSAGE")
         self.assertFalse(transport_called)
 
+    def test_send_text_rejects_non_https_webhook_without_transport_call(self) -> None:
+        transport_called = False
+
+        def fake_transport(_request):
+            nonlocal transport_called
+            transport_called = True
+            return MODULE.DiscordWebhookResponse(status_code=204)
+
+        result = self.plugin.send_text(
+            self.config,
+            "hello discord",
+            secrets={"discord.webhooks.primary": "http://discord.example.invalid/api/webhooks/test"},
+            transport=fake_transport,
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.code, "INVALID_WEBHOOK_URL")
+        self.assertEqual(result.webhook_secret_ref, "discord.webhooks.primary")
+        self.assertNotIn("discord.example.invalid", result.message)
+        self.assertFalse(transport_called)
+
     def test_send_text_returns_upstream_error_without_leaking_webhook(self) -> None:
         def fake_transport(_request):
             return MODULE.DiscordWebhookResponse(status_code=502, body="discord upstream unavailable")

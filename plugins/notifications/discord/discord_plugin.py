@@ -6,6 +6,7 @@ import socket
 import time
 from typing import Any, Callable, Mapping
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from nacl.exceptions import BadSignatureError
@@ -101,6 +102,14 @@ class DiscordPlugin:
                 ok=False,
                 code="SECRET_NOT_RESOLVED",
                 message="Webhook secret reference could not be resolved.",
+                webhook_secret_ref=webhook_secret_ref,
+            )
+
+        if not _is_allowed_webhook_url(webhook_url):
+            return SendResult(
+                ok=False,
+                code="INVALID_WEBHOOK_URL",
+                message="Discord webhook URL must use https scheme.",
                 webhook_secret_ref=webhook_secret_ref,
             )
 
@@ -327,6 +336,11 @@ def _resolve_secret(secret_ref: str, secrets: Mapping[str, str] | None) -> str |
     if not isinstance(value, str):
         return None
     return value.strip() or None
+
+
+def _is_allowed_webhook_url(value: str) -> bool:
+    parsed = urllib.parse.urlparse(value)
+    return parsed.scheme == "https" and bool(parsed.netloc)
 
 
 def _resolve_public_key(config: Mapping[str, Any], secrets: Mapping[str, str] | None) -> str | None:
