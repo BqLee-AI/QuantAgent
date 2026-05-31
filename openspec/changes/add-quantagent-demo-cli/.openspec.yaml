@@ -1,0 +1,5 @@
+schema: spec-driven
+change_id: add-quantagent-demo-cli
+title: 新增 quantagent-demo CLI，演示插件调度到事件消费最小闭环
+status: draft
+created: 2026-05-31
