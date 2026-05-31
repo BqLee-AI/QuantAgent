@@ -12,6 +12,7 @@ import asyncio
 import json
 import sys
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
@@ -206,7 +207,6 @@ class TavilySourcePluginTestCase(unittest.TestCase):
     def test_upstream_401_is_wrapped_and_desensitized(self) -> None:
         """测试上游 401 错误被正确包装且脱敏。"""
         def _fake_401(request, timeout=10.0):
-            import urllib.error
             raise urllib.error.HTTPError(
                 url="https://api.tavily.com/search",
                 code=401,

@@ -6,7 +6,7 @@
 
 - 只提供 `source.search` 和 `source.extract` 两个能力，不暴露其他 tool 接口。
 - 只消费平台传入的校验后配置 / `effective_config`。
-- 返回平台约定的 Source Plugin 输出结构。
+- 返回插件内统一 JSON-safe tool DTO（不是 `SourceFetchResult`，保持 evidence/tool 语义清晰）。
 - **不负责** `RawEvent` 入库、去重、`SourceBinding`、`Event Bus`、权限或生命周期。
 - **不负责** Tavily API key 的获取、验证或管理（由平台在 `api_key_ref` 配置中注入）。
 - **不负责** 调度、重试、跨插件调用或 ToolRegistry 集成。
@@ -65,7 +65,7 @@ include_raw_content: false          # 可选，默认 false
 
 ```bash
 # 在项目根目录执行
-python -m pytest plugins/sources/tavily-source/tests/test_tavily_source.py -v
+python -m unittest discover -s plugins/sources/tavily-source/tests -v
 ```
 
 ### 测试策略

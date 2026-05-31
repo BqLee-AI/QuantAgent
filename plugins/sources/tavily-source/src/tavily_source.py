@@ -20,7 +20,7 @@ _src_dir = str(Path(__file__).parent)
 if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
-from tavily_client import TavilyClient, TavilyClientError, _default_http_request
+from tavily_client import TavilyClient, TavilyClientError, default_http_request
 
 from quantagent.plugin_sdk import (
     BasePlugin,
@@ -41,7 +41,7 @@ class TavilySourcePlugin(BasePlugin):
     """
 
     # 类属性 seam，测试时注入 mock HTTP 实现
-    http_request = staticmethod(_default_http_request)
+    http_request = staticmethod(default_http_request)
 
     async def invoke(self, request: PluginInvokeRequest) -> PluginInvokeResult:
         """处理插件调用请求。
@@ -108,10 +108,11 @@ class TavilySourcePlugin(BasePlugin):
                 details={"reason": str(e)},
             )
         except Exception as e:
-            # 未预期错误
+            # 未预期错误：原始信息只记日志，不泄露给调用方
+            self.logger.error("Unexpected error in invoke: %s: %s", type(e).__name__, e)
             raise PluginRuntimeError(
                 code="PLUGIN_INTERNAL_ERROR",
-                message=f"Unexpected error: {e}",
+                message="An internal error occurred",
                 stage="invoke",
                 details={"error_type": type(e).__name__},
             )
@@ -128,9 +129,9 @@ class TavilySourcePlugin(BasePlugin):
         """
         query = _require_string(config, "query")
 
-        # 提取搜索参数，使用默认值或配置
-        max_results = _coerce_max_results(config.get("default_max_results"))
-        search_depth = _coerce_search_depth(config.get("default_search_depth"))
+        # 提取搜索参数：请求级参数优先，fallback 到平台配置级默认值
+        max_results = _coerce_max_results(config.get("max_results") or config.get("default_max_results"))
+        search_depth = _coerce_search_depth(config.get("search_depth") or config.get("default_search_depth"))
         include_raw_content = bool(config.get("include_raw_content", False))
         include_favicon = bool(config.get("include_favicon", False))
 

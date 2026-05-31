@@ -15,10 +15,11 @@ import urllib.request
 from typing import Any, Callable, Dict, List, Mapping, Optional
 
 
-def _default_http_request(request: urllib.request.Request, timeout: float = 10.0):
+def default_http_request(request: urllib.request.Request, timeout: float = 10.0):
     """默认 HTTP 请求实现，使用 urllib.request.urlopen。
 
     作为模块级函数而非类方法，方便测试时注入 mock 实现。
+    不使用下划线前缀，因为 tavily_source.py 需要显式引用它作为类属性默认值。
     """
     return urllib.request.urlopen(request, timeout=timeout)
 
@@ -48,15 +49,6 @@ class TavilyClientError(Exception):
         self.details = details or {}
         super().__init__(message)
 
-    def to_mapping(self) -> Dict[str, Any]:
-        """转换为字典，用于错误序列化。"""
-        return {
-            "code": self.code,
-            "message": self.message,
-            "retryable": self.retryable,
-            "details": self.details,
-        }
-
 
 class TavilyClient:
     """Tavily API 客户端。
@@ -71,7 +63,7 @@ class TavilyClient:
         api_key: str,
         timeout: float = 10.0,
         *,
-        http_request: Callable[[urllib.request.Request, float], Any] = _default_http_request,
+        http_request: Callable[[urllib.request.Request, float], Any] = default_http_request,
     ) -> None:
         """初始化 Tavily 客户端。
 
@@ -210,6 +202,7 @@ class TavilyClient:
             return json.loads(response_body)
         except urllib.error.HTTPError as e:
             self._handle_http_error(e)
+            raise AssertionError("unreachable: _handle_http_error always raises")  # 类型安全
         except urllib.error.URLError as e:
             if isinstance(e.reason, TimeoutError):
                 raise TavilyClientError(
@@ -242,14 +235,8 @@ class TavilyClient:
         """处理 HTTP 错误并抛出相应的 TavilyClientError。"""
         status_code = error.code
 
-        # 尝试读取错误响应体（用于调试，但不泄露给客户端）
+        # 只记录状态码，不读取响应体——响应体可能含敏感信息，不放进 error details
         error_details = {"status_code": status_code}
-        try:
-            error_body = error.read().decode("utf-8", errors="replace")
-            # 仅记录有限信息，不泄露完整响应
-            error_details["response_preview"] = error_body[:200] if error_body else None
-        except Exception:
-            error_details["response_preview"] = None
 
         if status_code == 401:
             raise TavilyClientError(
@@ -344,17 +331,16 @@ class TavilyClient:
         # 返回第一个成功的结果
         first_result = results[0]
         content = first_result.get("raw_content", "")
-        raw_content = first_result.get("raw_content") if raw.get("auto_parameters", {}).get("include_raw_content") else None
 
         return {
             "url": first_result.get("url", ""),
             "title": None,  # Tavily extract 不直接返回标题
             "content": content,
-            "raw_content": raw_content,
+            "raw_content": content,  # extract 的 raw_content 直接取，不依赖 auto_parameters
             "metadata": {
                 "provider": "tavily",
                 "content_length": len(content),
                 "extraction_source": "tavily-extract",
-                "favicon_url": first_result.get("favicon") if raw.get("auto_parameters", {}).get("include_favicon") else None,
+                "favicon_url": first_result.get("favicon"),
             },
         }
