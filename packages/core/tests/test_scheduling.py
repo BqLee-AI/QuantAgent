@@ -20,6 +20,7 @@ from quantagent.core.scheduling import (
     PluginTriggerRequest,
     PluginTriggerType,
 )
+from quantagent.core.events import InMemoryEventBus
 from quantagent.plugin_sdk import BasePlugin, PluginInvokeResult, PluginRuntimeError
 
 
@@ -415,6 +416,139 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(run.status, PluginRunStatus.FAILED)
         self.assertEqual(run.plugin_id, "invalid-plugin-id")
         self.assertEqual(run.error_summary["code"], "PLUGIN_SCHEDULING_FAILED")
+
+    def _service_with_publisher(self, record: PluginRecord, bus: InMemoryEventBus) -> PluginSchedulingService:
+        registry = PluginRegistry(StaticScanner([record]))
+        return PluginSchedulingService(
+            registry=registry,
+            runtime=PluginRuntimeService(),
+            repository=self.repository,
+            clock=self.clock,
+            publisher=bus,
+        )
+
+    async def test_trigger_publishes_source_event_when_publisher_provided(self) -> None:
+        """有 publisher 时 source.fetch 成功 → InMemoryEventBus 上出现 source.event.captured"""
+
+        class RecordingHandler:
+            def __init__(self) -> None:
+                self.envelopes: list[object] = []
+
+            async def handle(self, envelope) -> None:
+                self.envelopes.append(envelope)
+
+        bus = InMemoryEventBus()
+        handler = RecordingHandler()
+        await bus.subscribe(topics=["source.event.captured"], group_id="test-group", handler=handler)
+
+        class SourcePlugin(BasePlugin):
+            async def invoke(self, request):
+                return PluginInvokeResult(
+                    output={"items": [{"external_id": "a1", "title": "Test"}], "metadata": {}},
+                )
+
+        self._install_module("test_publish_source", SourcePlugin)
+        service = self._service_with_publisher(self._record(entrypoint="test_publish_source:plugin"), bus)
+        request = self._request(request_id="req-publish-1")
+
+        run = await service.trigger(request)
+
+        self.assertEqual(run.status, PluginRunStatus.SUCCEEDED)
+        self.assertEqual(len(handler.envelopes), 1)
+        envelope = handler.envelopes[0]
+        self.assertEqual(envelope.topic, "source.event.captured")
+        self.assertIn("plugin_id", envelope.payload)
+        self.assertEqual(envelope.payload["plugin_id"], "quantagent.test.scheduling")
+
+    async def test_trigger_without_publisher_behaves_identically(self) -> None:
+        """无 publisher 时行为不变"""
+
+        class SuccessPlugin(BasePlugin):
+            async def invoke(self, request):
+                return PluginInvokeResult(output={"items": []})
+
+        self._install_module("test_no_publisher", SuccessPlugin)
+        service = self._service(self._record(entrypoint="test_no_publisher:plugin"))
+        request = self._request(request_id="req-no-pub-1")
+
+        run = await service.trigger(request)
+
+        self.assertEqual(run.status, PluginRunStatus.SUCCEEDED)
+
+    async def test_trigger_does_not_publish_for_non_source_capability(self) -> None:
+        """非 source.fetch capability 不发布事件"""
+
+        class RecordingHandler:
+            def __init__(self) -> None:
+                self.envelopes: list[object] = []
+
+            async def handle(self, envelope) -> None:
+                self.envelopes.append(envelope)
+
+        bus = InMemoryEventBus()
+        handler = RecordingHandler()
+        await bus.subscribe(topics=["source.event.captured"], group_id="test-group", handler=handler)
+
+        class NotifyPlugin(BasePlugin):
+            async def invoke(self, request):
+                return PluginInvokeResult(output={"accepted": True})
+
+        self._install_module("test_notify_cap", NotifyPlugin)
+        record = PluginRecord(
+            id="quantagent.test.scheduling",
+            source=PluginSource.OFFICIAL,
+            path=Path(tempfile.gettempdir()),
+            status=PluginStatus.VALID,
+            manifest=PluginManifest(
+                id="quantagent.test.scheduling",
+                name="Notify Test",
+                type=PluginType.SOURCE,
+                version="0.1.0",
+                entrypoint="test_notify_cap:plugin",
+                capabilities=("notification.send",),
+                config_schema="config.schema.json",
+            ),
+        )
+        service = self._service_with_publisher(record, bus)
+        request = PluginTriggerRequest(
+            plugin_id="quantagent.test.scheduling",
+            capability="notification.send",
+            request_id="req-notify-1",
+            trigger_type=PluginTriggerType.MANUAL,
+            input={},
+            effective_config={"enabled": True},
+        )
+
+        run = await service.trigger(request)
+
+        self.assertEqual(run.status, PluginRunStatus.SUCCEEDED)
+        self.assertEqual(len(handler.envelopes), 0)
+
+    async def test_trigger_publish_failure_does_not_affect_run_record(self) -> None:
+        """发布失败不影响 PluginRunRecord 状态"""
+
+        class FailingPublisher:
+            async def publish(self, envelope):
+                raise RuntimeError("publish failed")
+
+        class SourcePlugin(BasePlugin):
+            async def invoke(self, request):
+                return PluginInvokeResult(output={"items": [{"external_id": "x"}]})
+
+        self._install_module("test_publish_fail", SourcePlugin)
+        registry = PluginRegistry(StaticScanner([self._record(entrypoint="test_publish_fail:plugin")]))
+        service = PluginSchedulingService(
+            registry=registry,
+            runtime=PluginRuntimeService(),
+            repository=self.repository,
+            clock=self.clock,
+            publisher=FailingPublisher(),
+        )
+        request = self._request(request_id="req-fail-pub-1")
+
+        run = await service.trigger(request)
+
+        self.assertEqual(run.status, PluginRunStatus.SUCCEEDED)
 
     def _service(self, record: PluginRecord) -> PluginSchedulingService:
         registry = PluginRegistry(StaticScanner([record]))
