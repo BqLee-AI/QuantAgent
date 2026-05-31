@@ -425,7 +425,7 @@ class AnalysisInput:
 
     def __post_init__(self) -> None:
         # evidences 用 Mapping[str, Any] 不强绑定具体 DTO 类型，保持链路松耦合
-        object.__setattr__(self, "evidences", _freeze_evidence_mappings(self.evidences))
+        object.__setattr__(self, "evidences", _freeze_evidence_mappings(self.evidences, stage="invoke"))
         _validate_optional_string("query", self.query)
         object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata))
 
@@ -714,18 +714,19 @@ def _freeze_evidence_items(items: tuple[EvidenceItem, ...] | list[EvidenceItem])
     return tuple(frozen_items)
 
 
-def _freeze_evidence_mappings(items: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
+def _freeze_evidence_mappings(items: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]], *, stage: str = "invoke") -> tuple[Mapping[str, Any], ...]:
     """冻结证据映射元组，验证所有元素都是映射并冻结"""
     if not isinstance(items, list | tuple):
         raise dto_validation_error(
             "AnalysisInput.evidences must be an array of mapping objects.",
             field_name="evidences",
+            stage=stage,
             details={"value_type": type(items).__name__},
         )
     frozen_items: list[Mapping[str, Any]] = []
     for item in items:
-        frozen = _require_mapping(item, field_name="evidences", stage="invoke")
-        frozen_items.append(freeze_json_mapping(frozen, stage="invoke"))
+        frozen = _require_mapping(item, field_name="evidences", stage=stage)
+        frozen_items.append(freeze_json_mapping(frozen, stage=stage))
     return tuple(frozen_items)
 
 

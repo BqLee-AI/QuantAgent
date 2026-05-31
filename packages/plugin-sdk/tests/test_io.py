@@ -334,6 +334,32 @@ class PluginSdkIoDtoTestCase(unittest.TestCase):
         self.assertEqual(restored.audit_hints, ("Check account balance",))
         self.assertEqual(restored.metadata["broker"], "ibkr")
 
+    # -- 负面测试：验证 from_mapping 对非法输入的正确拒绝 --
+
+    def test_evidence_search_result_rejects_missing_query(self) -> None:
+        """EvidenceSearchResult.from_mapping 缺少 query 必须抛 dto_validation_error"""
+        with self.assertRaises(PluginRuntimeError) as cm:
+            EvidenceSearchResult.from_mapping({"results": []})
+        self.assertEqual(cm.exception.code, DTO_VALIDATION_ERROR_CODE)
+
+    def test_analysis_input_rejects_non_array_evidences(self) -> None:
+        """AnalysisInput.from_mapping evidences 不是数组必须抛 dto_validation_error"""
+        with self.assertRaises(PluginRuntimeError) as cm:
+            AnalysisInput.from_mapping({"evidences": "not_array"})
+        self.assertEqual(cm.exception.code, DTO_VALIDATION_ERROR_CODE)
+
+    def test_broker_execute_input_rejects_non_string_action(self) -> None:
+        """BrokerExecuteInput.from_mapping action 不是字符串必须抛 dto_validation_error"""
+        with self.assertRaises(PluginRuntimeError) as cm:
+            BrokerExecuteInput.from_mapping({"action": 123, "symbol": "AAPL"})
+        self.assertEqual(cm.exception.code, DTO_VALIDATION_ERROR_CODE)
+
+    def test_broker_execute_result_rejects_missing_status(self) -> None:
+        """BrokerExecuteResult.from_mapping 缺少 status 必须抛 dto_validation_error"""
+        with self.assertRaises(PluginRuntimeError) as cm:
+            BrokerExecuteResult.from_mapping({})
+        self.assertEqual(cm.exception.code, DTO_VALIDATION_ERROR_CODE)
+
 
 if __name__ == "__main__":
     unittest.main()
