@@ -289,6 +289,133 @@ class NotificationSendResult:
         )
 
 
+@dataclass(frozen=True)
+class EvidenceItem:
+    """证据检索结果中的单个证据项"""
+    title: str | None = None
+    url: str | None = None
+    snippet: str | None = None
+    score: float | None = None
+    source: str | None = None
+    published_at: str | None = None
+    favicon_url: str | None = None
+    metadata: JsonObject = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _validate_optional_string("title", self.title)
+        _validate_optional_string("url", self.url)
+        _validate_optional_string("snippet", self.snippet)
+        _validate_optional_float("score", self.score)
+        _validate_optional_string("source", self.source)
+        _validate_optional_string("published_at", self.published_at)
+        _validate_optional_string("favicon_url", self.favicon_url)
+        object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata))
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "title": self.title,
+            "url": self.url,
+            "snippet": self.snippet,
+            "score": self.score,
+            "source": self.source,
+            "published_at": self.published_at,
+            "favicon_url": self.favicon_url,
+            "metadata": to_json_value(self.metadata),
+        }
+
+    as_plugin_output = to_mapping
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any], *, stage: str = "invoke") -> EvidenceItem:
+        _validate_object(payload, dto_name="EvidenceItem", stage=stage)
+        return cls(
+            title=_get_optional_string(payload, "title", stage=stage),
+            url=_get_optional_string(payload, "url", stage=stage),
+            snippet=_get_optional_string(payload, "snippet", stage=stage),
+            score=_get_optional_float(payload, "score", stage=stage),
+            source=_get_optional_string(payload, "source", stage=stage),
+            published_at=_get_optional_string(payload, "published_at", stage=stage),
+            favicon_url=_get_optional_string(payload, "favicon_url", stage=stage),
+            metadata=freeze_json_mapping(_get_optional_mapping(payload, "metadata", stage=stage), stage=stage),
+        )
+
+
+@dataclass(frozen=True)
+class EvidenceSearchResult:
+    """证据检索插件的输出结果"""
+    query: str
+    results: tuple[EvidenceItem, ...] = field(default_factory=tuple)
+    metadata: JsonObject = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _validate_required_string("query", self.query)
+        object.__setattr__(self, "results", _freeze_evidence_items(self.results))
+        object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata))
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "query": self.query,
+            "results": [item.to_mapping() for item in self.results],
+            "metadata": to_json_value(self.metadata),
+        }
+
+    as_plugin_output = to_mapping
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any], *, stage: str = "invoke") -> EvidenceSearchResult:
+        _validate_object(payload, dto_name="EvidenceSearchResult", stage=stage)
+        results_raw = payload.get("results", [])
+        if not isinstance(results_raw, list | tuple):
+            raise dto_validation_error("results must be an array.", field_name="results", stage=stage)
+        return cls(
+            query=_get_required_string(payload, "query", stage=stage),
+            results=tuple(
+                item if isinstance(item, EvidenceItem) else EvidenceItem.from_mapping(_require_mapping(item, field_name="results", stage=stage), stage=stage)
+                for item in results_raw
+            ),
+            metadata=freeze_json_mapping(_get_optional_mapping(payload, "metadata", stage=stage), stage=stage),
+        )
+
+
+@dataclass(frozen=True)
+class EvidenceExtractResult:
+    """证据内容提取插件的输出结果"""
+    url: str
+    title: str | None = None
+    content: str | None = None
+    raw_content: str | None = None
+    metadata: JsonObject = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _validate_required_string("url", self.url)
+        _validate_optional_string("title", self.title)
+        _validate_optional_string("content", self.content)
+        _validate_optional_string("raw_content", self.raw_content)
+        object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata))
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "url": self.url,
+            "title": self.title,
+            "content": self.content,
+            "raw_content": self.raw_content,
+            "metadata": to_json_value(self.metadata),
+        }
+
+    as_plugin_output = to_mapping
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any], *, stage: str = "invoke") -> EvidenceExtractResult:
+        _validate_object(payload, dto_name="EvidenceExtractResult", stage=stage)
+        return cls(
+            url=_get_required_string(payload, "url", stage=stage),
+            title=_get_optional_string(payload, "title", stage=stage),
+            content=_get_optional_string(payload, "content", stage=stage),
+            raw_content=_get_optional_string(payload, "raw_content", stage=stage),
+            metadata=freeze_json_mapping(_get_optional_mapping(payload, "metadata", stage=stage), stage=stage),
+        )
+
+
 def _freeze_items(items: tuple[SourceItemDraft, ...] | list[SourceItemDraft]) -> tuple[SourceItemDraft, ...]:
     if not isinstance(items, list | tuple):
         raise dto_validation_error(
@@ -305,6 +432,41 @@ def _freeze_items(items: tuple[SourceItemDraft, ...] | list[SourceItemDraft]) ->
                 details={"value_type": type(item).__name__},
             )
         frozen_items.append(item)
+    return tuple(frozen_items)
+
+
+def _freeze_evidence_items(items: tuple[EvidenceItem, ...] | list[EvidenceItem]) -> tuple[EvidenceItem, ...]:
+    """冻结 EvidenceItem 元组，验证所有元素都是 EvidenceItem 实例"""
+    if not isinstance(items, list | tuple):
+        raise dto_validation_error(
+            "EvidenceSearchResult.results must be an array of EvidenceItem objects.",
+            field_name="results",
+            details={"value_type": type(items).__name__},
+        )
+    frozen_items: list[EvidenceItem] = []
+    for item in items:
+        if not isinstance(item, EvidenceItem):
+            raise dto_validation_error(
+                "EvidenceSearchResult.results must contain EvidenceItem instances.",
+                field_name="results",
+                details={"value_type": type(item).__name__},
+            )
+        frozen_items.append(item)
+    return tuple(frozen_items)
+
+
+def _freeze_evidence_mappings(items: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]]) -> tuple[Mapping[str, Any], ...]:
+    """冻结证据映射元组，验证所有元素都是映射并冻结"""
+    if not isinstance(items, list | tuple):
+        raise dto_validation_error(
+            "AnalysisInput.evidences must be an array of mapping objects.",
+            field_name="evidences",
+            details={"value_type": type(items).__name__},
+        )
+    frozen_items: list[Mapping[str, Any]] = []
+    for item in items:
+        frozen = _require_mapping(item, field_name="evidences", stage="invoke")
+        frozen_items.append(freeze_json_mapping(frozen, stage="invoke"))
     return tuple(frozen_items)
 
 
@@ -419,3 +581,82 @@ def _require_mapping(value: Any, *, field_name: str, stage: str) -> Mapping[str,
         stage=stage,
         details={"value_type": type(value).__name__},
     )
+
+
+def _validate_optional_float(field_name: str, value: Any, *, stage: str = "invoke") -> None:
+    """验证可选浮点数字段，接受 int 或 float，拒绝 NaN/Inf"""
+    if value is None:
+        return
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise dto_validation_error(
+            f"{field_name} must be a number or null.",
+            field_name=field_name,
+            stage=stage,
+            details={"value_type": type(value).__name__},
+        )
+    if isinstance(value, float) and not math.isfinite(value):
+        raise dto_validation_error(
+            f"{field_name} must be a finite number.",
+            field_name=field_name,
+            stage=stage,
+        )
+
+
+def _validate_required_float(field_name: str, value: Any, *, stage: str = "invoke") -> None:
+    """验证必需浮点数字段，接受 int 或 float，拒绝 NaN/Inf"""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise dto_validation_error(
+            f"{field_name} must be a number.",
+            field_name=field_name,
+            stage=stage,
+            details={"value_type": type(value).__name__},
+        )
+    if isinstance(value, float) and not math.isfinite(value):
+        raise dto_validation_error(
+            f"{field_name} must be a finite number.",
+            field_name=field_name,
+            stage=stage,
+        )
+
+
+def _get_required_float(payload: Mapping[str, Any], field_name: str, *, stage: str) -> float:
+    """从 payload 获取必需的浮点数字段"""
+    if field_name not in payload:
+        raise dto_validation_error(
+            f"{field_name} is required.",
+            field_name=field_name,
+            stage=stage,
+        )
+    value = payload[field_name]
+    _validate_required_float(field_name, value, stage=stage)
+    return float(value)
+
+
+def _get_optional_float(payload: Mapping[str, Any], field_name: str, *, stage: str) -> float | None:
+    """从 payload 获取可选的浮点数字段"""
+    value = payload.get(field_name)
+    _validate_optional_float(field_name, value, stage=stage)
+    return float(value) if value is not None else None
+
+
+def _freeze_strings(values: tuple[str, ...] | list[str]) -> tuple[str, ...]:
+    """冻结字符串元组，验证所有元素都是字符串"""
+    if not isinstance(values, list | tuple):
+        raise dto_validation_error("Expected a list of strings.", details={"value_type": type(values).__name__})
+    for item in values:
+        if not isinstance(item, str):
+            raise dto_validation_error("All items must be strings.", details={"value_type": type(item).__name__})
+    return tuple(values)
+
+
+def _get_optional_string_tuple(payload: Mapping[str, Any], field_name: str, *, stage: str) -> tuple[str, ...]:
+    """从 payload 获取可选的字符串元组字段"""
+    value = payload.get(field_name, [])
+    if not isinstance(value, list | tuple):
+        raise dto_validation_error(
+            f"{field_name} must be an array of strings.",
+            field_name=field_name,
+            stage=stage,
+            details={"value_type": type(value).__name__},
+        )
+    return _freeze_strings(value)
