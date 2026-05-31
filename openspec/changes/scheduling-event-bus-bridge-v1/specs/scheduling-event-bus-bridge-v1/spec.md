@@ -45,8 +45,8 @@ The scheduling service SHALL NOT construct `EventEnvelope` directly. It SHALL de
 #### Scenario: output is converted to SourceFetchResult before publishing
 - **GIVEN** a successful `source.fetch` invocation with output `{"items": [...], ...}`
 - **WHEN** the scheduling service publishes the result
-- **THEN** it SHALL call `SourceFetchResult.from_mapping(invocation.result.output)`
-- **AND** pass the result to `SourceEventPublisher.publish_source_fetch_result()`
+- **THEN** it SHALL call `SourceFetchResult.from_mapping(invocation.result.output, stage="publish")`
+- **AND** pass the result to `SourceEventPublisher.publish_source_fetch_result()` with `producer="plugin-scheduling"`, `request_id` from the trigger request, `plugin_id` from the trigger request, and `causation_id` set to `run.run_id`
 
 ### Requirement: Publishing failure does not affect scheduling record
 
@@ -56,13 +56,13 @@ If the event publishing fails for any reason (conversion error, publisher error,
 - **GIVEN** a successful `source.fetch` invocation with malformed output
 - **WHEN** `SourceFetchResult.from_mapping()` raises an exception
 - **THEN** the `PluginRunRecord` SHALL still have status `SUCCEEDED`
-- **AND** a warning SHALL be logged
+- **AND** a warning SHALL be logged containing `plugin_id`, `run_id`, and `error_type`
 
 #### Scenario: publisher raises an exception
 - **GIVEN** a successful `source.fetch` invocation and a publisher that raises
 - **WHEN** `publisher.publish()` raises an exception
 - **THEN** the `PluginRunRecord` SHALL still have status `SUCCEEDED`
-- **AND** a warning SHALL be logged
+- **AND** a warning SHALL be logged containing `plugin_id`, `run_id`, and `error_type`
 
 ### Requirement: Zero regression guarantee
 

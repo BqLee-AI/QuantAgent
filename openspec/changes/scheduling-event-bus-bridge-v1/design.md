@@ -76,9 +76,20 @@ AND invocation.result.output is not None
 
 ```text
 invocation.result.output (dict)
-  → SourceFetchResult.from_mapping(output)
+  → SourceFetchResult.from_mapping(output, stage="publish")
   → SourceEventPublisher.publish_source_fetch_result(result, ...)
   → EventEnvelope → EventBusPublisher.publish(envelope)
+```
+
+`from_mapping` 的 `stage` 参数传入 `"publish"` 而非默认 `"invoke"`，保持审计归属清晰：DTO 校验失败时的错误信息会标记为 publish 阶段，不会误导排查者以为问题出在插件调用。
+
+参数映射（`publish_source_fetch_result` 的关键字参数）：
+
+```text
+producer       = "plugin-scheduling"
+request_id     = validated_request.request_id
+plugin_id      = validated_request.plugin_id
+causation_id   = run.run_id
 ```
 
 ### 4. 发布失败不改变调度记录
@@ -89,9 +100,13 @@ invocation.result.output (dict)
 try:
     await self._publish_source_result(invocation, run, validated_request)
 except Exception:
-    # warning log, 不传播异常
-    pass
+    logger.warning(
+        "Event publish failed after successful scheduling.",
+        extra={"plugin_id": run.plugin_id, "run_id": run.run_id, "error_type": exc.__class__.__name__},
+    )
 ```
+
+warning 日志必须包含 `plugin_id`、`run_id`、`error_type`，确保生产环境可排查。
 
 原因：
 - 调度层和发布层是不同关注点。调度已成功，不应因为发布失败而标记调度为 FAILED。
