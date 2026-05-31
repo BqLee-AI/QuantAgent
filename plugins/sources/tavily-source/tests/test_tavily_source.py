@@ -26,7 +26,7 @@ for src_root in (
 
 from quantagent.core.registry import RegistryScanner
 from quantagent.core.runtime import PluginRuntimeService
-from quantagent.plugin_sdk import PluginInvokeRequest, PluginRuntimeError
+from quantagent.plugin_sdk import PluginInvokeRequest, PluginRuntimeError, SourceFetchResult
 
 PLUGIN_ROOT = REPO_ROOT / "plugins" / "sources" / "tavily-source"
 SEARCH_FIXTURE = PLUGIN_ROOT / "tests" / "fixtures" / "tavily_search_response.json"
@@ -60,8 +60,8 @@ class TavilySourcePluginTestCase(unittest.TestCase):
             )
             del cls.plugin
 
-    def test_search_returns_structured_results(self) -> None:
-        """测试 source.search 返回结构化结果。"""
+    def test_search_returns_source_fetch_result(self) -> None:
+        """测试 source.search 返回可解析的 SourceFetchResult。"""
         fixture_data = json.loads(SEARCH_FIXTURE.read_text(encoding="utf-8"))
 
         with patch.object(type(self.plugin), "http_request", staticmethod(_fake_http(fixture_data))):
@@ -75,22 +75,22 @@ class TavilySourcePluginTestCase(unittest.TestCase):
                 )
             )
 
-        self.assertIsNotNone(result.output)
-        self.assertEqual(result.output["query"], "battery storage breakthrough 2026")
-        self.assertEqual(len(result.output["results"]), 2)
-        self.assertEqual(result.output["metadata"]["provider"], "tavily")
-        self.assertEqual(result.output["metadata"]["result_count"], 2)
+        output = SourceFetchResult.from_mapping(result.output)
+        self.assertEqual(len(output.items), 2)
+        self.assertEqual(output.metadata["provider"], "tavily")
+        self.assertEqual(output.metadata["result_count"], 2)
+        self.assertEqual(output.metadata["query"], "battery storage breakthrough 2026")
 
         # 验证第一条结果的结构
-        first_result = result.output["results"][0]
-        self.assertEqual(first_result["title"], "Grid-Scale Battery Storage Breakthrough Reported in East Asia")
-        self.assertEqual(first_result["url"], "https://example.com/articles/storage-breakthrough")
-        self.assertIn("Battery storage suppliers climbed", first_result["snippet"])
-        self.assertEqual(first_result["score"], 0.92)
-        self.assertEqual(first_result["source"], "tavily")
+        first_result = output.items[0]
+        self.assertEqual(first_result.title, "Grid-Scale Battery Storage Breakthrough Reported in East Asia")
+        self.assertEqual(first_result.url, "https://example.com/articles/storage-breakthrough")
+        self.assertIn("Battery storage suppliers climbed", first_result.content or "")
+        self.assertEqual(first_result.metadata["score"], 0.92)
+        self.assertEqual(first_result.metadata["source"], "tavily")
 
-    def test_extract_returns_structured_content(self) -> None:
-        """测试 source.extract 返回结构化内容。"""
+    def test_extract_returns_source_fetch_result(self) -> None:
+        """测试 source.extract 返回可解析的 SourceFetchResult。"""
         fixture_data = json.loads(EXTRACT_FIXTURE.read_text(encoding="utf-8"))
 
         with patch.object(type(self.plugin), "http_request", staticmethod(_fake_http(fixture_data))):
@@ -104,11 +104,12 @@ class TavilySourcePluginTestCase(unittest.TestCase):
                 )
             )
 
-        self.assertIsNotNone(result.output)
-        self.assertEqual(result.output["url"], "https://example.com/articles/storage-breakthrough")
-        self.assertIn("Battery storage suppliers climbed", result.output["content"])
-        self.assertEqual(result.output["metadata"]["provider"], "tavily")
-        self.assertGreater(result.output["metadata"]["content_length"], 0)
+        output = SourceFetchResult.from_mapping(result.output)
+        self.assertEqual(len(output.items), 1)
+        self.assertEqual(output.items[0].url, "https://example.com/articles/storage-breakthrough")
+        self.assertIn("Battery storage suppliers climbed", output.items[0].content or "")
+        self.assertEqual(output.metadata["provider"], "tavily")
+        self.assertGreater(output.metadata["content_length"], 0)
 
     def test_runtime_invokes_manifest_entrypoint(self) -> None:
         """测试通过 PluginRuntimeService 端到端调用。"""
@@ -127,8 +128,47 @@ class TavilySourcePluginTestCase(unittest.TestCase):
 
         self.assertTrue(invocation.ok)
         self.assertIsNotNone(invocation.result)
-        self.assertEqual(invocation.result.output["query"], "battery storage breakthrough 2026")
-        self.assertEqual(len(invocation.result.output["results"]), 2)
+        output = SourceFetchResult.from_mapping(invocation.result.output)
+        self.assertEqual(output.metadata["query"], "battery storage breakthrough 2026")
+        self.assertEqual(len(output.items), 2)
+
+    def test_source_fetch_routes_query_to_search_path(self) -> None:
+        """测试 source.fetch 传 query 时走搜索路径。"""
+        fixture_data = json.loads(SEARCH_FIXTURE.read_text(encoding="utf-8"))
+
+        with patch.object(type(self.plugin), "http_request", staticmethod(_fake_http(fixture_data))):
+            result = asyncio.run(
+                self.plugin.invoke(
+                    PluginInvokeRequest(
+                        capability="source.fetch",
+                        request_id="req-tavily-fetch-search",
+                        input={"query": "battery storage breakthrough 2026"},
+                    )
+                )
+            )
+
+        output = SourceFetchResult.from_mapping(result.output)
+        self.assertEqual(output.metadata["capability"], "source.search")
+        self.assertEqual(len(output.items), 2)
+
+    def test_source_fetch_routes_url_to_extract_path(self) -> None:
+        """测试 source.fetch 传 url 时走提取路径。"""
+        fixture_data = json.loads(EXTRACT_FIXTURE.read_text(encoding="utf-8"))
+
+        with patch.object(type(self.plugin), "http_request", staticmethod(_fake_http(fixture_data))):
+            result = asyncio.run(
+                self.plugin.invoke(
+                    PluginInvokeRequest(
+                        capability="source.fetch",
+                        request_id="req-tavily-fetch-extract",
+                        input={"url": "https://example.com/articles/storage-breakthrough"},
+                    )
+                )
+            )
+
+        output = SourceFetchResult.from_mapping(result.output)
+        self.assertEqual(output.metadata["capability"], "source.extract")
+        self.assertEqual(len(output.items), 1)
 
     def test_search_rejects_missing_query(self) -> None:
         """测试 source.search 缺失 query 参数时报错。"""
@@ -160,12 +200,12 @@ class TavilySourcePluginTestCase(unittest.TestCase):
         """测试不支持的 capability 报错。"""
         with self.assertRaises(PluginRuntimeError) as cm:
             asyncio.run(
-                self.plugin.invoke(
-                    PluginInvokeRequest(
-                        capability="source.fetch",
-                        request_id="req-tavily-unsupported-cap",
-                        input={"query": "test"},
-                    )
+                    self.plugin.invoke(
+                        PluginInvokeRequest(
+                            capability="source.unknown",
+                            request_id="req-tavily-unsupported-cap",
+                            input={"query": "test"},
+                        )
                 )
             )
         self.assertEqual(cm.exception.code, "PLUGIN_CAPABILITY_NOT_IMPLEMENTED")
@@ -249,11 +289,67 @@ class TavilySourcePluginTestCase(unittest.TestCase):
             self.assertEqual(cm.exception.code, "TAVILY_TIMEOUT")
             self.assertTrue(cm.exception.retryable)
 
+    def test_extract_empty_result_returns_controlled_empty_fetch_result(self) -> None:
+        """测试 extract 空结果不会被包装成内部错误。"""
+        fixture_data = {"results": [], "failed_results": []}
+
+        with patch.object(type(self.plugin), "http_request", staticmethod(_fake_http(fixture_data))):
+            result = asyncio.run(
+                self.plugin.invoke(
+                    PluginInvokeRequest(
+                        capability="source.extract",
+                        request_id="req-tavily-empty-extract",
+                        input={"url": "https://example.com/articles/storage-breakthrough"},
+                    )
+                )
+            )
+
+        output = SourceFetchResult.from_mapping(result.output)
+        self.assertEqual(len(output.items), 0)
+        self.assertEqual(output.metadata["error"], "Extraction returned empty result")
+
+    def test_boolean_string_flags_are_coerced_strictly(self) -> None:
+        """测试布尔字符串按预期解析。"""
+        fixture_data = json.loads(SEARCH_FIXTURE.read_text(encoding="utf-8"))
+        capture_http = _capture_http_payload(fixture_data)
+
+        with patch.object(type(self.plugin), "http_request", staticmethod(capture_http)):
+            asyncio.run(
+                self.plugin.invoke(
+                    PluginInvokeRequest(
+                        capability="source.search",
+                        request_id="req-tavily-bool-coerce",
+                        input={
+                            "query": "battery storage breakthrough 2026",
+                            "include_raw_content": "false",
+                            "include_favicon": "true",
+                        },
+                    )
+                )
+            )
+
+        self.assertFalse(capture_http.last_payload["include_raw_content"])
+        self.assertTrue(capture_http.last_payload["include_favicon"])
+
+    def test_invalid_boolean_flag_is_rejected(self) -> None:
+        """测试非法布尔值直接报输入错误。"""
+        with self.assertRaises(PluginRuntimeError) as cm:
+            asyncio.run(
+                self.plugin.invoke(
+                    PluginInvokeRequest(
+                        capability="source.search",
+                        request_id="req-tavily-invalid-bool",
+                        input={"query": "test", "include_favicon": "maybe"},
+                    )
+                )
+            )
+        self.assertEqual(cm.exception.code, "PLUGIN_INVALID_INPUT")
+
     def test_readme_documents_plugin_boundary(self) -> None:
         """测试 README 说明插件边界。"""
         readme = (PLUGIN_ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn("source.search", readme)
-        self.assertIn("source.extract", readme)
+        self.assertIn("source.fetch", readme)
+        self.assertIn("asyncio.run", readme)
         self.assertIn("不负责", readme)
 
 
@@ -283,6 +379,21 @@ def _fake_http(json_response):
     def _http(request, timeout=10.0):
         return _FakeResponse()
 
+    return _http
+
+
+def _capture_http_payload(json_response):
+    encoded = json.dumps(json_response).encode("utf-8")
+
+    class _FakeResponse:
+        def read(self):
+            return encoded
+
+    def _http(request, timeout=10.0):
+        _http.last_payload = json.loads(request.data.decode("utf-8"))
+        return _FakeResponse()
+
+    _http.last_payload = None
     return _http
 
 

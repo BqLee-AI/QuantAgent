@@ -27,11 +27,13 @@ from quantagent.plugin_sdk import (
     PluginInvokeRequest,
     PluginInvokeResult,
     PluginRuntimeError,
+    SourceFetchResult,
+    SourceItemDraft,
 )
 
 
 PLUGIN_ID = "quantagent.official.source.tavily"
-SUPPORTED_CAPABILITIES = frozenset({"source.search", "source.extract"})
+SUPPORTED_CAPABILITIES = frozenset({"source.fetch", "source.search", "source.extract"})
 
 
 class TavilySourcePlugin(BasePlugin):
@@ -85,10 +87,12 @@ class TavilySourcePlugin(BasePlugin):
         try:
             if request.capability == "source.search":
                 result_dict = self._handle_search(client, config)
-            else:  # source.extract
+            elif request.capability == "source.extract":
                 result_dict = self._handle_extract(client, config)
+            else:
+                result_dict = self._handle_fetch(client, config)
 
-            return PluginInvokeResult(output=result_dict)
+            return PluginInvokeResult(output=result_dict.to_mapping())
 
         except TavilyClientError as e:
             # 上游错误统一转为 PluginRuntimeError
@@ -117,7 +121,7 @@ class TavilySourcePlugin(BasePlugin):
                 details={"error_type": type(e).__name__},
             )
 
-    def _handle_search(self, client: TavilyClient, config: Mapping[str, Any]) -> dict:
+    def _handle_search(self, client: TavilyClient, config: Mapping[str, Any]) -> SourceFetchResult:
         """处理 source.search 能力。
 
         Args:
@@ -132,15 +136,15 @@ class TavilySourcePlugin(BasePlugin):
         # 提取搜索参数：请求级参数优先，fallback 到平台配置级默认值
         max_results = _coerce_max_results(config.get("max_results") or config.get("default_max_results"))
         search_depth = _coerce_search_depth(config.get("search_depth") or config.get("default_search_depth"))
-        include_raw_content = bool(config.get("include_raw_content", False))
-        include_favicon = bool(config.get("include_favicon", False))
+        include_raw_content = _coerce_bool(config.get("include_raw_content"), key="include_raw_content", default=False)
+        include_favicon = _coerce_bool(config.get("include_favicon"), key="include_favicon", default=False)
 
         # 可选的高级参数
         topic = config.get("topic")
         include_domains = config.get("include_domains")
         exclude_domains = config.get("exclude_domains")
 
-        return client.search(
+        raw_result = client.search(
             query=query,
             max_results=max_results,
             search_depth=search_depth,
@@ -150,8 +154,9 @@ class TavilySourcePlugin(BasePlugin):
             include_domains=include_domains,
             exclude_domains=exclude_domains,
         )
+        return _build_search_fetch_result(raw_result)
 
-    def _handle_extract(self, client: TavilyClient, config: Mapping[str, Any]) -> dict:
+    def _handle_extract(self, client: TavilyClient, config: Mapping[str, Any]) -> SourceFetchResult:
         """处理 source.extract 能力。
 
         Args:
@@ -164,18 +169,30 @@ class TavilySourcePlugin(BasePlugin):
         url = _require_string(config, "url")
 
         # 提取参数
-        extract_depth = config.get("extract_depth", "basic")
-        include_raw_content = bool(config.get("include_raw_content", False))
-        include_favicon = bool(config.get("include_favicon", False))
+        extract_depth = _coerce_search_depth(config.get("extract_depth"))
+        include_raw_content = _coerce_bool(config.get("include_raw_content"), key="include_raw_content", default=False)
+        include_favicon = _coerce_bool(config.get("include_favicon"), key="include_favicon", default=False)
         query = config.get("query")  # 可选的提取上下文
 
-        return client.extract(
+        raw_result = client.extract(
             urls=[url],
             extract_depth=extract_depth,
             include_raw_content=include_raw_content,
             include_favicon=include_favicon,
             query=query,
         )
+        return _build_extract_fetch_result(raw_result)
+
+    def _handle_fetch(self, client: TavilyClient, config: Mapping[str, Any]) -> SourceFetchResult:
+        """兼容 source.fetch 契约。
+
+        为什么这样做：
+        - 最新 gate 已把 source 插件的默认能力收口到 source.fetch + SourceFetchResult。
+        - Tavily 仍保留 search/extract 两种调用语义，但通过 fetch 作为统一入口，避免插件类型与 DTO 契约继续漂移。
+        """
+        if isinstance(config.get("url"), str) and config.get("url", "").strip():
+            return self._handle_extract(client, config)
+        return self._handle_search(client, config)
 
 
 # 插件入口
@@ -277,3 +294,84 @@ def _coerce_search_depth(value: Any) -> str:
     if depth not in {"basic", "advanced"}:
         raise ValueError('default_search_depth must be "basic" or "advanced"')
     return depth
+
+
+def _coerce_bool(value: Any, *, key: str, default: bool) -> bool:
+    """严格解析布尔配置，避免字符串 false/0 被 Python bool() 误判为 True。"""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes"}:
+            return True
+        if normalized in {"false", "0", "no"}:
+            return False
+    raise ValueError(f"{key} must be a boolean")
+
+
+def _build_search_fetch_result(raw_result: Mapping[str, Any]) -> SourceFetchResult:
+    items = []
+    for item in raw_result.get("results", []):
+        items.append(
+            SourceItemDraft(
+                external_id=item.get("url"),
+                url=item.get("url"),
+                title=item.get("title"),
+                content=item.get("content"),
+                raw_payload=item.get("raw_payload") or {},
+                metadata={
+                    "plugin_id": PLUGIN_ID,
+                    "provider": "tavily",
+                    "score": item.get("score"),
+                    "source": item.get("source"),
+                    "favicon_url": item.get("favicon_url"),
+                    "query": raw_result.get("query"),
+                    "search_depth": raw_result.get("metadata", {}).get("search_depth"),
+                },
+            )
+        )
+    return SourceFetchResult(
+        items=tuple(items),
+        metadata={
+            "provider": raw_result.get("metadata", {}).get("provider", "tavily"),
+            "result_count": raw_result.get("metadata", {}).get("result_count", len(items)),
+            "query": raw_result.get("query"),
+            "capability": "source.search",
+        },
+    )
+
+
+def _build_extract_fetch_result(raw_result: Mapping[str, Any]) -> SourceFetchResult:
+    content = raw_result.get("content")
+    item = SourceItemDraft(
+        external_id=raw_result.get("url") or None,
+        url=raw_result.get("url") or None,
+        title=raw_result.get("title"),
+        content=content,
+        raw_payload=raw_result.get("raw_payload") or {},
+        metadata={
+            "plugin_id": PLUGIN_ID,
+            "provider": raw_result.get("metadata", {}).get("provider", "tavily"),
+            "favicon_url": raw_result.get("favicon_url"),
+            "raw_content": raw_result.get("raw_content"),
+            "extraction_source": raw_result.get("metadata", {}).get("extraction_source"),
+            "error": raw_result.get("metadata", {}).get("error"),
+            "error_details": raw_result.get("metadata", {}).get("error_details"),
+        },
+    )
+    items = () if item.url is None and content is None else (item,)
+    return SourceFetchResult(
+        items=items,
+        metadata={
+            "provider": raw_result.get("metadata", {}).get("provider", "tavily"),
+            "content_length": raw_result.get("metadata", {}).get("content_length", 0),
+            "capability": "source.extract",
+            **(
+                {"error": raw_result.get("metadata", {}).get("error")}
+                if raw_result.get("metadata", {}).get("error")
+                else {}
+            ),
+        },
+    )

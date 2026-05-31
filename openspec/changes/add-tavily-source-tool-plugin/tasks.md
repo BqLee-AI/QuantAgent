@@ -20,7 +20,7 @@
 
 - [ ] 4.1 定义 `search` 工具 ID、输入字段和输出字段草案，确保结果 JSON-safe、可校验、可序列化。
 - [ ] 4.2 定义 `extract` 工具 ID、输入字段和输出字段草案，确保结果 JSON-safe、可校验、可序列化。
-- [ ] 4.3 固定 Tavily tool DTO 不伪装成 `SourceFetchResult`，而是保持 evidence/tool 语义清晰的统一 JSON DTO。
+- [ ] 4.3 使 Tavily 输出对齐 `SourceFetchResult`，并通过 metadata 保留 search/extract 的 evidence 语义。
 - [ ] 4.4 固定最小配置字段草案：`api_key_ref`、`timeout_seconds`、`default_max_results` 和必要的 extract/search 参数。
 
 ## 5. Verification Gate

@@ -23,7 +23,7 @@
 **Goals:**
 
 - 定义官方 `Tavily` Source/Data Tool Plugin 的最小插件包蓝图。
-- 固定第一版 capability 只包含 `search` / `extract`。
+- 固定第一版以 `source.fetch` 为统一入口，并兼容 `search` / `extract` 细分调用语义。
 - 固定工具 ID、输入输出 schema 和 README 说明方式。
 - 明确第三方 Tavily API 适配应下沉到独立 adapter/client，而不是散落在插件入口。
 - 对“基类继承 vs 协议接入”做显式取舍，给实现阶段一个稳定方向。
@@ -50,7 +50,6 @@ plugins/sources/tavily-source/
   src/
     tavily_source.py
     tavily_client.py
-    schemas.py
   tests/
     test_tavily_source.py
     fixtures/
@@ -67,11 +66,9 @@ plugins/sources/tavily-source/
 - `README.md`
   - 说明 Tavily 在官方插件主链路中的定位、非目标、capability 列表、最小配置和测试方式。
 - `src/tavily_source.py`
-  - 插件入口；负责 capability 分发、输入 DTO 校验、调用 adapter、输出 DTO 组装。
+  - 插件入口；负责 capability 分发、输入 DTO 校验、调用 adapter、输出 `SourceFetchResult` 组装。
 - `src/tavily_client.py`
   - Tavily 第三方适配层；负责 HTTP / SDK 请求、超时、错误包装和响应字段归一化。
-- `src/schemas.py`
-  - 插件内 search/extract 的输入输出 schema 草案、字段转换和复用常量。
 - `tests/test_tavily_source.py`
   - 覆盖 `search` / `extract` 成功、配置缺失、capability 不支持、上游错误和 schema 校验失败。
 - `tests/fixtures/*.json`
@@ -79,23 +76,19 @@ plugins/sources/tavily-source/
 
 ## Decisions
 
-### Decision 1: Tavily 作为 source/data tool 插件，只暴露 `search` / `extract`
+### Decision 1: Tavily 以 `source.fetch` 对齐 source 插件契约，并兼容 `search` / `extract`
 
-第一版 capability 固定为：
+第一版 capability 固定至少包含：
 
+- `source.fetch`
 - `source.search`
 - `source.extract`
 
-对应官方工具 ID：
-
-- `quantagent.official.source.tavily.search`
-- `quantagent.official.source.tavily.extract`
-
 原因：
 
-- `official-plugin-v1-main-chain` 已明确 Tavily 第一版边界。
-- `search` 对应主动检索外部证据。
-- `extract` 对应对已知 URL 做高质量正文抽取。
+- `plugins/**` 的最新 gate 已把 source 插件默认契约收口到 `source.fetch` + `SourceFetchResult`。
+- Tavily 仍然需要保留 `search` 对应主动检索外部证据、`extract` 对应对已知 URL 做高质量正文抽取的细分调用语义。
+- 统一入口可以让 Runtime / Registry / SDK 在 source 类型上继续保持一致，而不让 Tavily 成为额外的特例。
 - `crawl` / `map` / `research` 会迅速把范围扩成“通用网络 agent”，不适合本轮。
 
 ### Decision 2: 接入方式采用“协议优先，可选复用 BasePlugin”
@@ -193,50 +186,51 @@ plugins/sources/tavily-source/
 - 这符合 `packages/core/AGENTS.md` 对 RuntimeContext 的限制。
 - 也符合 plugin runtime v1 的“平台校验后注入 config”边界。
 
-### Decision 5: `search` / `extract` 输出先使用 JSON-safe tool DTO，不复用 `SourceFetchResult`
+### Decision 5: `search` / `extract` 输出对齐 `SourceFetchResult`，通过 metadata 保留 evidence 语义
 
-虽然 Tavily 被归类在 `source/data tool` 范畴，但本轮两个 capability 都是“工具式调用”而不是“直接产出 RawEvent candidate”。因此输出不强行贴 `SourceFetchResult`，而是定义插件内统一 JSON-safe tool DTO。
+虽然 Tavily 被归类在 `source/data tool` 范畴，但最新 source 插件 gate 已经把插件 DTO 契约统一到了 `SourceFetchResult`。因此本轮输出对齐 `SourceFetchResult`，同时通过 `metadata` 保留 search/extract 的 evidence 语义，避免继续分叉 source 插件边界。
 
-`search` 输出字段草案：
+`search` 输出映射草案：
 
 ```text
-query
-results[]
+SourceFetchResult.items[]
   title
   url
-  snippet
-  score
-  source
-  published_at?
-  favicon_url?
+  content
+  raw_payload
+  metadata.score
+  metadata.source
+  metadata.favicon_url
+  metadata.query
 metadata
   provider
   result_count
   search_depth?
+  capability=source.search
 ```
 
-`extract` 输出字段草案：
+`extract` 输出映射草案：
 
 ```text
-url
-title
-content
-raw_content?
-summary?
-canonical_url?
-published_at?
+SourceFetchResult.items[0]
+  url
+  title
+  content
+  raw_payload
+  metadata.raw_content?
+  metadata.favicon_url?
 metadata
   provider
   content_length
   extraction_source?
+  capability=source.extract
 ```
 
 原因：
 
-- `SourceFetchResult` 面向 source item 列表，更适合 RSS/reader 这类事件候选输出。
-- Tavily `search` 更像 evidence query result，不应伪装成 source fetch item。
-- 强行复用错误 DTO 会让字段语义扭曲，后续 ToolRegistry 统一时反而更难收敛。
-- 但 DTO 仍必须保持 JSON-safe、schema 可校验和 runtime 可序列化。
+- `SourceFetchResult` 已经成为当前 source 插件的统一 DTO 契约。
+- Tavily 的 search/extract 差异可以通过 `metadata.capability`、`metadata.score`、`metadata.raw_content` 等字段保留，而不必继续发散出第二套 source 输出结构。
+- 这样可以减少 Runtime、事件服务和后续 Source 链路适配成本。
 
 ### Decision 6: 测试以静态 fixture + fake client 为主，不依赖外部网络
 
@@ -261,10 +255,10 @@ metadata
 
 ```text
 Runtime / ToolRegistry
-  -> plugin.invoke(capability="source.search", input={query, max_results, ...})
+  -> plugin.invoke(capability="source.fetch" or "source.search", input={query, max_results, ...})
   -> TavilySourcePlugin
   -> TavilyClient.search()
-  -> normalized search dto
+  -> SourceFetchResult
   -> PluginInvokeResult.output
 ```
 
@@ -272,10 +266,10 @@ Runtime / ToolRegistry
 
 ```text
 Runtime / ToolRegistry
-  -> plugin.invoke(capability="source.extract", input={url, include_raw_content, ...})
+  -> plugin.invoke(capability="source.fetch" or "source.extract", input={url, include_raw_content, ...})
   -> TavilySourcePlugin
   -> TavilyClient.extract()
-  -> normalized extract dto
+  -> SourceFetchResult
   -> PluginInvokeResult.output
 ```
 
@@ -284,9 +278,9 @@ Runtime / ToolRegistry
 - 配置缺失
   - 缺少 `api_key_ref` 或注入后 key 为空时，插件返回结构化配置错误。
 - capability 不支持
-  - `invoke` 收到非 `source.search` / `source.extract` 时返回 `PLUGIN_CAPABILITY_NOT_IMPLEMENTED` 类错误。
+  - `invoke` 收到非 `source.fetch` / `source.search` / `source.extract` 时返回 `PLUGIN_CAPABILITY_NOT_IMPLEMENTED` 类错误。
 - 输入非法
-  - `query` 为空、`url` 非法、`max_results` 超限时返回 DTO 校验错误。
+  - `query` 为空、`url` 非法、`max_results` 超限或布尔/枚举参数非法时返回 DTO 校验错误。
 - 上游不可用
   - Tavily 超时、限流、响应格式不符合预期时，经 adapter 转为脱敏插件错误。
 - 响应字段漂移

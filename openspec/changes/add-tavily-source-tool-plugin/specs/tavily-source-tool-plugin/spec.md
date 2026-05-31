@@ -11,19 +11,36 @@
 - **THEN** 插件包 MUST 包含 `plugin.yaml`、`config.schema.json`、README、入口实现、Tavily client adapter、最小测试和静态 fixture
 - **AND** 插件 MUST 通过 `plugin.yaml` 注册为 `source` 类型官方插件
 - **AND** 插件 `id` MUST 为 `quantagent.official.source.tavily`
-- **AND** 插件 `capabilities` MUST 至少声明 `source.search` 与 `source.extract`
+- **AND** 插件 `capabilities` MUST 至少声明 `source.fetch`
+- **AND** 插件 MAY 兼容声明 `source.search` 与 `source.extract` 作为细分调用语义
 
-### Requirement: Tavily Plugin Exposes Search And Extract Only In V1
+### Requirement: Tavily Plugin Exposes Source Fetch Contract In V1
 
-`Tavily` 插件第一版 MUST 只暴露 `search` 与 `extract` 两类工具能力。
+`Tavily` 插件第一版 MUST 对齐 `source` 插件的 `SourceFetchResult` 契约，并通过 `source.fetch` 提供统一入口。
+
+#### Scenario: Source fetch routes to search path when query is provided
+
+- **GIVEN** 运行时通过 `source.fetch` 调用 Tavily
+- **WHEN** 插件收到合法 `query` 和可选搜索参数
+- **THEN** 插件 MUST 走搜索路径执行
+- **AND** 输出 MUST 可被 `SourceFetchResult` 解析
+- **AND** 输出项 SHOULD 至少保留 `title`、`url`、`content` 和来源相关字段
+
+#### Scenario: Source fetch routes to extract path when url is provided
+
+- **GIVEN** 运行时通过 `source.fetch` 调用 Tavily
+- **WHEN** 插件收到合法 `url` 和可选抽取参数
+- **THEN** 插件 MUST 走提取路径执行
+- **AND** 输出 MUST 可被 `SourceFetchResult` 解析
+- **AND** 输出项 MAY 通过 `metadata` 保留 `raw_content`、`favicon_url`、`error` 等补充字段
 
 #### Scenario: Search capability returns structured search results
 
 - **GIVEN** 运行时通过受控工具边界调用 Tavily `search`
 - **WHEN** 插件收到合法 query 和可选搜索参数
 - **THEN** 插件 MUST 返回结构化搜索结果列表
-- **AND** 每条结果 SHOULD 至少包含 `title`、`url`、`snippet`、`score` 和来源相关字段
-- **AND** 输出 MUST 是 JSON-safe、可序列化、可被 schema 校验的 DTO
+- **AND** 每条结果 SHOULD 至少包含 `title`、`url`、`content`、`score` 和来源相关字段
+- **AND** 输出 MUST 是 JSON-safe、可序列化、可被 `SourceFetchResult` 校验的 DTO
 
 #### Scenario: Extract capability returns structured page content
 
@@ -32,7 +49,7 @@
 - **THEN** 插件 MUST 返回结构化正文抽取结果
 - **AND** 输出 SHOULD 至少包含 `title`、`content`、`canonical_url` 或等价链接字段
 - **AND** 输出 MAY 包含 `raw_content`、`summary`、`published_at` 等补充字段
-- **AND** 输出 MUST 是 JSON-safe、可序列化、可被 schema 校验的 DTO
+- **AND** 输出 MUST 是 JSON-safe、可序列化、可被 `SourceFetchResult` 校验的 DTO
 
 #### Scenario: V1 defers other Tavily capabilities
 

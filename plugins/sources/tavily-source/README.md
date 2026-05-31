@@ -4,18 +4,26 @@
 
 ## 能力边界
 
-- 只提供 `source.search` 和 `source.extract` 两个能力，不暴露其他 tool 接口。
+- 默认提供 `source.fetch`，并兼容 `source.search` 和 `source.extract` 两种细分调用语义。
 - 只消费平台传入的校验后配置 / `effective_config`。
-- 返回插件内统一 JSON-safe tool DTO（不是 `SourceFetchResult`，保持 evidence/tool 语义清晰）。
+- 返回 `plugin-sdk` 定义的 `SourceFetchResult`，保持 source 插件 DTO 契约一致。
 - **不负责** `RawEvent` 入库、去重、`SourceBinding`、`Event Bus`、权限或生命周期。
 - **不负责** Tavily API key 的获取、验证或管理（由平台在 `api_key_ref` 配置中注入）。
 - **不负责** 调度、重试、跨插件调用或 ToolRegistry 集成。
 
 ## 能力说明
 
+### source.fetch
+
+统一入口能力：
+
+- 传入 `query` 时按搜索路径执行
+- 传入 `url` 时按提取路径执行
+- 输出统一为 `SourceFetchResult`
+
 ### source.search
 
-执行搜索查询并返回结构化结果列表。
+执行搜索查询，并以 `SourceFetchResult.items` 返回结构化结果列表。
 
 **必需参数：**
 - `query` (str): 搜索查询字符串
@@ -31,7 +39,7 @@
 
 ### source.extract
 
-提取指定 URL 的网页内容。
+提取指定 URL 的网页内容，并以单条 `SourceItemDraft` 返回。
 
 **必需参数：**
 - `url` (str): 要提取的 URL
@@ -73,6 +81,7 @@ python -m unittest discover -s plugins/sources/tavily-source/tests -v
 - **静态 fixture**：使用预设的 JSON 响应文件，不依赖真实 Tavily API 稳定性。
 - **受控假响应**：通过 `patch.object` 注入 fake HTTP 请求函数，隔离网络 I/O。
 - **端到端验证**：通过 `PluginRuntimeService` 加载插件并执行完整调用流程。
+- **DTO 对齐**：断言输出可被 `SourceFetchResult.from_mapping(...)` 解析。
 
 ## 错误处理
 
@@ -95,6 +104,8 @@ python -m unittest discover -s plugins/sources/tavily-source/tests -v
 ## 验证插件加载
 
 ```python
+import asyncio
+
 from quantagent.core.registry import RegistryScanner
 from quantagent.core.runtime import PluginRuntimeService
 
@@ -106,11 +117,13 @@ records = RegistryScanner(
 
 # 加载 Tavily 插件
 tavily_record = [r for r in records if r.id == "quantagent.official.source.tavily"][0]
-plugin, error = PluginRuntimeService().load_plugin(
-    tavily_record,
-    request_id="test-load",
-    config={"api_key_ref": "test-key"},
-    metadata={"origin": "test"},
+plugin, error = asyncio.run(
+    PluginRuntimeService().load_plugin(
+        tavily_record,
+        request_id="test-load",
+        config={"api_key_ref": "test-key"},
+        metadata={"origin": "test"},
+    )
 )
 
 if error:

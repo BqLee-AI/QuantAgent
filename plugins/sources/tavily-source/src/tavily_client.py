@@ -1,7 +1,6 @@
 """Tavily HTTP 适配器 - 纯 urllib 实现，零外部依赖。
 
 设计关键:
-- 使用模块级 _default_http_request 作为测试注入点（seam）
 - TavilyClient 接受 http_request 注入，便于测试时 mock HTTP 响应
 - 所有错误脱敏处理，不泄露 API key 或原始响应体
 - 防御性响应解析，使用 .get() 避免 KeyError
@@ -284,11 +283,12 @@ class TavilyClient:
             normalized_item = {
                 "title": item.get("title", ""),
                 "url": item.get("url", ""),
-                "snippet": item.get("content", ""),
+                "content": item.get("content", ""),
                 "score": item.get("score", 0.0),
                 "source": "tavily",
                 "published_at": None,  # Tavily search 不直接提供发布时间
-                "favicon_url": item.get("favicon") if raw.get("auto_parameters", {}).get("include_favicon") else None,
+                "favicon_url": item.get("favicon"),
+                "raw_payload": item,
             }
             normalized_results.append(normalized_item)
 
@@ -319,6 +319,7 @@ class TavilyClient:
                 "title": None,
                 "content": None,
                 "raw_content": None,
+                "favicon_url": None,
                 "metadata": {
                     "provider": "tavily",
                     "content_length": 0,
@@ -328,19 +329,37 @@ class TavilyClient:
                 },
             }
 
+        if not results:
+            # 上游返回空结果时，降级为受控空响应，避免被包装成内部错误。
+            return {
+                "url": "",
+                "title": None,
+                "content": None,
+                "raw_content": None,
+                "favicon_url": None,
+                "metadata": {
+                    "provider": "tavily",
+                    "content_length": 0,
+                    "extraction_source": "tavily-extract",
+                    "error": "Extraction returned empty result",
+                },
+            }
+
         # 返回第一个成功的结果
         first_result = results[0]
-        content = first_result.get("raw_content", "")
+        content = first_result.get("content") or first_result.get("raw_content", "")
+        raw_content = first_result.get("raw_content")
 
         return {
             "url": first_result.get("url", ""),
             "title": None,  # Tavily extract 不直接返回标题
             "content": content,
-            "raw_content": content,  # extract 的 raw_content 直接取，不依赖 auto_parameters
+            "raw_content": raw_content,
             "metadata": {
                 "provider": "tavily",
                 "content_length": len(content),
                 "extraction_source": "tavily-extract",
-                "favicon_url": first_result.get("favicon"),
             },
+            "favicon_url": first_result.get("favicon"),
+            "raw_payload": first_result,
         }
