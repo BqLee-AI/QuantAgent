@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import asyncio
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol
 
@@ -36,7 +34,7 @@ class DiscordInteractionIngressService:
         self._registry = registry
         self._runtime = runtime or PluginRuntimeService()
 
-    def receive_interaction(self, *, headers: Mapping[str, str], body: bytes) -> DiscordInteractionHttpResult:
+    async def receive_interaction(self, *, headers: Mapping[str, str], body: bytes) -> DiscordInteractionHttpResult:
         if not self._settings.DISCORD_INTERACTIONS_ENABLED:
             raise NotFoundError("Discord interactions endpoint is not enabled")
 
@@ -45,17 +43,15 @@ class DiscordInteractionIngressService:
             raise ServiceUnavailableError("Discord interactions public key is not configured")
 
         record = self._require_receive_plugin(self._settings.DISCORD_INTERACTIONS_PLUGIN_ID)
-        invocation = asyncio.run(
-            self._runtime.invoke(
-                record,
-                capability="notification.receive",
-                request_id="discord-interactions-ingress",
-                config=_build_plugin_config(self._settings, public_key=public_key),
-                input={
-                    "headers": _discord_signature_headers(headers),
-                    "body": body.decode("utf-8", errors="strict"),
-                },
-            )
+        invocation = await self._runtime.invoke(
+            record,
+            capability="notification.receive",
+            request_id="discord-interactions-ingress",
+            config=_build_plugin_config(self._settings, public_key=public_key),
+            input={
+                "headers": _discord_signature_headers(headers),
+                "body": body.decode("utf-8", errors="strict"),
+            },
         )
         if invocation.error is not None or invocation.result is None:
             raise ServiceUnavailableError("Configured Discord plugin could not be invoked")
@@ -145,4 +141,3 @@ def _validated_response_content(result: DiscordReceiveResult) -> Mapping[str, An
     if response is None:
         raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
     return response
-

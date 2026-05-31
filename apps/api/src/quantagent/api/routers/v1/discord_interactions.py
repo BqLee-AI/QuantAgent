@@ -11,7 +11,7 @@ router = APIRouter(prefix="/integrations/discord", tags=["integrations"])
 
 @router.post("/interactions")
 async def receive_discord_interaction(request: Request) -> JSONResponse:
-    result = get_discord_interaction_ingress_service(request).receive_interaction(
+    result = await get_discord_interaction_ingress_service(request).receive_interaction(
         headers=request.headers,
         body=await request.body(),
     )
