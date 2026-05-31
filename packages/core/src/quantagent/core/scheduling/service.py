@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import math
 import re
 from collections.abc import Mapping
@@ -9,18 +8,14 @@ from dataclasses import replace
 from typing import Any
 from uuid import uuid4
 
-from quantagent.core.events.ports import EventBusPublisher
-from quantagent.core.events.service import SourceEventPublisher
 from quantagent.core.registry.models import PluginError, PluginRecord, PluginStatus
 from quantagent.core.registry.service import PluginRegistry
 from quantagent.core.runtime import PluginRuntimeInvocation, PluginRuntimeService
 from quantagent.core.scheduling.clock import SchedulingClock, SystemSchedulingClock
 from quantagent.core.scheduling.models import PluginRunRecord, PluginRunStatus, PluginTriggerRequest
 from quantagent.core.scheduling.repository import PluginRunRepository
-from quantagent.plugin_sdk import PluginRuntimeError, SourceFetchResult, freeze_json_mapping
+from quantagent.plugin_sdk import PluginRuntimeError, freeze_json_mapping
 from quantagent.plugin_sdk.io import JsonObject, JsonValue
-
-logger = logging.getLogger(__name__)
 
 
 class PluginSchedulingService:
@@ -31,13 +26,11 @@ class PluginSchedulingService:
         runtime: PluginRuntimeService,
         repository: PluginRunRepository,
         clock: SchedulingClock | None = None,
-        publisher: EventBusPublisher | None = None,
     ) -> None:
         self._registry = registry
         self._runtime = runtime
         self._repository = repository
         self._clock = clock or SystemSchedulingClock()
-        self._publisher = publisher
 
     async def trigger(self, request: PluginTriggerRequest) -> PluginRunRecord:
         run: PluginRunRecord | None = None
@@ -64,14 +57,12 @@ class PluginSchedulingService:
                 )
 
             output_summary = _summarize_mapping(invocation.result.output if invocation.result is not None else {})
-            finished_run = self._finish_run(
+            return self._finish_run(
                 run,
                 status=PluginRunStatus.SUCCEEDED,
                 output_summary=output_summary,
                 started_monotonic=started_monotonic,
             )
-            await self._maybe_publish_source_event(invocation, finished_run, validated_request)
-            return finished_run
         except asyncio.TimeoutError:
             return self._finish_run(
                 _ensure_run(run),
@@ -171,33 +162,6 @@ class PluginSchedulingService:
         if request.timeout_ms is None:
             return await invoke_coro
         return await asyncio.wait_for(invoke_coro, timeout=request.timeout_ms / 1000)
-
-    async def _maybe_publish_source_event(
-        self,
-        invocation: PluginRuntimeInvocation,
-        run: PluginRunRecord,
-        request: PluginTriggerRequest,
-    ) -> None:
-        if self._publisher is None:
-            return
-        if request.capability != "source.fetch":
-            return
-        if invocation.result is None or not invocation.result.output:
-            return
-        try:
-            source_result = SourceFetchResult.from_mapping(invocation.result.output, stage="publish")
-            await SourceEventPublisher(self._publisher).publish_source_fetch_result(
-                source_result,
-                producer="plugin-scheduling",
-                request_id=request.request_id,
-                plugin_id=request.plugin_id,
-                causation_id=run.run_id,
-            )
-        except Exception as exc:
-            logger.warning(
-                "Event publish failed after successful scheduling.",
-                extra={"plugin_id": run.plugin_id, "run_id": run.run_id, "error_type": type(exc).__name__},
-            )
 
     def _finish_run(
         self,
