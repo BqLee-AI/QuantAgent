@@ -1,6 +1,8 @@
 from quantagent.plugin_sdk.io import (
     DTO_VALIDATION_ERROR_CODE,
     NotificationSendInput,
+    NotificationReceiveItem,
+    NotificationReceiveResult,
     NotificationSendResult,
     PluginInput,
     PluginResult,
@@ -26,6 +28,8 @@ __all__ = [
     "DTO_VALIDATION_ERROR_CODE",
     "HealthCheckResult",
     "NotificationSendInput",
+    "NotificationReceiveItem",
+    "NotificationReceiveResult",
     "NotificationSendResult",
     "PluginInput",
     "PluginInvokeRequest",

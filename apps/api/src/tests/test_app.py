@@ -2035,7 +2035,7 @@ class ApiAppTestCase(unittest.TestCase):
             with patch("quantagent.api.services.discord_interactions.PluginRuntimeService.invoke") as invoke:
                 invoke.return_value = SimpleNamespace(
                     error=None,
-                    result=SimpleNamespace(output={"ok": True, "code": "RECEIVED", "message": "ok", "response": "not-a-mapping", "dto": {"id": "1"}}),
+                    result=SimpleNamespace(output={"accepted": True, "code": "RECEIVED", "message": "ok", "response": "not-a-mapping", "item": {"interaction_id": "1", "source_id": "s", "text": "t"}, "retryable": False}),
                 )
                 with TestClient(app) as client:
                     response = client.post(
@@ -2074,7 +2074,7 @@ class ApiAppTestCase(unittest.TestCase):
             with patch("quantagent.api.services.discord_interactions.PluginRuntimeService.invoke") as invoke:
                 invoke.return_value = SimpleNamespace(
                     error=None,
-                    result=SimpleNamespace(output={"ok": True, "code": "RECEIVED", "message": "ok", "response": None, "dto": {"id": "1"}}),
+                    result=SimpleNamespace(output={"accepted": True, "code": "RECEIVED", "message": "ok", "response": None, "item": {"interaction_id": "1", "source_id": "s", "text": "t"}, "retryable": False}),
                 )
                 with TestClient(app) as client:
                     response = client.post(
@@ -2089,7 +2089,7 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["error"]["code"], "SERVICE_UNAVAILABLE")
 
-    def test_discord_interactions_endpoint_rejects_command_result_without_dto(self) -> None:
+    def test_discord_interactions_endpoint_rejects_command_result_without_item(self) -> None:
         signing_key = SigningKey.generate()
         public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
         app = create_app(
@@ -2128,11 +2128,12 @@ class ApiAppTestCase(unittest.TestCase):
                     error=None,
                     result=SimpleNamespace(
                         output={
-                            "ok": True,
+                            "accepted": True,
                             "code": "RECEIVED",
                             "message": "ok",
                             "response": {"type": 4, "data": {"content": "ok", "flags": 64}},
-                            "dto": None,
+                            "item": None,
+                            "retryable": False,
                         }
                     ),
                 )

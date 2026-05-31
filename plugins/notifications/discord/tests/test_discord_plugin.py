@@ -11,7 +11,7 @@ import unittest
 
 from nacl.encoding import HexEncoder
 from nacl.signing import SigningKey
-from quantagent.plugin_sdk import PluginInvokeRequest, RuntimeContext
+from quantagent.plugin_sdk import NotificationReceiveResult, PluginInvokeRequest, RuntimeContext
 
 
 def _load_module():
@@ -228,16 +228,16 @@ class DiscordPluginReceiveTestCase(unittest.TestCase):
 
         result = self.plugin.receive_request(self.config, headers, body)
 
-        self.assertTrue(result.ok)
+        self.assertTrue(result.accepted)
         self.assertEqual(result.code, "PING")
         self.assertEqual(result.response, {"type": 1})
 
-    def test_receive_request_returns_dto_and_response_for_valid_signed_interaction(self) -> None:
+    def test_receive_request_returns_item_and_response_for_valid_signed_interaction(self) -> None:
         result = self.plugin.receive_request(self.config, self.headers, self.body)
 
-        self.assertTrue(result.ok)
+        self.assertTrue(result.accepted)
         self.assertEqual(result.code, "RECEIVED")
-        self.assertIsNotNone(result.dto)
+        self.assertIsNotNone(result.item)
         self.assertEqual(
             result.response,
             {
@@ -248,15 +248,15 @@ class DiscordPluginReceiveTestCase(unittest.TestCase):
                 },
             },
         )
-        assert result.dto is not None
-        self.assertEqual(result.dto.interaction_id, "1234567890")
-        self.assertEqual(result.dto.source_id, "discord.interaction:app-1")
-        self.assertEqual(result.dto.text, "hello from discord")
-        self.assertEqual(result.dto.guild_id, "guild-1")
-        self.assertEqual(result.dto.channel_id, "channel-1")
-        self.assertEqual(result.dto.author_id, "user-1")
+        assert result.item is not None
+        self.assertEqual(result.item.interaction_id, "1234567890")
+        self.assertEqual(result.item.source_id, "discord.interaction:app-1")
+        self.assertEqual(result.item.text, "hello from discord")
+        self.assertEqual(result.item.guild_id, "guild-1")
+        self.assertEqual(result.item.channel_id, "channel-1")
+        self.assertEqual(result.item.author_id, "user-1")
         self.assertEqual(
-            result.dto.payload_summary,
+            result.item.payload_summary,
             {
                 "type": 2,
                 "command_name": "notify",
@@ -271,7 +271,7 @@ class DiscordPluginReceiveTestCase(unittest.TestCase):
             self.body,
         )
 
-        self.assertFalse(result.ok)
+        self.assertFalse(result.accepted)
         self.assertEqual(result.code, "SIGNATURE_INVALID")
 
     def test_receive_request_rejects_invalid_timestamp_header(self) -> None:
@@ -281,7 +281,7 @@ class DiscordPluginReceiveTestCase(unittest.TestCase):
             self.body,
         )
 
-        self.assertFalse(result.ok)
+        self.assertFalse(result.accepted)
         self.assertEqual(result.code, "TIMESTAMP_INVALID")
 
     def test_receive_request_rejects_stale_timestamp(self) -> None:
@@ -296,19 +296,19 @@ class DiscordPluginReceiveTestCase(unittest.TestCase):
             self.body,
         )
 
-        self.assertFalse(result.ok)
+        self.assertFalse(result.accepted)
         self.assertEqual(result.code, "TIMESTAMP_INVALID")
 
     def test_receive_request_rejects_missing_public_key_config(self) -> None:
         result = self.plugin.receive_request({}, self.headers, self.body)
 
-        self.assertFalse(result.ok)
+        self.assertFalse(result.accepted)
         self.assertEqual(result.code, "MISSING_CONFIG")
 
     def test_receive_request_rejects_missing_signature_headers(self) -> None:
         result = self.plugin.receive_request(self.config, {}, self.body)
 
-        self.assertFalse(result.ok)
+        self.assertFalse(result.accepted)
         self.assertEqual(result.code, "SIGNATURE_MISSING")
 
     def test_receive_request_rejects_invalid_json_payload(self) -> None:
@@ -320,7 +320,7 @@ class DiscordPluginReceiveTestCase(unittest.TestCase):
 
         result = self.plugin.receive_request(self.config, headers, invalid_body)
 
-        self.assertFalse(result.ok)
+        self.assertFalse(result.accepted)
         self.assertEqual(result.code, "PAYLOAD_INVALID")
 
     def test_receive_request_rejects_unsupported_payload_type(self) -> None:
@@ -334,7 +334,7 @@ class DiscordPluginReceiveTestCase(unittest.TestCase):
 
         result = self.plugin.receive_request(self.config, headers, custom_body)
 
-        self.assertFalse(result.ok)
+        self.assertFalse(result.accepted)
         self.assertEqual(result.code, "UNSUPPORTED_EVENT_TYPE")
 
     def test_receive_request_rejects_allowlist_mismatch(self) -> None:
@@ -348,7 +348,7 @@ class DiscordPluginReceiveTestCase(unittest.TestCase):
 
         result = self.plugin.receive_request(self.config, headers, custom_body)
 
-        self.assertFalse(result.ok)
+        self.assertFalse(result.accepted)
         self.assertEqual(result.code, "GUILD_NOT_ALLOWED")
 
     def test_receive_request_rejects_channel_allowlist_mismatch(self) -> None:
@@ -362,7 +362,7 @@ class DiscordPluginReceiveTestCase(unittest.TestCase):
 
         result = self.plugin.receive_request(self.config, headers, custom_body)
 
-        self.assertFalse(result.ok)
+        self.assertFalse(result.accepted)
         self.assertEqual(result.code, "CHANNEL_NOT_ALLOWED")
 
     def test_receive_request_rejects_payload_without_supported_text_option(self) -> None:
@@ -376,7 +376,7 @@ class DiscordPluginReceiveTestCase(unittest.TestCase):
 
         result = self.plugin.receive_request(self.config, headers, custom_body)
 
-        self.assertFalse(result.ok)
+        self.assertFalse(result.accepted)
         self.assertEqual(result.code, "PAYLOAD_UNSUPPORTED")
 
 
@@ -461,9 +461,10 @@ class DiscordPluginRuntimeContractTestCase(unittest.TestCase):
             )
         )
 
-        self.assertTrue(result.output["ok"])
-        self.assertEqual(result.output["code"], "PING")
-        self.assertEqual(result.output["response"], {"type": 1})
+        output = NotificationReceiveResult.from_mapping(result.output)
+        self.assertTrue(output.accepted)
+        self.assertEqual(output.code, "PING")
+        self.assertEqual(output.response, {"type": 1})
 
 
 if __name__ == "__main__":

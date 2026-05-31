@@ -289,6 +289,111 @@ class NotificationSendResult:
         )
 
 
+@dataclass(frozen=True)
+class NotificationReceiveItem:
+    interaction_id: str
+    source_id: str
+    text: str
+    payload_summary: JsonObject = field(default_factory=dict)
+    guild_id: str | None = None
+    channel_id: str | None = None
+    author_id: str | None = None
+    metadata: JsonObject = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _validate_required_string("interaction_id", self.interaction_id)
+        _validate_required_string("source_id", self.source_id)
+        _validate_required_string("text", self.text)
+        _validate_optional_string("guild_id", self.guild_id)
+        _validate_optional_string("channel_id", self.channel_id)
+        _validate_optional_string("author_id", self.author_id)
+        object.__setattr__(self, "payload_summary", freeze_json_mapping(self.payload_summary))
+        object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata))
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "interaction_id": self.interaction_id,
+            "source_id": self.source_id,
+            "text": self.text,
+            "payload_summary": to_json_value(self.payload_summary),
+            "guild_id": self.guild_id,
+            "channel_id": self.channel_id,
+            "author_id": self.author_id,
+            "metadata": to_json_value(self.metadata),
+        }
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any], *, stage: str = "invoke") -> NotificationReceiveItem:
+        _validate_object(payload, dto_name="NotificationReceiveItem", stage=stage)
+        return cls(
+            interaction_id=_get_required_string(payload, "interaction_id", stage=stage),
+            source_id=_get_required_string(payload, "source_id", stage=stage),
+            text=_get_required_string(payload, "text", stage=stage),
+            payload_summary=freeze_json_mapping(_get_optional_mapping(payload, "payload_summary", stage=stage), stage=stage),
+            guild_id=_get_optional_string(payload, "guild_id", stage=stage),
+            channel_id=_get_optional_string(payload, "channel_id", stage=stage),
+            author_id=_get_optional_string(payload, "author_id", stage=stage),
+            metadata=freeze_json_mapping(_get_optional_mapping(payload, "metadata", stage=stage), stage=stage),
+        )
+
+
+@dataclass(frozen=True)
+class NotificationReceiveResult:
+    accepted: bool
+    code: str
+    message: str
+    response: JsonObject | None = None
+    item: NotificationReceiveItem | None = None
+    retryable: bool = False
+    metadata: JsonObject = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _validate_bool("accepted", self.accepted)
+        _validate_required_string("code", self.code)
+        _validate_required_string("message", self.message)
+        if self.response is not None:
+            object.__setattr__(self, "response", freeze_json_mapping(self.response))
+        if self.item is not None and not isinstance(self.item, NotificationReceiveItem):
+            raise dto_validation_error(
+                "item must be a NotificationReceiveItem or null.",
+                field_name="item",
+            )
+        _validate_bool("retryable", self.retryable)
+        object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata))
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "accepted": self.accepted,
+            "code": self.code,
+            "message": self.message,
+            "response": to_json_value(self.response) if self.response is not None else None,
+            "item": self.item.to_mapping() if self.item is not None else None,
+            "retryable": self.retryable,
+            "metadata": to_json_value(self.metadata),
+        }
+
+    as_plugin_output = to_mapping
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any], *, stage: str = "invoke") -> NotificationReceiveResult:
+        _validate_object(payload, dto_name="NotificationReceiveResult", stage=stage)
+        response = payload.get("response")
+        item = payload.get("item")
+        return cls(
+            accepted=_get_required_bool(payload, "accepted", stage=stage),
+            code=_get_required_string(payload, "code", stage=stage),
+            message=_get_required_string(payload, "message", stage=stage),
+            response=freeze_json_mapping(_require_mapping(response, field_name="response", stage=stage), stage=stage)
+            if response is not None
+            else None,
+            item=NotificationReceiveItem.from_mapping(_require_mapping(item, field_name="item", stage=stage), stage=stage)
+            if item is not None
+            else None,
+            retryable=_get_required_bool(payload, "retryable", stage=stage),
+            metadata=freeze_json_mapping(_get_optional_mapping(payload, "metadata", stage=stage), stage=stage),
+        )
+
+
 def _freeze_items(items: tuple[SourceItemDraft, ...] | list[SourceItemDraft]) -> tuple[SourceItemDraft, ...]:
     if not isinstance(items, list | tuple):
         raise dto_validation_error(

@@ -11,14 +11,15 @@ from quantagent.api.http.errors import BadRequestError, NotFoundError, ServiceUn
 from quantagent.api.services import plugin_registry as plugin_registry_service
 from quantagent.core.registry import PluginRecord, PluginRegistry, PluginStatus
 from quantagent.core.runtime import PluginRuntimeService
+from quantagent.plugin_sdk import NotificationReceiveResult
 
 
 class DiscordReceiveResult(Protocol):
-    ok: bool
+    accepted: bool
     code: str
     message: str
     response: Mapping[str, Any] | None
-    dto: object | None
+    item: object | None
 
 
 @dataclass(frozen=True)
@@ -59,9 +60,9 @@ class DiscordInteractionIngressService:
         if invocation.error is not None or invocation.result is None:
             raise ServiceUnavailableError("Configured Discord plugin could not be invoked")
         result = _validate_receive_result(
-            _result_from_mapping(invocation.result.output)
+            NotificationReceiveResult.from_mapping(invocation.result.output)
         )
-        if not result.ok:
+        if not result.accepted:
             return _map_plugin_failure(result)
 
         return DiscordInteractionHttpResult(status_code=200, content=_validated_response_content(result))
@@ -120,7 +121,7 @@ def _map_plugin_failure(result: DiscordReceiveResult) -> DiscordInteractionHttpR
 
 
 def _validate_receive_result(result: object) -> DiscordReceiveResult:
-    if not isinstance(getattr(result, "ok", None), bool):
+    if not isinstance(getattr(result, "accepted", None), bool):
         raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
     if not isinstance(getattr(result, "code", None), str) or not getattr(result, "code").strip():
         raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
@@ -130,11 +131,11 @@ def _validate_receive_result(result: object) -> DiscordReceiveResult:
     response = getattr(result, "response", None)
     if response is not None and not isinstance(response, Mapping):
         raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
-    if getattr(result, "ok") and response is None:
+    if getattr(result, "accepted") and response is None:
         raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
-    dto = getattr(result, "dto", None)
+    item = getattr(result, "item", None)
     # PING 只需要返回 Discord 协议响应；真正进入业务链路的 interaction 才要求 dto。
-    if getattr(result, "ok") and getattr(result, "code") != "PING" and dto is None:
+    if getattr(result, "accepted") and getattr(result, "code") != "PING" and item is None:
         raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
     return result  # type: ignore[return-value]
 
@@ -145,16 +146,3 @@ def _validated_response_content(result: DiscordReceiveResult) -> Mapping[str, An
         raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
     return response
 
-
-def _result_from_mapping(output: Mapping[str, Any]) -> object:
-    return type(
-        "_DiscordReceiveResult",
-        (),
-        {
-            "ok": output.get("ok"),
-            "code": output.get("code"),
-            "message": output.get("message"),
-            "response": output.get("response"),
-            "dto": output.get("dto"),
-        },
-    )()

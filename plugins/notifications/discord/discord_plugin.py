@@ -11,7 +11,16 @@ import urllib.request
 
 from nacl.exceptions import BadSignatureError
 from nacl.signing import VerifyKey
-from quantagent.plugin_sdk import BasePlugin, NotificationSendInput, NotificationSendResult, PluginInvokeRequest, PluginInvokeResult, PluginRuntimeError
+from quantagent.plugin_sdk import (
+    BasePlugin,
+    NotificationReceiveItem,
+    NotificationReceiveResult,
+    NotificationSendInput,
+    NotificationSendResult,
+    PluginInvokeRequest,
+    PluginInvokeResult,
+    PluginRuntimeError,
+)
 
 
 SIGNATURE_HEADER = "x-signature-ed25519"
@@ -48,27 +57,6 @@ class SendResult:
     http_status: int | None = None
     webhook_secret_ref: str | None = None
     response_excerpt: str | None = None
-
-
-@dataclass(frozen=True)
-class DiscordInteractionDto:
-    interaction_id: str
-    source_id: str
-    text: str
-    payload_summary: Mapping[str, Any]
-    guild_id: str | None = None
-    channel_id: str | None = None
-    author_id: str | None = None
-
-
-@dataclass(frozen=True)
-class ReceiveResult:
-    ok: bool
-    code: str
-    message: str
-    response: Mapping[str, Any] | None = None
-    dto: DiscordInteractionDto | None = None
-    retryable: bool = False
 
 
 class DiscordPlugin(BasePlugin):
@@ -124,16 +112,16 @@ class DiscordPlugin(BasePlugin):
             body_text.encode("utf-8"),
             secrets=_resolve_runtime_secrets(self.context.config),
         )
-        return PluginInvokeResult(
-            output={
-                "ok": result.ok,
-                "code": result.code,
-                "message": result.message,
-                "retryable": result.retryable,
-                "response": result.response,
-                "dto": _dto_to_mapping(result.dto),
-            }
+        output = NotificationReceiveResult(
+            accepted=result.accepted,
+            code=result.code,
+            message=result.message,
+            response=result.response,
+            item=result.item,
+            retryable=result.retryable,
+            metadata=result.metadata,
         )
+        return PluginInvokeResult(output=output.to_mapping())
 
     def build_payload(self, text: str) -> dict[str, str]:
         normalized_text = text.strip()
@@ -240,11 +228,11 @@ class DiscordPlugin(BasePlugin):
         body: bytes,
         *,
         secrets: Mapping[str, str] | None = None,
-    ) -> ReceiveResult:
+    ) -> NotificationReceiveResult:
         public_key = _resolve_public_key(config, secrets)
         if public_key is None:
-            return ReceiveResult(
-                ok=False,
+            return NotificationReceiveResult(
+                accepted=False,
                 code="MISSING_CONFIG",
                 message="Missing Discord interactions public key configuration.",
             )
@@ -252,16 +240,16 @@ class DiscordPlugin(BasePlugin):
         signature = _get_header(headers, SIGNATURE_HEADER)
         timestamp = _get_header(headers, TIMESTAMP_HEADER)
         if signature is None or timestamp is None:
-            return ReceiveResult(
-                ok=False,
+            return NotificationReceiveResult(
+                accepted=False,
                 code="SIGNATURE_MISSING",
                 message="Missing required Discord signature headers.",
             )
 
         timestamp_seconds = _parse_timestamp(timestamp)
         if timestamp_seconds is None:
-            return ReceiveResult(
-                ok=False,
+            return NotificationReceiveResult(
+                accepted=False,
                 code="TIMESTAMP_INVALID",
                 message="Discord signature timestamp is invalid.",
             )
@@ -270,15 +258,15 @@ class DiscordPlugin(BasePlugin):
             timestamp_seconds,
             tolerance_seconds=_resolve_timestamp_tolerance(config),
         ):
-            return ReceiveResult(
-                ok=False,
+            return NotificationReceiveResult(
+                accepted=False,
                 code="TIMESTAMP_INVALID",
                 message="Discord signature timestamp is outside the accepted tolerance window.",
             )
 
         if not verify_discord_request(body, timestamp, signature, public_key):
-            return ReceiveResult(
-                ok=False,
+            return NotificationReceiveResult(
+                accepted=False,
                 code="SIGNATURE_INVALID",
                 message="Discord request signature validation failed.",
             )
@@ -286,31 +274,31 @@ class DiscordPlugin(BasePlugin):
         try:
             payload = json.loads(body.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError):
-            return ReceiveResult(
-                ok=False,
+            return NotificationReceiveResult(
+                accepted=False,
                 code="PAYLOAD_INVALID",
                 message="Request body is not valid JSON.",
             )
 
         if not isinstance(payload, dict):
-            return ReceiveResult(
-                ok=False,
+            return NotificationReceiveResult(
+                accepted=False,
                 code="PAYLOAD_INVALID",
                 message="Request payload must be a JSON object.",
             )
 
         payload_type = payload.get("type")
         if payload_type == PING_TYPE:
-            return ReceiveResult(
-                ok=True,
+            return NotificationReceiveResult(
+                accepted=True,
                 code="PING",
                 message="Discord interaction ping acknowledged.",
                 response=PONG_RESPONSE,
             )
 
         if payload_type != APPLICATION_COMMAND_TYPE:
-            return ReceiveResult(
-                ok=False,
+            return NotificationReceiveResult(
+                accepted=False,
                 code="UNSUPPORTED_EVENT_TYPE",
                 message="Only application command interactions are supported in v1.",
             )
@@ -318,8 +306,8 @@ class DiscordPlugin(BasePlugin):
         guild_id = _optional_str(payload.get("guild_id"))
         guild_allowlist = _normalized_allowlist(config.get("guild_allowlist"))
         if guild_allowlist and guild_id not in guild_allowlist:
-            return ReceiveResult(
-                ok=False,
+            return NotificationReceiveResult(
+                accepted=False,
                 code="GUILD_NOT_ALLOWED",
                 message="Interaction guild is not allowed by this plugin config.",
             )
@@ -327,21 +315,21 @@ class DiscordPlugin(BasePlugin):
         channel_id = _optional_str(payload.get("channel_id"))
         channel_allowlist = _normalized_allowlist(config.get("channel_allowlist"))
         if channel_allowlist and channel_id not in channel_allowlist:
-            return ReceiveResult(
-                ok=False,
+            return NotificationReceiveResult(
+                accepted=False,
                 code="CHANNEL_NOT_ALLOWED",
                 message="Interaction channel is not allowed by this plugin config.",
             )
 
         text = _extract_text(payload)
         if text is None:
-            return ReceiveResult(
-                ok=False,
+            return NotificationReceiveResult(
+                accepted=False,
                 code="PAYLOAD_UNSUPPORTED",
                 message="Interaction payload does not include a supported text option.",
             )
 
-        dto = DiscordInteractionDto(
+        item = NotificationReceiveItem(
             interaction_id=_required_identifier(payload.get("id"), fallback="unknown-interaction"),
             source_id=f"discord.interaction:{_required_identifier(payload.get('application_id'), fallback='unknown-app')}",
             text=text,
@@ -353,6 +341,7 @@ class DiscordPlugin(BasePlugin):
                 "command_name": _optional_str(_mapping(payload.get("data")).get("name")),
                 "option_names": _extract_option_names(payload),
             },
+            metadata={"plugin_id": self.context.plugin_id if self._context is not None else "quantagent.official.notification.discord"},
         )
 
         response_text = _optional_str(config.get("response_text")) or "QuantAgent received your Discord interaction."
@@ -363,12 +352,12 @@ class DiscordPlugin(BasePlugin):
                 "flags": EPHEMERAL_FLAG,
             },
         }
-        return ReceiveResult(
-            ok=True,
+        return NotificationReceiveResult(
+            accepted=True,
             code="RECEIVED",
             message="Discord interaction webhook payload received.",
             response=response,
-            dto=dto,
+            item=item,
         )
 
 
@@ -543,17 +532,3 @@ def _resolve_runtime_secrets(config: Mapping[str, Any]) -> Mapping[str, str] | N
     if isinstance(secrets, Mapping):
         return {str(key): str(value) for key, value in secrets.items()}
     return None
-
-
-def _dto_to_mapping(dto: DiscordInteractionDto | None) -> Mapping[str, Any] | None:
-    if dto is None:
-        return None
-    return {
-        "interaction_id": dto.interaction_id,
-        "source_id": dto.source_id,
-        "text": dto.text,
-        "payload_summary": dto.payload_summary,
-        "guild_id": dto.guild_id,
-        "channel_id": dto.channel_id,
-        "author_id": dto.author_id,
-    }

@@ -4,6 +4,8 @@ import unittest
 
 from quantagent.plugin_sdk import (
     DTO_VALIDATION_ERROR_CODE,
+    NotificationReceiveItem,
+    NotificationReceiveResult,
     NotificationSendInput,
     NotificationSendResult,
     PluginRuntimeError,
@@ -134,6 +136,48 @@ class PluginSdkIoDtoTestCase(unittest.TestCase):
         )
         with self.assertRaises(TypeError):
             result.metadata["another"] = 1  # type: ignore[index]
+
+    def test_notification_receive_result_roundtrip(self) -> None:
+        result = NotificationReceiveResult.from_mapping(
+            {
+                "accepted": True,
+                "code": "RECEIVED",
+                "message": "ok",
+                "response": {"type": 4, "data": {"content": "ok", "flags": 64}},
+                "item": {
+                    "interaction_id": "123456",
+                    "source_id": "discord.interaction:app-1",
+                    "text": "hello from discord",
+                    "payload_summary": {"type": 2, "command_name": "notify"},
+                    "guild_id": "guild-1",
+                    "channel_id": "channel-1",
+                    "author_id": "user-1",
+                    "metadata": {"plugin_id": "quantagent.official.notification.discord"},
+                },
+                "retryable": False,
+                "metadata": {"transport": "discord-webhook"},
+            }
+        )
+
+        self.assertEqual(result.code, "RECEIVED")
+        self.assertIsInstance(result.item, NotificationReceiveItem)
+        assert result.item is not None
+        self.assertEqual(result.item.source_id, "discord.interaction:app-1")
+        self.assertEqual(result.to_mapping()["response"]["type"], 4)
+
+    def test_notification_receive_result_rejects_missing_code(self) -> None:
+        with self.assertRaises(PluginRuntimeError) as raised:
+            NotificationReceiveResult.from_mapping(
+                {
+                    "accepted": True,
+                    "message": "ok",
+                    "response": {"type": 1},
+                    "retryable": False,
+                }
+            )
+
+        self.assertEqual(raised.exception.code, DTO_VALIDATION_ERROR_CODE)
+        self.assertEqual(raised.exception.details["field"], "code")
 
     def test_json_safe_validation_rejects_unserializable_values(self) -> None:
         with self.assertRaises(PluginRuntimeError) as raised:
