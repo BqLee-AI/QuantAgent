@@ -454,9 +454,10 @@ class AnalysisInput:
 
     def to_mapping(self) -> dict[str, Any]:
         return {
-            # EvidenceLike 对象可能是 dataclass 或任意对象，统一走 to_json_value
+            # 优先用 PluginResult.to_mapping() 序列化；否则要求对象可转为映射
             "evidences": [
-                to_json_value(e.to_mapping()) if hasattr(e, "to_mapping") else to_json_value(e)
+                to_json_value(e.to_mapping()) if isinstance(e, PluginResult)
+                else _evidence_like_to_json(e)
                 for e in self.evidences
             ],
             "query": self.query,
@@ -961,3 +962,19 @@ def _get_optional_string_tuple(payload: Mapping[str, Any], field_name: str, *, s
             details={"value_type": type(value).__name__},
         )
     return _freeze_strings(value)
+
+
+def _evidence_like_to_json(obj: EvidenceLike) -> JsonObject:
+    """将满足 EvidenceLike Protocol 的对象序列化为 JSON 映射。
+
+    用于 AnalysisInput.to_mapping() 中处理自定义 EvidenceLike 对象。
+    只提取 Protocol 定义的三个核心属性：title、url、snippet。
+    """
+    result: dict[str, JsonValue] = {}
+    if obj.title is not None:
+        result["title"] = obj.title
+    if obj.url is not None:
+        result["url"] = obj.url
+    if obj.snippet is not None:
+        result["snippet"] = obj.snippet
+    return freeze_json_mapping(result)
