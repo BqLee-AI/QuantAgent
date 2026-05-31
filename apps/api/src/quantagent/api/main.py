@@ -20,6 +20,7 @@ from quantagent.api.routers.v1 import register_api_v1_routes
 _DEV_SERVER_PID_DIR = Path("data/api/dev-server")
 _DEV_SERVER_STOP_TIMEOUT_SECONDS = 2.0
 _DEV_SERVER_STOP_POLL_INTERVAL_SECONDS = 0.1
+_DEV_WORKER_PID_TRACKING_ENV = "QUANTAGENT_API_TRACK_DEV_WORKER_PID"
 _PID_ROLE_RELOADER = "reloader"
 _PID_ROLE_WORKER = "worker"
 
@@ -199,23 +200,36 @@ def _stop_dev_server(current_settings: Settings) -> DevServerStopSummary:
     )
 
 
+def _should_enable_reload(current_settings: Settings) -> bool:
+    """本地开发入口默认启用热更新，非本地环境保持单进程启动。"""
+    return current_settings.APP_ENV.lower() in {"development", "local"}
+
+
+def _should_track_dev_worker_pid(current_settings: Settings) -> bool:
+    """worker pid 只服务 `uv run api` 本地入口，不作为普通 app lifespan 副作用。"""
+    return _should_enable_reload(current_settings) and os.environ.get(_DEV_WORKER_PID_TRACKING_ENV) == "1"
+
+
 def create_app(app_settings: Settings | None = None) -> FastAPI:
     """构建 FastAPI 应用，并注册公共中间件、异常处理和路由。"""
     current_settings = app_settings or settings
+    should_track_dev_worker = _should_track_dev_worker_pid(current_settings)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         # 将数据库初始化放在生命周期里，避免测试或脚本在创建应用时就提前建立连接。
         try:
-            # reload 模式下 reloader 和 worker 是两个独立进程；记录 worker pid 供 api-stop 一次性回收残留进程。
-            _write_dev_server_pid(current_settings, _PID_ROLE_WORKER, os.getpid())
+            if should_track_dev_worker:
+                # 仅本地 reload 入口记录 worker pid，避免生产/测试 runtime 被开发态进程管理文件污染。
+                _write_dev_server_pid(current_settings, _PID_ROLE_WORKER, os.getpid())
             configure_api_logging(current_settings)
             initialize_database(app, current_settings)
             yield
         finally:
             shutdown_database(app)
             shutdown_api_logging()
-            _remove_dev_server_pid(current_settings, _PID_ROLE_WORKER, expected_pid=os.getpid())
+            if should_track_dev_worker:
+                _remove_dev_server_pid(current_settings, _PID_ROLE_WORKER, expected_pid=os.getpid())
 
     app = FastAPI(title="QuantAgent API", version=__version__, lifespan=lifespan)
     app.state.settings = current_settings
@@ -228,15 +242,12 @@ def create_app(app_settings: Settings | None = None) -> FastAPI:
 app = create_app()
 
 
-def _should_enable_reload(current_settings: Settings) -> bool:
-    """本地开发入口默认启用热更新，非本地环境保持单进程启动。"""
-    return current_settings.APP_ENV.lower() in {"development", "local"}
-
-
 def run() -> None:
     """使用配置中的主机和端口启动开发服务器。"""
     import uvicorn
 
+    previous_tracking_value = os.environ.get(_DEV_WORKER_PID_TRACKING_ENV)
+    os.environ[_DEV_WORKER_PID_TRACKING_ENV] = "1"
     try:
         _write_dev_server_pid(settings, _PID_ROLE_RELOADER, os.getpid())
         uvicorn.run(
@@ -247,6 +258,10 @@ def run() -> None:
         )
     finally:
         _remove_dev_server_pid(settings, _PID_ROLE_RELOADER, expected_pid=os.getpid())
+        if previous_tracking_value is None:
+            os.environ.pop(_DEV_WORKER_PID_TRACKING_ENV, None)
+        else:
+            os.environ[_DEV_WORKER_PID_TRACKING_ENV] = previous_tracking_value
 
 
 def stop() -> None:
