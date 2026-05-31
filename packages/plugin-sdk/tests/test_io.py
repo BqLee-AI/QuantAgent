@@ -10,6 +10,7 @@ from quantagent.plugin_sdk import (
     DTO_VALIDATION_ERROR_CODE,
     EvidenceExtractResult,
     EvidenceItem,
+    EvidenceLike,
     EvidenceSearchResult,
     NotificationSendInput,
     NotificationSendResult,
@@ -240,8 +241,8 @@ class PluginSdkIoDtoTestCase(unittest.TestCase):
     def test_analysis_input_roundtrip(self) -> None:
         original = AnalysisInput(
             evidences=(
-                {"title": "Evidence 1", "url": "https://example.com/1"},
-                {"title": "Evidence 2", "url": "https://example.com/2"},
+                EvidenceItem(title="Evidence 1", url="https://example.com/1"),
+                EvidenceItem(title="Evidence 2", url="https://example.com/2"),
             ),
             query="What is the market trend?",
             metadata={"context": "investment"},
@@ -249,7 +250,8 @@ class PluginSdkIoDtoTestCase(unittest.TestCase):
         mapped = original.to_mapping()
         restored = AnalysisInput.from_mapping(mapped)
         self.assertEqual(len(restored.evidences), 2)
-        self.assertEqual(restored.evidences[0]["title"], "Evidence 1")
+        # from_mapping 将 plain mapping 重建为 EvidenceItem
+        self.assertEqual(restored.evidences[0].title, "Evidence 1")
         self.assertEqual(restored.query, "What is the market trend?")
         self.assertEqual(restored.metadata["context"], "investment")
 
@@ -346,6 +348,31 @@ class PluginSdkIoDtoTestCase(unittest.TestCase):
         """AnalysisInput.from_mapping evidences 不是数组必须抛 dto_validation_error"""
         with self.assertRaises(PluginRuntimeError) as cm:
             AnalysisInput.from_mapping({"evidences": "not_array"})
+        self.assertEqual(cm.exception.code, DTO_VALIDATION_ERROR_CODE)
+
+    def test_analysis_input_accepts_evidence_like_protocol(self) -> None:
+        """AnalysisInput 接受满足 EvidenceLike Protocol 的自定义对象"""
+        class CustomEvidence:
+            @property
+            def title(self) -> str | None:
+                return "Custom"
+            @property
+            def url(self) -> str | None:
+                return "https://custom.com"
+            @property
+            def snippet(self) -> str | None:
+                return "Custom snippet"
+
+        custom = CustomEvidence()
+        self.assertIsInstance(custom, EvidenceLike)
+        original = AnalysisInput(evidences=(custom,))
+        self.assertEqual(len(original.evidences), 1)
+        self.assertEqual(original.evidences[0].title, "Custom")
+
+    def test_analysis_input_rejects_non_evidence_like(self) -> None:
+        """AnalysisInput.__post_init__ 拒绝不满足 EvidenceLike 的对象"""
+        with self.assertRaises(PluginRuntimeError) as cm:
+            AnalysisInput(evidences=("not_an_evidence",))
         self.assertEqual(cm.exception.code, DTO_VALIDATION_ERROR_CODE)
 
     def test_broker_execute_input_rejects_non_string_action(self) -> None:

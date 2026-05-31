@@ -289,6 +289,25 @@ class NotificationSendResult:
         )
 
 
+@runtime_checkable
+class EvidenceLike(Protocol):
+    """最小证据契约 — 跨链路解耦接口。
+
+    任何证据来源只需满足 title/url/snippet 三个属性即可传入 AnalysisInput。
+    EvidenceItem 天然满足此 Protocol；外部插件也可自行实现。
+    与 RuntimePlugin Protocol 风格一致：结构性子类型，不要求继承。
+    """
+
+    @property
+    def title(self) -> str | None: ...
+
+    @property
+    def url(self) -> str | None: ...
+
+    @property
+    def snippet(self) -> str | None: ...
+
+
 @dataclass(frozen=True)
 class EvidenceItem:
     """证据检索结果中的单个证据项"""
@@ -418,20 +437,28 @@ class EvidenceExtractResult:
 
 @dataclass(frozen=True)
 class AnalysisInput:
-    """分析插件的输入参数（使用通用 Mapping 保持链路松耦合）"""
-    evidences: tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
+    """分析插件的输入参数。
+
+    evidences 接受满足 EvidenceLike Protocol 的任意对象，
+    不强绑定具体 DTO 类型，保持链路松耦合。
+    """
+    evidences: tuple[EvidenceLike, ...] = field(default_factory=tuple)
     query: str | None = None
     metadata: JsonObject = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        # evidences 用 Mapping[str, Any] 不强绑定具体 DTO 类型，保持链路松耦合
-        object.__setattr__(self, "evidences", _freeze_evidence_mappings(self.evidences, stage="invoke"))
+        # 冻结 evidences 元组，验证所有元素满足 EvidenceLike Protocol
+        object.__setattr__(self, "evidences", _freeze_evidence_like(self.evidences))
         _validate_optional_string("query", self.query)
         object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata))
 
     def to_mapping(self) -> dict[str, Any]:
         return {
-            "evidences": [to_json_value(e) for e in self.evidences],
+            # EvidenceLike 对象可能是 dataclass 或任意对象，统一走 to_json_value
+            "evidences": [
+                to_json_value(e.to_mapping()) if hasattr(e, "to_mapping") else to_json_value(e)
+                for e in self.evidences
+            ],
             "query": self.query,
             "metadata": to_json_value(self.metadata),
         }
@@ -444,9 +471,12 @@ class AnalysisInput:
         evidences_raw = payload.get("evidences", [])
         if not isinstance(evidences_raw, list | tuple):
             raise dto_validation_error("evidences must be an array.", field_name="evidences", stage=stage)
+        # from_mapping 从 plain mapping 重建，用 EvidenceItem 作为标准载体
         return cls(
             evidences=tuple(
-                freeze_json_mapping(_require_mapping(e, field_name="evidences", stage=stage), stage=stage)
+                EvidenceItem.from_mapping(_require_mapping(e, field_name="evidences", stage=stage), stage=stage)
+                if not isinstance(e, EvidenceLike)
+                else e
                 for e in evidences_raw
             ),
             query=_get_optional_string(payload, "query", stage=stage),
@@ -714,20 +744,22 @@ def _freeze_evidence_items(items: tuple[EvidenceItem, ...] | list[EvidenceItem])
     return tuple(frozen_items)
 
 
-def _freeze_evidence_mappings(items: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]], *, stage: str = "invoke") -> tuple[Mapping[str, Any], ...]:
-    """冻结证据映射元组，验证所有元素都是映射并冻结"""
+def _freeze_evidence_like(items: tuple[EvidenceLike, ...] | list[EvidenceLike]) -> tuple[EvidenceLike, ...]:
+    """冻结 EvidenceLike 元组，验证所有元素满足 Protocol"""
     if not isinstance(items, list | tuple):
         raise dto_validation_error(
-            "AnalysisInput.evidences must be an array of mapping objects.",
+            "AnalysisInput.evidences must be an array.",
             field_name="evidences",
-            stage=stage,
             details={"value_type": type(items).__name__},
         )
-    frozen_items: list[Mapping[str, Any]] = []
     for item in items:
-        frozen = _require_mapping(item, field_name="evidences", stage=stage)
-        frozen_items.append(freeze_json_mapping(frozen, stage=stage))
-    return tuple(frozen_items)
+        if not isinstance(item, EvidenceLike):
+            raise dto_validation_error(
+                "evidences must contain objects satisfying EvidenceLike protocol (title, url, snippet).",
+                field_name="evidences",
+                details={"value_type": type(item).__name__},
+            )
+    return tuple(items)
 
 
 def _validate_object(payload: Mapping[str, Any], *, dto_name: str, stage: str) -> None:
