@@ -431,7 +431,7 @@ class AnalysisInput:
 
     def to_mapping(self) -> dict[str, Any]:
         return {
-            "evidences": [dict(e) if isinstance(e, Mapping) else e for e in self.evidences],
+            "evidences": [to_json_value(e) for e in self.evidences],
             "query": self.query,
             "metadata": to_json_value(self.metadata),
         }
