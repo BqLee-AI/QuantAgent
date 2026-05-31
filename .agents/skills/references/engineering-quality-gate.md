@@ -21,7 +21,8 @@
 
 - 涉及 `apps/web/**` 时，必须读取 `.agents/skills/references/web-architecture-gate.md`。
 - Web 变更涉及新增 feature、复杂 route、目录增长、shared 能力或文件职责拆分时，还必须读取 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`。
-- 后续涉及 `apps/api/**`、`packages/core/**` 且有共享 gate 时，按同样方式加载对应文件。
+- 涉及 `apps/api/**` 时，必须读取 `.agents/skills/references/api-architecture-gate.md`。
+- 涉及 `packages/core/**`、`packages/plugin-sdk/**` 或 `plugins/**` 时，必须读取 `.agents/skills/references/core-and-plugin-architecture-gate.md`。
 
 模块 gate 是规划和实现阶段的规范来源；`ai-code-review/references/**` 只补充审查场景、finding 口径和输出导航。
 
@@ -61,12 +62,57 @@
 
 涉及 Python/API/core 时必须检查：
 
-- FastAPI router 保持薄层，只处理 HTTP 参数、DTO、状态码、响应信封、依赖注入和异常映射。
+- 已读取对应模块 gate：涉及 `apps/api/**` 读取 `api-architecture-gate.md`；涉及 `packages/core/**` 或 `plugins/**` 读取 `core-and-plugin-architecture-gate.md`。
+- FastAPI router 保持薄层，只处理 HTTP 参数、DTO、状态码、响应信封、依赖注入和异常映射；禁止 router 直接操作数据库、承载业务逻辑或调用插件。
 - 业务流程、状态变化、插件生命周期、审计、权限、数据库写入或外部适配必须有明确 service/provider/repository/port 边界。
-- DTO、ORM model、领域对象、插件 DTO、API envelope 分层独立，不能互相替代。
-- 跨 app 复用能力优先下沉到 package；API 私有能力保留在 `apps/api`。
-- Repository / storage port 只在存在真实持久化、跨调用复用或插件隔离需求时引入。
-- 关键状态变化、高风险动作和人工确认必须可审计。
+- DTO、ORM model、领域对象、插件 DTO、API envelope 分层独立，不能互相替代；ORM model 不能直接作为 API response 返回。
+- 跨 app 复用能力优先下沉到 package；API 私有能力保留在 `apps/api`；core 不能反向依赖 app 或具体插件。
+- Repository / storage port 只在存在真实持久化、跨调用复用或插件隔离需求时引入；service 依赖 repository 接口而非 ORM session 实现（依赖倒置）。
+- 关键状态变化、高风险动作和人工确认必须可审计；审计记录 append-only，不可覆盖。
+
+### 数据库操作
+
+- 查询必须有 WHERE 条件和索引覆盖；禁止无 LIMIT 大查询和 `SELECT *`；`.all()` 不加 `limit` 是 must-fix。
+- ORM 关联加载必须显式声明 `selectinload` / `joinedload`；循环内访问 relation attribute（N+1）是 must-fix。
+- 写事务范围最小化，事务内禁止跨网络调用（HTTP、插件 invoke）；批量写入必须分批。
+- Engine 由应用生命周期管理，禁止模块级 `create_engine()` 单例；pool size 可配置。
+- 软删除必须处理 unique 约束（条件索引）、默认过滤和唯一性冲突错误。
+- Migration 禁止手改历史、大表同步删列/改类型；data backfill 必须分批。
+
+### 缓存策略
+
+- 没有性能瓶颈证据前不引入缓存；先看查询优化和索引。
+- 引入缓存前必须说明：缓存什么、失效策略、一致性保证级别、内存上限。
+- 缓存不能改变业务语义——有缓存和无缓存的行为必须一致。
+
+### 并发与异步
+
+- async endpoint 内禁止同步阻塞调用（`requests`、同步 DB driver、CPU 密集）；必须用 `run_in_executor` 或换 async 库。
+- 共享状态的先读后写必须有并发保护（乐观锁 version field 或悲观锁 `SELECT ... FOR UPDATE`）。
+- API 写操作必须幂等或通过 idempotency key 保证；插件调用和事件发布必须可安全重试。
+- 所有外部调用必须有显式超时；插件执行必须有可配置超时上限和降级策略。
+- 并发相关代码必须有测试覆盖（竞态、幂等、超时降级）。
+
+### 跨功能调用
+
+- 调用链必须是 router → service → repository；跳层（router 直接调 repository 或 ORM）是 must-fix。
+- 跨聚合不直接调对方 repository；通过 service 接口或事件通信。
+- 插件之间不能互相 import；只能通过 core 定义的 event / DTO 通信。
+
+### 错误处理与可观测性
+
+- 不吞异常（`except Exception: pass` 是 must-fix）；底层错误必须 wrap 成领域异常。
+- 错误响应使用统一 envelope，不暴露 traceback、连接串、secret 或内部路径。
+- 每个 HTTP 请求必须有 `X-Request-ID`，贯穿日志、错误响应和审计。
+- 关键路径必须有结构化日志（JSON + request_id + action + duration）；日志不打印 secret。
+- 插件执行必须有 duration + success/failure 指标。
+
+### 插件边界
+
+- 插件只通过 `plugin.yaml` + Registry 进入系统；core 不硬编码插件 class/import/if-else。
+- 插件执行必须有超时保护、返回值大小限制和失败隔离。
+- 插件之间互相隔离，不能互相 import 或直接访问数据库 session。
+- 插件配置中的 secret 只存 reference，不存明文。
 
 ## 注释门槛
 

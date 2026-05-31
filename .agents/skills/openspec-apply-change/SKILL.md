@@ -13,7 +13,7 @@ Implement tasks from an OpenSpec change.
 
 **Input**: Optionally specify a change name. If omitted, check if it can be inferred from conversation context. If vague or ambiguous you MUST prompt for available changes.
 
-**QuantAgent quality gate**: Before implementation, read `.agents/skills/references/engineering-quality-gate.md` and verify the selected change artifacts are implementation-ready. If affected paths include `apps/web/**`, also read `.agents/skills/references/web-architecture-gate.md`. For complex Web features, routes, shared capabilities, or file splitting, read `.agents/skills/references/web-file-responsibility-and-feature-structure.md`. If the artifacts do not describe directory/file planning, responsibilities, core models, interface fields, reuse points, data flow, failure paths, and validation entrypoints, pause and propose artifact updates instead of writing code.
+**QuantAgent quality gate**: Before implementation, read `.agents/skills/references/engineering-quality-gate.md` and verify the selected change artifacts are implementation-ready. If affected paths include `apps/web/**`, also read `.agents/skills/references/web-architecture-gate.md`. For complex Web features, routes, shared capabilities, or file splitting, read `.agents/skills/references/web-file-responsibility-and-feature-structure.md`. If affected paths include `apps/api/**`, also read `.agents/skills/references/api-architecture-gate.md`. If affected paths include `packages/core/**`, `packages/plugin-sdk/**`, or `plugins/**`, also read `.agents/skills/references/core-and-plugin-architecture-gate.md`. If the artifacts do not describe directory/file planning, responsibilities, core models, interface fields, reuse points, data flow, failure paths, and validation entrypoints, pause and propose artifact updates instead of writing code.
 
 **Steps**
 
@@ -58,7 +58,7 @@ Implement tasks from an OpenSpec change.
    - **spec-driven**: proposal, specs, design, tasks
    - Other schemas: follow the contextFiles from CLI output
 
-   Also read `.agents/skills/references/engineering-quality-gate.md`, root `AGENTS.md`, and the nearest `AGENTS.md` files for the paths the tasks will touch. For Web tasks, read `.agents/skills/references/web-architecture-gate.md`; for complex Web feature structure or file splitting, read `.agents/skills/references/web-file-responsibility-and-feature-structure.md`.
+   Also read `.agents/skills/references/engineering-quality-gate.md`, root `AGENTS.md`, and the nearest `AGENTS.md` files for the paths the tasks will touch. For Web tasks, read `.agents/skills/references/web-architecture-gate.md`; for complex Web feature structure or file splitting, read `.agents/skills/references/web-file-responsibility-and-feature-structure.md`. For API tasks, read `.agents/skills/references/api-architecture-gate.md`. For Core/Plugin tasks, read `.agents/skills/references/core-and-plugin-architecture-gate.md`. For SDK tasks, read `.agents/skills/references/core-and-plugin-architecture-gate.md`.
 
 5. **Run engineering quality gate**
 

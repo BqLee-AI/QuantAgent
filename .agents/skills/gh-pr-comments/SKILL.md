@@ -33,7 +33,9 @@ gh api repos/BqLee-AI/QuantAgent/pulls/<pr>/comments
 5. 需要判断工程质量门槛时读 `.agents/skills/references/engineering-quality-gate.md`
 6. 涉及 `apps/web/**`、前端 feature、route、API 调用、组件或运行时容器时，读 `.agents/skills/references/web-architecture-gate.md`
 7. Web 评论涉及复杂 feature、route、shared 能力或目录拆分时，读 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`
-8. 需要分类处理时再读 `references/comment-triage.md`
+8. 涉及 `apps/api/**` 时，读 `.agents/skills/references/api-architecture-gate.md`
+9. 涉及 `packages/core/**`、`packages/plugin-sdk/**` 或 `plugins/**` 时，读 `.agents/skills/references/core-and-plugin-architecture-gate.md`
+10. 需要分类处理时再读 `references/comment-triage.md`
 
 ## 分类原则
 
@@ -47,7 +49,7 @@ gh api repos/BqLee-AI/QuantAgent/pulls/<pr>/comments
 
 不要因为评论来自 AI 就全接，也不要因为来自 AI 就直接忽略。用代码、版本、文档、测试和项目规则判断。
 
-如果评论指出组件拆分、HeroUI/Tailwind、薄 router、service/repository/port、DTO/ORM 分层、注释、OpenSpec 质量或验证缺口，必须对照 `.agents/skills/references/engineering-quality-gate.md` 判断是否属于 must-fix 或 should-fix；Web 评论还必须对照 `.agents/skills/references/web-architecture-gate.md` 判断 runtime/API/query/hook/component/README 边界。涉及具体文件拆分时，对照 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`。不能用“当前能跑”作为跳过理由。
+如果评论指出组件拆分、HeroUI/Tailwind、薄 router、service/repository/port、DTO/ORM 分层、注释、OpenSpec 质量或验证缺口，必须对照 `.agents/skills/references/engineering-quality-gate.md` 判断是否属于 must-fix 或 should-fix；Web 评论还必须对照 `.agents/skills/references/web-architecture-gate.md` 判断 runtime/API/query/hook/component/README 边界。涉及具体文件拆分时，对照 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`。API 评论必须对照 `.agents/skills/references/api-architecture-gate.md` 判断 router/service/DTO/DB/并发/错误处理边界。Core/Plugin 评论必须对照 `.agents/skills/references/core-and-plugin-architecture-gate.md` 判断 package 依赖方向、插件分层、Registry 边界和性能边界。不能用“当前能跑”作为跳过理由。
 
 ## 判断较新技术栈
 

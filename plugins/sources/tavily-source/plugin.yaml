@@ -1,0 +1,12 @@
+id: quantagent.official.source.tavily
+name: Tavily Source Tool
+type: source
+version: 0.1.0
+entrypoint: src.tavily_source:plugin
+description: Evidence-oriented search and extract tool backed by the Tavily API.
+execution_mode: pull
+capabilities:
+  - source.fetch
+  - source.search
+  - source.extract
+config_schema: config.schema.json

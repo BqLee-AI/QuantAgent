@@ -1,0 +1,1 @@
+"""QuantAgent worker entrypoint package."""

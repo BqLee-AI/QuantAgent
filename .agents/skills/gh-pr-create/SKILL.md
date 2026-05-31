@@ -24,7 +24,9 @@ metadata:
 6. 需要判断工程质量门槛时读 `.agents/skills/references/engineering-quality-gate.md`
 7. 涉及 `apps/web/**`、前端 feature、route、API 调用、组件或运行时容器时，读 `.agents/skills/references/web-architecture-gate.md`
 8. Web PR 涉及复杂 feature、route、shared 能力或目录拆分时，读 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`
-9. 需要对照 PR 说明结构时再读 `references/pr-body.md`
+9. 涉及 `apps/api/**` 时，读 `.agents/skills/references/api-architecture-gate.md`
+10. 涉及 `packages/core/**`、`packages/plugin-sdk/**` 或 `plugins/**` 时，读 `.agents/skills/references/core-and-plugin-architecture-gate.md`
+11. 需要对照 PR 说明结构时再读 `references/pr-body.md`
 
 不要把未提交、无关或用户已有脏改动混进 PR。当前工作区有无关变更时，先说明并只 stage 自己负责的文件。
 
@@ -43,6 +45,8 @@ metadata:
 - 工程质量 gate 已体现在 diff 或 PR 说明中：目录/文件规划、职责边界、核心模型、接口字段、复用点、数据流、失败路径、验证入口和必要注释都有交代。
 - Web PR 已体现在 diff 或 PR 说明中：route、app runtime、API/BaseApi/FeatureApi、query/mutation、业务 hook、view component、README、中文注释和目录分组是否符合 `web-architecture-gate.md`。
 - 复杂 Web PR 已体现在 diff 或 PR 说明中：具体 route、api、contracts、query keys、queries、mutations、hooks、components、types、utils、README 文件职责是否符合 `web-file-responsibility-and-feature-structure.md`。
+- API PR 已体现在 diff 或 PR 说明中：router/service/repository/DTO/envelope 边界、DB 操作规范、缓存策略、并发保护、错误处理和审计是否符合 `api-architecture-gate.md`。
+- Core/Plugin PR 已体现在 diff 或 PR 说明中：package 依赖方向、插件分层、DTO 契约、Registry 边界、ORM/Repository 规范、性能边界和 secret 管理是否符合 `core-and-plugin-architecture-gate.md`。
 - 若跳过组件拆分、service/repository/port、注释或测试，必须有基于范围和风险的理由。
 - 没有提交 secrets、真实 `.env`、runtime 私有内容、缓存或构建产物。
 

@@ -24,10 +24,14 @@ metadata:
 4. 关联 issue、OpenSpec change、设计文档、PRD、PR 评论和 CI 结果
 5. 需要判断工程质量门槛时读 `.agents/skills/references/engineering-quality-gate.md`
 6. 涉及 `apps/web/**` 时，先读 `.agents/skills/references/web-architecture-gate.md`；复杂 feature、route、shared 能力或文件拆分还要读 `.agents/skills/references/web-file-responsibility-and-feature-structure.md`；再读本 skill 的 Web review reference
-7. 按变更路径加载本 skill 的 reference：
+7. 涉及 `apps/api/**` 时，先读 `.agents/skills/references/api-architecture-gate.md`
+8. 涉及 `packages/core/**`、`packages/plugin-sdk/**` 或 `plugins/**` 时，先读 `.agents/skills/references/core-and-plugin-architecture-gate.md`
+9. 按变更路径加载本 skill 的 reference：
    - `apps/web/**`：读 `references/web/overview.md`
    - `apps/api/**`：读 `references/api/overview.md`
    - `packages/core/**`：读 `references/core/overview.md`
+   - 后端变更若同时触及 `apps/api/**` 与 `packages/core/**`，必须同时加载 API 与 core overview；再按 overview 的场景索引选择细则，不用当前实现替代目标边界。
+   - Event Bus、worker、scheduler、Docker 或运行时配置变更通常同时涉及 core 的 Event / State / Audit、Config、Package Boundary，以及 API 的 Lifespan / Readiness；不要只按单一路径审查。
 8. 需要统一输出格式时读 `references/shared/review-output.md`
 
 不要一次性加载所有模块细则。先用 changed files、imports、调用形态和 diff 内容选择相关 reference。
@@ -77,7 +81,9 @@ metadata:
 - Web 文件职责规范：`.agents/skills/references/web-file-responsibility-and-feature-structure.md`
 - 前端管理台：`references/web/overview.md`
 - FastAPI API 边界：`references/api/overview.md`
+- API 规划与实现 gate：`.agents/skills/references/api-architecture-gate.md`
 - 共享 core 包：`references/core/overview.md`
+- Core 与 Plugin 规划与实现 gate：`.agents/skills/references/core-and-plugin-architecture-gate.md`
 
 未来新增模块时，只在对应 overview 里加入导航，不把细则塞回 `SKILL.md`。
 

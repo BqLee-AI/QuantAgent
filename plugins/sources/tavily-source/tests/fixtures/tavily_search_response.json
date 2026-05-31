@@ -1,0 +1,27 @@
+{
+  "query": "battery storage breakthrough 2026",
+  "answer": "Battery storage suppliers climbed after a new grid-scale chemistry cleared pilot deployment.",
+  "results": [
+    {
+      "title": "Grid-Scale Battery Storage Breakthrough Reported in East Asia",
+      "url": "https://example.com/articles/storage-breakthrough",
+      "content": "Battery storage suppliers climbed after a new grid-scale chemistry cleared pilot deployment in East Asia. Analysts said the update could lower balancing costs.",
+      "score": 0.92,
+      "raw_content": null,
+      "favicon": "https://example.com/favicon.ico"
+    },
+    {
+      "title": "Energy Storage Market Outlook 2026",
+      "url": "https://example.com/reports/energy-storage-2026",
+      "content": "The energy storage sector is seeing record investment as grid-scale solutions become commercially viable.",
+      "score": 0.85,
+      "raw_content": null,
+      "favicon": "https://example.com/favicon.ico"
+    }
+  ],
+  "response_time": 1.23,
+  "auto_parameters": {
+    "topic": "general",
+    "search_depth": "basic"
+  }
+}
