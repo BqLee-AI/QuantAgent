@@ -582,7 +582,7 @@ class StrategyDraftResult:
             rationale=_get_required_string(payload, "rationale", stage=stage),
             risk_notes=_get_optional_string_tuple(payload, "risk_notes", stage=stage),
             confidence=_get_optional_float(payload, "confidence", stage=stage),
-            requires_approval=_get_required_bool(payload, "requires_approval", stage=stage) if "requires_approval" in payload else True,
+            requires_approval=_get_optional_bool(payload, "requires_approval", default=True, stage=stage),
             metadata=freeze_json_mapping(_get_optional_mapping(payload, "metadata", stage=stage), stage=stage),
         )
 
@@ -629,7 +629,7 @@ class BrokerExecuteInput:
             quantity=_get_optional_float(payload, "quantity", stage=stage),
             order_type=_get_optional_string(payload, "order_type", stage=stage),
             price=_get_optional_float(payload, "price", stage=stage),
-            dry_run=_get_required_bool(payload, "dry_run", stage=stage) if "dry_run" in payload else True,
+            dry_run=_get_optional_bool(payload, "dry_run", default=True, stage=stage),
             metadata=freeze_json_mapping(_get_optional_mapping(payload, "metadata", stage=stage), stage=stage),
         )
 
@@ -822,6 +822,15 @@ def _get_required_bool(payload: Mapping[str, Any], field_name: str, *, stage: st
             field_name=field_name,
             stage=stage,
         )
+    value = payload[field_name]
+    _validate_bool(field_name, value, stage=stage)
+    return value
+
+
+def _get_optional_bool(payload: Mapping[str, Any], field_name: str, *, default: bool = False, stage: str) -> bool:
+    """从 payload 获取可选的布尔字段，缺失时返回 default"""
+    if field_name not in payload:
+        return default
     value = payload[field_name]
     _validate_bool(field_name, value, stage=stage)
     return value

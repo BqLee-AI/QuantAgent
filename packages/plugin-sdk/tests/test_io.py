@@ -360,6 +360,26 @@ class PluginSdkIoDtoTestCase(unittest.TestCase):
             BrokerExecuteResult.from_mapping({})
         self.assertEqual(cm.exception.code, DTO_VALIDATION_ERROR_CODE)
 
+    def test_strategy_draft_result_defaults_requires_approval_to_true(self) -> None:
+        """StrategyDraftResult.from_mapping 缺少 requires_approval 时默认 True"""
+        result = StrategyDraftResult.from_mapping({"action": "buy", "rationale": "test"})
+        self.assertTrue(result.requires_approval)
+
+    def test_strategy_draft_result_explicit_requires_approval_false(self) -> None:
+        """StrategyDraftResult.from_mapping 显式设 requires_approval=False"""
+        result = StrategyDraftResult.from_mapping({"action": "buy", "rationale": "test", "requires_approval": False})
+        self.assertFalse(result.requires_approval)
+
+    def test_broker_execute_input_defaults_dry_run_to_true(self) -> None:
+        """BrokerExecuteInput.from_mapping 缺少 dry_run 时默认 True"""
+        result = BrokerExecuteInput.from_mapping({"action": "buy", "symbol": "AAPL"})
+        self.assertTrue(result.dry_run)
+
+    def test_broker_execute_input_explicit_dry_run_false(self) -> None:
+        """BrokerExecuteInput.from_mapping 显式设 dry_run=False"""
+        result = BrokerExecuteInput.from_mapping({"action": "buy", "symbol": "AAPL", "dry_run": False})
+        self.assertFalse(result.dry_run)
+
 
 if __name__ == "__main__":
     unittest.main()
