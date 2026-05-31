@@ -30,5 +30,6 @@
 - 涉及 `packages/core/**` 的规划、实现和 review 必须读取 `.agents/skills/references/core-and-plugin-architecture-gate.md`，把目标分层落实到 issue、OpenSpec、实现计划或 PR 说明。
 - 新增共享配置时先判断是否真的跨 app/package 复用；API 私有项保留在 `apps/api`。
 - 新增数据库能力时优先放在 `src/quantagent/core/db/`，并补充 `packages/core/tests/`。
+- 新增 CLI 级共享演示或诊断入口时，优先放在 `src/quantagent/core/`，并补最小测试，避免把 demo 逻辑塞进 API、插件或 worker 入口。
 - 修改迁移加载或数据库 URL 逻辑时，同时检查 `packages/core/alembic.ini` 和 `packages/core/alembic/env.py`。
 - 如果实现结果改变 `docs/design/04-database-and-persistence-design.md` 中的持久化边界，需要在 PR 说明证据并回写设计或 OpenSpec。
