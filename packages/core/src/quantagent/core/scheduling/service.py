@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 import re
 from collections.abc import Mapping
@@ -8,14 +9,18 @@ from dataclasses import replace
 from typing import Any
 from uuid import uuid4
 
+from quantagent.core.events.ports import EventBusPublisher
+from quantagent.core.events.service import SourceEventPublisher
 from quantagent.core.registry.models import PluginError, PluginRecord, PluginStatus
 from quantagent.core.registry.service import PluginRegistry
 from quantagent.core.runtime import PluginRuntimeInvocation, PluginRuntimeService
 from quantagent.core.scheduling.clock import SchedulingClock, SystemSchedulingClock
 from quantagent.core.scheduling.models import PluginRunRecord, PluginRunStatus, PluginTriggerRequest
 from quantagent.core.scheduling.repository import PluginRunRepository
-from quantagent.plugin_sdk import PluginRuntimeError, freeze_json_mapping
+from quantagent.plugin_sdk import PluginRuntimeError, SourceFetchResult, freeze_json_mapping
 from quantagent.plugin_sdk.io import JsonObject, JsonValue
+
+logger = logging.getLogger(__name__)
 
 
 class PluginSchedulingService:
@@ -26,11 +31,13 @@ class PluginSchedulingService:
         runtime: PluginRuntimeService,
         repository: PluginRunRepository,
         clock: SchedulingClock | None = None,
+        publisher: EventBusPublisher | None = None,
     ) -> None:
         self._registry = registry
         self._runtime = runtime
         self._repository = repository
         self._clock = clock or SystemSchedulingClock()
+        self._publisher = publisher
 
     async def trigger(self, request: PluginTriggerRequest) -> PluginRunRecord:
         run: PluginRunRecord | None = None
@@ -57,12 +64,15 @@ class PluginSchedulingService:
                 )
 
             output_summary = _summarize_mapping(invocation.result.output if invocation.result is not None else {})
-            return self._finish_run(
+            finished_run = self._finish_run(
                 run,
                 status=PluginRunStatus.SUCCEEDED,
                 output_summary=output_summary,
                 started_monotonic=started_monotonic,
             )
+            # 发布在 _finish_run 之后：调度记录已持久化为 SUCCEEDED，发布失败由内层 catch 隔离
+            await self._maybe_publish_source_event(invocation, finished_run, validated_request)
+            return finished_run
         except asyncio.TimeoutError:
             return self._finish_run(
                 _ensure_run(run),
@@ -162,6 +172,40 @@ class PluginSchedulingService:
         if request.timeout_ms is None:
             return await invoke_coro
         return await asyncio.wait_for(invoke_coro, timeout=request.timeout_ms / 1000)
+
+    async def _maybe_publish_source_event(
+        self,
+        invocation: PluginRuntimeInvocation,
+        run: PluginRunRecord,
+        request: PluginTriggerRequest,
+    ) -> None:
+        """调度成功后按条件发布 source.event.captured 事件。
+
+        仅当 publisher 已注入、capability 为 source.fetch、且插件返回非空结果时才发布。
+        发布失败不改变 PluginRunRecord 状态（catch + warning），保证调度链路不被发布故障拖垮。
+        """
+        if self._publisher is None:
+            return
+        # 仅 source.fetch 发布事件：V1 先验证桥接模式可行，后续按需扩展其他 capability
+        if request.capability != "source.fetch":
+            return
+        if invocation.result is None or not invocation.result.output:
+            return
+        try:
+            # stage="publish"：DTO 校验失败时错误归属 publish 阶段，不误导排查者以为问题出在插件调用
+            source_result = SourceFetchResult.from_mapping(invocation.result.output, stage="publish")
+            await SourceEventPublisher(self._publisher).publish_source_fetch_result(
+                source_result,
+                producer="plugin-scheduling",
+                request_id=request.request_id,
+                plugin_id=request.plugin_id,
+                causation_id=run.run_id,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Event publish failed after successful scheduling.",
+                extra={"plugin_id": run.plugin_id, "run_id": run.run_id, "error_type": type(exc).__name__},
+            )
 
     def _finish_run(
         self,
