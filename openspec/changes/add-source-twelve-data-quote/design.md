@@ -84,14 +84,15 @@
 - `market_quote` 比泛化的 `market_data` 更能限制首版范围，避免把历史序列、深度、基本面等未来行情能力一起带入。
 - 后续若需要扩展到 `market_timeseries` 或其他类型，可以通过新 change 演进，不必在首版就预留过宽命名。
 
-### Decision 4: `external_id` 首版采用 `provider:symbol:quote_timestamp`
+### Decision 4: `external_id` 首版固定采用 `provider:symbol:quote_timestamp`，缺失时间戳时直接失败
 
-当 Twelve Data 响应中可构造稳定 quote 时间点时，首版 `external_id` 采用 `provider:symbol:quote_timestamp` 形状。
+当 Twelve Data 响应无法提供可解析的 `quote_timestamp` 时，首版实现直接返回清晰失败，不做 fallback external_id 拼接。
 
 原因：
 
 - latest quote 场景通常没有 RSS 式天然 GUID，需要在首版定义最小稳定去重标识来源。
 - `provider + symbol + quote timestamp` 能较好区分同一 symbol 不同时间点的行情。
+- 直接失败比首版引入 provider_time / capture_time fallback 更容易保持去重语义稳定，避免不同实现各自扩展降级规则。
 - 该约定仍然保持在 Source Plugin 输出边界内，后续若运行时 dedupe 需要补充策略，可以在后续 change 调整。
 
 ### Decision 5: 平台统一控制 Twelve Data 鉴权与频率策略
@@ -131,4 +132,3 @@
 
 - Twelve Data API key 最终通过哪种平台 secret / policy 入口传入插件运行时，而不暴露为公开 schema 普通字段？
 - 首版是否在 README 中直接声明“默认只建议 1-5 个 symbols，60 秒及以上轮询”，还是由 runtime policy 单独约束？
-- 首版 `quote_timestamp` 缺失或格式不稳定时，是否允许降级使用 provider 返回时间加捕获时间构造 `external_id`？

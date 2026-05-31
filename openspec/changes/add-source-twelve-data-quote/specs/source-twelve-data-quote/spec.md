@@ -41,7 +41,7 @@
 - **AND** 每条结果 MUST 声明 `source_plugin_id`
 - **AND** 每条结果 MUST 声明 `source_type=market_quote`
 - **AND** 每条结果 MUST 包含 `raw_payload` 和必要 `metadata`
-- **AND** `metadata` SHOULD 至少包含 `provider`、`symbol`、`price` 和 `quote_timestamp`
+- **AND** `metadata` MUST 包含 `provider`、`symbol`、`price` 和 `quote_timestamp`
 
 ### Requirement: Twelve Data Quote Plugin Defines Stable First-Version Quote Identity
 
@@ -52,8 +52,8 @@
 - **GIVEN** 插件已获取某个 symbol 的 latest quote 数据
 - **WHEN** 插件将结果转换为平台约定的 Source Plugin 输出结构
 - **THEN** 插件 MUST 尝试为该结果构造 `external_id`
-- **AND** 首版 `external_id` SHOULD 采用 `provider:symbol:quote_timestamp` 形状
-- **AND** 当 provider 时间字段缺失或格式异常时，插件 MUST 返回清晰失败，或采用在 change / README 中明确记录的受控降级策略
+- **AND** 首版 `external_id` MUST 采用 `provider:symbol:quote_timestamp` 形状
+- **AND** 当 provider 时间字段缺失或格式异常时，插件 MUST 返回清晰失败
 
 ### Requirement: Twelve Data Quote Plugin Boundary Excludes Runtime And Market Infrastructure Responsibilities
 
