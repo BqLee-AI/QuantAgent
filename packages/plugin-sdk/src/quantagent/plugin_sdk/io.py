@@ -587,6 +587,94 @@ class StrategyDraftResult:
         )
 
 
+@dataclass(frozen=True)
+class BrokerExecuteInput:
+    """经纪商执行插件的输入参数"""
+    action: str
+    symbol: str
+    quantity: float | None = None
+    order_type: str | None = None
+    price: float | None = None
+    dry_run: bool = True
+    metadata: JsonObject = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _validate_required_string("action", self.action)
+        _validate_required_string("symbol", self.symbol)
+        _validate_optional_float("quantity", self.quantity)
+        _validate_optional_string("order_type", self.order_type)
+        _validate_optional_float("price", self.price)
+        _validate_bool("dry_run", self.dry_run)
+        object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata))
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "action": self.action,
+            "symbol": self.symbol,
+            "quantity": self.quantity,
+            "order_type": self.order_type,
+            "price": self.price,
+            "dry_run": self.dry_run,
+            "metadata": to_json_value(self.metadata),
+        }
+
+    as_plugin_input = to_mapping
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any], *, stage: str = "invoke") -> BrokerExecuteInput:
+        _validate_object(payload, dto_name="BrokerExecuteInput", stage=stage)
+        return cls(
+            action=_get_required_string(payload, "action", stage=stage),
+            symbol=_get_required_string(payload, "symbol", stage=stage),
+            quantity=_get_optional_float(payload, "quantity", stage=stage),
+            order_type=_get_optional_string(payload, "order_type", stage=stage),
+            price=_get_optional_float(payload, "price", stage=stage),
+            dry_run=_get_required_bool(payload, "dry_run", stage=stage) if "dry_run" in payload else True,
+            metadata=freeze_json_mapping(_get_optional_mapping(payload, "metadata", stage=stage), stage=stage),
+        )
+
+
+@dataclass(frozen=True)
+class BrokerExecuteResult:
+    """经纪商执行插件的输出结果"""
+    status: str
+    estimated_order: Mapping[str, Any] | None = None
+    validation_errors: tuple[str, ...] = field(default_factory=tuple)
+    audit_hints: tuple[str, ...] = field(default_factory=tuple)
+    metadata: JsonObject = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _validate_required_string("status", self.status)
+        if self.estimated_order is not None:
+            object.__setattr__(self, "estimated_order", freeze_json_mapping(self.estimated_order))
+        object.__setattr__(self, "validation_errors", _freeze_strings(self.validation_errors))
+        object.__setattr__(self, "audit_hints", _freeze_strings(self.audit_hints))
+        object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata))
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "estimated_order": to_json_value(self.estimated_order) if self.estimated_order is not None else None,
+            "validation_errors": list(self.validation_errors),
+            "audit_hints": list(self.audit_hints),
+            "metadata": to_json_value(self.metadata),
+        }
+
+    as_plugin_output = to_mapping
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any], *, stage: str = "invoke") -> BrokerExecuteResult:
+        _validate_object(payload, dto_name="BrokerExecuteResult", stage=stage)
+        order_raw = payload.get("estimated_order")
+        return cls(
+            status=_get_required_string(payload, "status", stage=stage),
+            estimated_order=freeze_json_mapping(_require_mapping(order_raw, field_name="estimated_order", stage=stage), stage=stage) if order_raw is not None else None,
+            validation_errors=_get_optional_string_tuple(payload, "validation_errors", stage=stage),
+            audit_hints=_get_optional_string_tuple(payload, "audit_hints", stage=stage),
+            metadata=freeze_json_mapping(_get_optional_mapping(payload, "metadata", stage=stage), stage=stage),
+        )
+
+
 def _freeze_items(items: tuple[SourceItemDraft, ...] | list[SourceItemDraft]) -> tuple[SourceItemDraft, ...]:
     if not isinstance(items, list | tuple):
         raise dto_validation_error(
