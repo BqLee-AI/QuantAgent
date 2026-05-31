@@ -26,6 +26,7 @@ class DiscordReceiveResult(Protocol):
     code: str
     message: str
     response: Mapping[str, Any] | None
+    dto: object | None
 
 
 @dataclass(frozen=True)
@@ -81,10 +82,14 @@ class DiscordInteractionIngressService:
 
 
 def get_discord_interaction_ingress_service(request: Request) -> DiscordInteractionIngressService:
-    return DiscordInteractionIngressService(
-        settings=request.app.state.settings,
-        registry=plugin_registry_service.get_plugin_registry(request),
-    )
+    service = getattr(request.app.state, "discord_interaction_ingress_service", None)
+    if service is None:
+        service = DiscordInteractionIngressService(
+            settings=request.app.state.settings,
+            registry=plugin_registry_service.get_plugin_registry(request),
+        )
+        request.app.state.discord_interaction_ingress_service = service
+    return service
 
 
 def _build_plugin_config(settings: Settings, *, public_key: str) -> dict[str, object]:
@@ -134,6 +139,10 @@ def _validate_receive_result(result: object) -> DiscordReceiveResult:
     if response is not None and not isinstance(response, Mapping):
         raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
     if getattr(result, "ok") and response is None:
+        raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
+    dto = getattr(result, "dto", None)
+    # PING 只需要返回 Discord 协议响应；真正进入业务链路的 interaction 才要求 dto。
+    if getattr(result, "ok") and getattr(result, "code") != "PING" and dto is None:
         raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
     return result  # type: ignore[return-value]
 
