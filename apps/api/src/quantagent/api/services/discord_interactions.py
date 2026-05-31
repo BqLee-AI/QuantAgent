@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any, Mapping, Protocol
 
@@ -8,17 +9,8 @@ from fastapi import Request
 from quantagent.api.config.settings import Settings
 from quantagent.api.http.errors import BadRequestError, NotFoundError, ServiceUnavailableError, UnauthorizedError
 from quantagent.api.services import plugin_registry as plugin_registry_service
-from quantagent.core.plugins import PluginEntrypointLoadError, load_plugin_entrypoint
-from quantagent.core.registry import PluginRegistry, PluginStatus
-
-
-class DiscordReceivePlugin(Protocol):
-    def receive_request(
-        self,
-        config: Mapping[str, Any],
-        headers: Mapping[str, str],
-        body: bytes,
-    ) -> object: ...
+from quantagent.core.registry import PluginRecord, PluginRegistry, PluginStatus
+from quantagent.core.runtime import PluginRuntimeService
 
 
 class DiscordReceiveResult(Protocol):
@@ -36,11 +28,12 @@ class DiscordInteractionHttpResult:
 
 
 class DiscordInteractionIngressService:
-    """API 私有编排层：只连接 HTTP 配置、Registry 和插件 entrypoint，不托管插件生命周期。"""
+    """API 私有编排层：只连接 HTTP 配置、Registry 和 runtime invoke，不托管插件生命周期。"""
 
-    def __init__(self, *, settings: Settings, registry: PluginRegistry) -> None:
+    def __init__(self, *, settings: Settings, registry: PluginRegistry, runtime: PluginRuntimeService | None = None) -> None:
         self._settings = settings
         self._registry = registry
+        self._runtime = runtime or PluginRuntimeService()
 
     def receive_interaction(self, *, headers: Mapping[str, str], body: bytes) -> DiscordInteractionHttpResult:
         if not self._settings.DISCORD_INTERACTIONS_ENABLED:
@@ -50,20 +43,30 @@ class DiscordInteractionIngressService:
         if not public_key:
             raise ServiceUnavailableError("Discord interactions public key is not configured")
 
-        plugin = self._load_receive_plugin(self._settings.DISCORD_INTERACTIONS_PLUGIN_ID)
-        result = _validate_receive_result(
-            plugin.receive_request(
-                _build_plugin_config(self._settings, public_key=public_key),
-                _discord_signature_headers(headers),
-                body,
+        record = self._require_receive_plugin(self._settings.DISCORD_INTERACTIONS_PLUGIN_ID)
+        invocation = asyncio.run(
+            self._runtime.invoke(
+                record,
+                capability="notification.receive",
+                request_id="discord-interactions-ingress",
+                config=_build_plugin_config(self._settings, public_key=public_key),
+                input={
+                    "headers": _discord_signature_headers(headers),
+                    "body": body.decode("utf-8", errors="strict"),
+                },
             )
+        )
+        if invocation.error is not None or invocation.result is None:
+            raise ServiceUnavailableError("Configured Discord plugin could not be invoked")
+        result = _validate_receive_result(
+            _result_from_mapping(invocation.result.output)
         )
         if not result.ok:
             return _map_plugin_failure(result)
 
         return DiscordInteractionHttpResult(status_code=200, content=_validated_response_content(result))
 
-    def _load_receive_plugin(self, plugin_id: str) -> DiscordReceivePlugin:
+    def _require_receive_plugin(self, plugin_id: str) -> PluginRecord:
         record = self._registry.get_plugin(plugin_id)
         if record is None:
             raise ServiceUnavailableError("Configured Discord plugin was not found")
@@ -71,14 +74,9 @@ class DiscordInteractionIngressService:
             raise ServiceUnavailableError("Configured Discord plugin is not valid")
         if record.manifest is None:
             raise ServiceUnavailableError("Configured Discord plugin is not valid")
-        # 会议收口为单 Discord 插件后，接收入口不再由 source type 代理，而由 capability + handler 收口。
         if "notification.receive" not in record.manifest.capabilities:
             raise ServiceUnavailableError("Configured Discord plugin does not expose notification.receive capability")
-        try:
-            plugin = load_plugin_entrypoint(record)
-        except PluginEntrypointLoadError as exc:
-            raise ServiceUnavailableError("Configured Discord plugin could not be loaded") from exc
-        return _validate_receive_plugin(plugin)
+        return record
 
 
 def get_discord_interaction_ingress_service(request: Request) -> DiscordInteractionIngressService:
@@ -87,6 +85,7 @@ def get_discord_interaction_ingress_service(request: Request) -> DiscordInteract
         service = DiscordInteractionIngressService(
             settings=request.app.state.settings,
             registry=plugin_registry_service.get_plugin_registry(request),
+            runtime=PluginRuntimeService(),
         )
         request.app.state.discord_interaction_ingress_service = service
     return service
@@ -120,13 +119,6 @@ def _map_plugin_failure(result: DiscordReceiveResult) -> DiscordInteractionHttpR
     raise BadRequestError(result.message, details={"code": result.code})
 
 
-def _validate_receive_plugin(plugin: object) -> DiscordReceivePlugin:
-    receive_request = getattr(plugin, "receive_request", None)
-    if not callable(receive_request):
-        raise ServiceUnavailableError("Configured Discord plugin does not expose a receive_request handler")
-    return plugin  # type: ignore[return-value]
-
-
 def _validate_receive_result(result: object) -> DiscordReceiveResult:
     if not isinstance(getattr(result, "ok", None), bool):
         raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
@@ -152,3 +144,17 @@ def _validated_response_content(result: DiscordReceiveResult) -> Mapping[str, An
     if response is None:
         raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
     return response
+
+
+def _result_from_mapping(output: Mapping[str, Any]) -> object:
+    return type(
+        "_DiscordReceiveResult",
+        (),
+        {
+            "ok": output.get("ok"),
+            "code": output.get("code"),
+            "message": output.get("message"),
+            "response": output.get("response"),
+            "dto": output.get("dto"),
+        },
+    )()

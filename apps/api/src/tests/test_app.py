@@ -1951,17 +1951,15 @@ class ApiAppTestCase(unittest.TestCase):
             )
         )
 
-        class _InvalidPlugin:
-            pass
-
-        with patch("quantagent.api.services.discord_interactions.load_plugin_entrypoint", return_value=_InvalidPlugin()):
-            with patch("quantagent.api.services.plugin_registry.get_plugin_registry") as get_registry:
-                get_registry.return_value = SimpleNamespace(
-                    get_plugin=lambda _plugin_id: SimpleNamespace(
-                        status=PluginStatus.VALID,
-                        manifest=SimpleNamespace(capabilities=("notification.receive",)),
-                    )
+        with patch("quantagent.api.services.plugin_registry.get_plugin_registry") as get_registry:
+            get_registry.return_value = SimpleNamespace(
+                get_plugin=lambda _plugin_id: SimpleNamespace(
+                    status=PluginStatus.VALID,
+                    manifest=SimpleNamespace(capabilities=("notification.receive",)),
                 )
+            )
+            with patch("quantagent.api.services.discord_interactions.PluginRuntimeService.invoke") as invoke:
+                invoke.return_value = SimpleNamespace(error=SimpleNamespace(code="boom"), result=None)
                 with TestClient(app) as client:
                     response = client.post(
                         "/api/v1/integrations/discord/interactions",
@@ -2023,21 +2021,21 @@ class ApiAppTestCase(unittest.TestCase):
             )
         )
 
-        class _InvalidResultPlugin:
-            def receive_request(self, _config, _headers, _body):
-                return SimpleNamespace(ok=True, code="RECEIVED", message="ok", response="not-a-mapping")
-
         body = b'{"type":1}'
         timestamp = str(int(time.time()))
         signature = signing_key.sign(timestamp.encode("utf-8") + body).signature.hex()
 
-        with patch("quantagent.api.services.discord_interactions.load_plugin_entrypoint", return_value=_InvalidResultPlugin()):
-            with patch("quantagent.api.services.plugin_registry.get_plugin_registry") as get_registry:
-                get_registry.return_value = SimpleNamespace(
-                    get_plugin=lambda _plugin_id: SimpleNamespace(
-                        status=PluginStatus.VALID,
-                        manifest=SimpleNamespace(capabilities=("notification.receive",)),
-                    )
+        with patch("quantagent.api.services.plugin_registry.get_plugin_registry") as get_registry:
+            get_registry.return_value = SimpleNamespace(
+                get_plugin=lambda _plugin_id: SimpleNamespace(
+                    status=PluginStatus.VALID,
+                    manifest=SimpleNamespace(capabilities=("notification.receive",)),
+                )
+            )
+            with patch("quantagent.api.services.discord_interactions.PluginRuntimeService.invoke") as invoke:
+                invoke.return_value = SimpleNamespace(
+                    error=None,
+                    result=SimpleNamespace(output={"ok": True, "code": "RECEIVED", "message": "ok", "response": "not-a-mapping", "dto": {"id": "1"}}),
                 )
                 with TestClient(app) as client:
                     response = client.post(
@@ -2062,21 +2060,21 @@ class ApiAppTestCase(unittest.TestCase):
             )
         )
 
-        class _MissingResponsePlugin:
-            def receive_request(self, _config, _headers, _body):
-                return SimpleNamespace(ok=True, code="RECEIVED", message="ok", response=None)
-
         body = b'{"type":1}'
         timestamp = str(int(time.time()))
         signature = signing_key.sign(timestamp.encode("utf-8") + body).signature.hex()
 
-        with patch("quantagent.api.services.discord_interactions.load_plugin_entrypoint", return_value=_MissingResponsePlugin()):
-            with patch("quantagent.api.services.plugin_registry.get_plugin_registry") as get_registry:
-                get_registry.return_value = SimpleNamespace(
-                    get_plugin=lambda _plugin_id: SimpleNamespace(
-                        status=PluginStatus.VALID,
-                        manifest=SimpleNamespace(capabilities=("notification.receive",)),
-                    )
+        with patch("quantagent.api.services.plugin_registry.get_plugin_registry") as get_registry:
+            get_registry.return_value = SimpleNamespace(
+                get_plugin=lambda _plugin_id: SimpleNamespace(
+                    status=PluginStatus.VALID,
+                    manifest=SimpleNamespace(capabilities=("notification.receive",)),
+                )
+            )
+            with patch("quantagent.api.services.discord_interactions.PluginRuntimeService.invoke") as invoke:
+                invoke.return_value = SimpleNamespace(
+                    error=None,
+                    result=SimpleNamespace(output={"ok": True, "code": "RECEIVED", "message": "ok", "response": None, "dto": {"id": "1"}}),
                 )
                 with TestClient(app) as client:
                     response = client.post(
@@ -2101,16 +2099,6 @@ class ApiAppTestCase(unittest.TestCase):
             )
         )
 
-        class _MissingDtoPlugin:
-            def receive_request(self, _config, _headers, _body):
-                return SimpleNamespace(
-                    ok=True,
-                    code="RECEIVED",
-                    message="ok",
-                    response={"type": 4, "data": {"content": "ok", "flags": 64}},
-                    dto=None,
-                )
-
         body = json.dumps(
             {
                 "id": "1234567890",
@@ -2128,13 +2116,25 @@ class ApiAppTestCase(unittest.TestCase):
         timestamp = str(int(time.time()))
         signature = signing_key.sign(timestamp.encode("utf-8") + body).signature.hex()
 
-        with patch("quantagent.api.services.discord_interactions.load_plugin_entrypoint", return_value=_MissingDtoPlugin()):
-            with patch("quantagent.api.services.plugin_registry.get_plugin_registry") as get_registry:
-                get_registry.return_value = SimpleNamespace(
-                    get_plugin=lambda _plugin_id: SimpleNamespace(
-                        status=PluginStatus.VALID,
-                        manifest=SimpleNamespace(capabilities=("notification.receive",)),
-                    )
+        with patch("quantagent.api.services.plugin_registry.get_plugin_registry") as get_registry:
+            get_registry.return_value = SimpleNamespace(
+                get_plugin=lambda _plugin_id: SimpleNamespace(
+                    status=PluginStatus.VALID,
+                    manifest=SimpleNamespace(capabilities=("notification.receive",)),
+                )
+            )
+            with patch("quantagent.api.services.discord_interactions.PluginRuntimeService.invoke") as invoke:
+                invoke.return_value = SimpleNamespace(
+                    error=None,
+                    result=SimpleNamespace(
+                        output={
+                            "ok": True,
+                            "code": "RECEIVED",
+                            "message": "ok",
+                            "response": {"type": 4, "data": {"content": "ok", "flags": 64}},
+                            "dto": None,
+                        }
+                    ),
                 )
                 with TestClient(app) as client:
                     response = client.post(

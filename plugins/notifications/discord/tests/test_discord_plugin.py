@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import importlib.util
+import asyncio
 import json
+import logging
 from pathlib import Path
 import sys
 import time
@@ -9,6 +11,7 @@ import unittest
 
 from nacl.encoding import HexEncoder
 from nacl.signing import SigningKey
+from quantagent.plugin_sdk import PluginInvokeRequest, RuntimeContext
 
 
 def _load_module():
@@ -375,6 +378,92 @@ class DiscordPluginReceiveTestCase(unittest.TestCase):
 
         self.assertFalse(result.ok)
         self.assertEqual(result.code, "PAYLOAD_UNSUPPORTED")
+
+
+class DiscordPluginRuntimeContractTestCase(unittest.TestCase):
+    def test_runtime_invoke_send_returns_notification_result_mapping(self) -> None:
+        plugin = MODULE.DiscordPlugin()
+        asyncio.run(
+            plugin.load(
+                RuntimeContext(
+                    plugin_id="quantagent.official.notification.discord",
+                    plugin_version="0.1.0",
+                    request_id="req-runtime-send",
+                    logger=logging.getLogger("test"),
+                    config={
+                        "webhook_secret_ref": "discord.webhooks.primary",
+                        "__secrets__": {
+                            "discord.webhooks.primary": "https://discord.example.invalid/api/webhooks/test"
+                        },
+                    },
+                )
+            )
+        )
+
+        captured = {}
+
+        def fake_transport(request):
+            captured["url"] = request.url
+            return MODULE.DiscordWebhookResponse(status_code=204)
+
+        original_transport = MODULE._default_transport
+        MODULE._default_transport = fake_transport
+        try:
+            result = asyncio.run(
+                plugin.invoke(
+                    PluginInvokeRequest(
+                        capability="notification.send",
+                        request_id="req-runtime-send",
+                        input={"channel": "discord", "text": "hello runtime"},
+                    )
+                )
+            )
+        finally:
+            MODULE._default_transport = original_transport
+
+        self.assertTrue(result.output["accepted"])
+        self.assertEqual(result.output["metadata"]["code"], "SENT")
+        self.assertEqual(captured["url"], "https://discord.example.invalid/api/webhooks/test")
+
+    def test_runtime_invoke_receive_returns_structured_mapping(self) -> None:
+        plugin = MODULE.DiscordPlugin()
+        signing_key = SigningKey.generate()
+        public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
+        body = json.dumps({"type": 1}).encode("utf-8")
+        timestamp = str(int(time.time()))
+        signature = signing_key.sign(timestamp.encode("utf-8") + body).signature.hex()
+
+        asyncio.run(
+            plugin.load(
+                RuntimeContext(
+                    plugin_id="quantagent.official.notification.discord",
+                    plugin_version="0.1.0",
+                    request_id="req-runtime-receive",
+                    logger=logging.getLogger("test"),
+                    config={"public_key": public_key},
+                )
+            )
+        )
+
+        result = asyncio.run(
+            plugin.invoke(
+                PluginInvokeRequest(
+                    capability="notification.receive",
+                    request_id="req-runtime-receive",
+                    input={
+                        "headers": {
+                            "X-Signature-Timestamp": timestamp,
+                            "X-Signature-Ed25519": signature,
+                        },
+                        "body": body.decode("utf-8"),
+                    },
+                )
+            )
+        )
+
+        self.assertTrue(result.output["ok"])
+        self.assertEqual(result.output["code"], "PING")
+        self.assertEqual(result.output["response"], {"type": 1})
 
 
 if __name__ == "__main__":

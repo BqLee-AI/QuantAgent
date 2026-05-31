@@ -11,6 +11,7 @@ import urllib.request
 
 from nacl.exceptions import BadSignatureError
 from nacl.signing import VerifyKey
+from quantagent.plugin_sdk import BasePlugin, NotificationSendInput, NotificationSendResult, PluginInvokeRequest, PluginInvokeResult, PluginRuntimeError
 
 
 SIGNATURE_HEADER = "x-signature-ed25519"
@@ -70,8 +71,69 @@ class ReceiveResult:
     retryable: bool = False
 
 
-class DiscordPlugin:
+class DiscordPlugin(BasePlugin):
     """Unified experimental Discord plugin for low-risk send and receive flows."""
+
+    async def invoke(self, request: PluginInvokeRequest) -> PluginInvokeResult:
+        if request.capability == "notification.send":
+            return self._invoke_send(request)
+        if request.capability == "notification.receive":
+            return self._invoke_receive(request)
+        raise PluginRuntimeError(
+            code="PLUGIN_CAPABILITY_NOT_IMPLEMENTED",
+            message="Discord plugin only implements notification.send and notification.receive.",
+            stage="invoke",
+            details={"capability": request.capability},
+        )
+
+    def _invoke_send(self, request: PluginInvokeRequest) -> PluginInvokeResult:
+        payload = NotificationSendInput.from_mapping(request.input)
+        config = _merge_effective_config(self.context.config, payload.metadata.get("config_override"))
+        result = self.send_text(
+            config,
+            payload.text,
+            secrets=_resolve_runtime_secrets(self.context.config),
+        )
+        output = NotificationSendResult(
+            accepted=result.ok,
+            retryable=result.retryable,
+            metadata={
+                "code": result.code,
+                "message": result.message,
+                "http_status": result.http_status,
+                "webhook_secret_ref": result.webhook_secret_ref,
+                "response_excerpt": result.response_excerpt,
+            },
+        )
+        return PluginInvokeResult(output=output.to_mapping())
+
+    def _invoke_receive(self, request: PluginInvokeRequest) -> PluginInvokeResult:
+        config = _merge_effective_config(self.context.config, request.input.get("config_override"))
+        headers = _mapping(request.input.get("headers"))
+        body_text = request.input.get("body")
+        if not isinstance(body_text, str):
+            raise PluginRuntimeError(
+                code="PLUGIN_INVALID_INPUT",
+                message="notification.receive body must be a utf-8 string.",
+                stage="invoke",
+                details={"field": "body"},
+            )
+        result = self.receive_request(
+            config,
+            headers,
+            body_text.encode("utf-8"),
+            secrets=_resolve_runtime_secrets(self.context.config),
+        )
+        return PluginInvokeResult(
+            output={
+                "ok": result.ok,
+                "code": result.code,
+                "message": result.message,
+                "retryable": result.retryable,
+                "response": result.response,
+                "dto": _dto_to_mapping(result.dto),
+            }
+        )
 
     def build_payload(self, text: str) -> dict[str, str]:
         normalized_text = text.strip()
@@ -468,3 +530,30 @@ def _excerpt(value: str, limit: int = 120) -> str | None:
 
 
 plugin = DiscordPlugin()
+
+
+def _merge_effective_config(context_config: Mapping[str, Any], override: Any) -> dict[str, Any]:
+    if isinstance(override, Mapping):
+        return {**context_config, **override}
+    return dict(context_config)
+
+
+def _resolve_runtime_secrets(config: Mapping[str, Any]) -> Mapping[str, str] | None:
+    secrets = config.get("__secrets__")
+    if isinstance(secrets, Mapping):
+        return {str(key): str(value) for key, value in secrets.items()}
+    return None
+
+
+def _dto_to_mapping(dto: DiscordInteractionDto | None) -> Mapping[str, Any] | None:
+    if dto is None:
+        return None
+    return {
+        "interaction_id": dto.interaction_id,
+        "source_id": dto.source_id,
+        "text": dto.text,
+        "payload_summary": dto.payload_summary,
+        "guild_id": dto.guild_id,
+        "channel_id": dto.channel_id,
+        "author_id": dto.author_id,
+    }
