@@ -416,6 +416,177 @@ class EvidenceExtractResult:
         )
 
 
+@dataclass(frozen=True)
+class AnalysisInput:
+    """分析插件的输入参数（使用通用 Mapping 保持链路松耦合）"""
+    evidences: tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
+    query: str | None = None
+    metadata: JsonObject = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        # evidences 用 Mapping[str, Any] 不强绑定具体 DTO 类型，保持链路松耦合
+        object.__setattr__(self, "evidences", _freeze_evidence_mappings(self.evidences))
+        _validate_optional_string("query", self.query)
+        object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata))
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "evidences": [dict(e) if isinstance(e, Mapping) else e for e in self.evidences],
+            "query": self.query,
+            "metadata": to_json_value(self.metadata),
+        }
+
+    as_plugin_input = to_mapping
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any], *, stage: str = "invoke") -> AnalysisInput:
+        _validate_object(payload, dto_name="AnalysisInput", stage=stage)
+        evidences_raw = payload.get("evidences", [])
+        if not isinstance(evidences_raw, list | tuple):
+            raise dto_validation_error("evidences must be an array.", field_name="evidences", stage=stage)
+        return cls(
+            evidences=tuple(
+                freeze_json_mapping(_require_mapping(e, field_name="evidences", stage=stage), stage=stage)
+                for e in evidences_raw
+            ),
+            query=_get_optional_string(payload, "query", stage=stage),
+            metadata=freeze_json_mapping(_get_optional_mapping(payload, "metadata", stage=stage), stage=stage),
+        )
+
+
+@dataclass(frozen=True)
+class AnalysisResult:
+    """分析插件的输出结果"""
+    summary: str
+    key_facts: tuple[str, ...] = field(default_factory=tuple)
+    market_impact: str | None = None
+    direction: str | None = None
+    confidence: float | None = None
+    uncertainty: tuple[str, ...] = field(default_factory=tuple)
+    evidence_refs: tuple[str, ...] = field(default_factory=tuple)
+    metadata: JsonObject = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _validate_required_string("summary", self.summary)
+        object.__setattr__(self, "key_facts", _freeze_strings(self.key_facts))
+        _validate_optional_string("market_impact", self.market_impact)
+        _validate_optional_string("direction", self.direction)
+        _validate_optional_float("confidence", self.confidence)
+        object.__setattr__(self, "uncertainty", _freeze_strings(self.uncertainty))
+        object.__setattr__(self, "evidence_refs", _freeze_strings(self.evidence_refs))
+        object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata))
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "summary": self.summary,
+            "key_facts": list(self.key_facts),
+            "market_impact": self.market_impact,
+            "direction": self.direction,
+            "confidence": self.confidence,
+            "uncertainty": list(self.uncertainty),
+            "evidence_refs": list(self.evidence_refs),
+            "metadata": to_json_value(self.metadata),
+        }
+
+    as_plugin_output = to_mapping
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any], *, stage: str = "invoke") -> AnalysisResult:
+        _validate_object(payload, dto_name="AnalysisResult", stage=stage)
+        return cls(
+            summary=_get_required_string(payload, "summary", stage=stage),
+            key_facts=_get_optional_string_tuple(payload, "key_facts", stage=stage),
+            market_impact=_get_optional_string(payload, "market_impact", stage=stage),
+            direction=_get_optional_string(payload, "direction", stage=stage),
+            confidence=_get_optional_float(payload, "confidence", stage=stage),
+            uncertainty=_get_optional_string_tuple(payload, "uncertainty", stage=stage),
+            evidence_refs=_get_optional_string_tuple(payload, "evidence_refs", stage=stage),
+            metadata=freeze_json_mapping(_get_optional_mapping(payload, "metadata", stage=stage), stage=stage),
+        )
+
+
+@dataclass(frozen=True)
+class StrategyDraftInput:
+    """策略草稿插件的输入参数"""
+    analysis: Mapping[str, Any] = field(default_factory=dict)
+    metadata: JsonObject = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "analysis", freeze_json_mapping(self.analysis))
+        object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata))
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "analysis": to_json_value(self.analysis),
+            "metadata": to_json_value(self.metadata),
+        }
+
+    as_plugin_input = to_mapping
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any], *, stage: str = "invoke") -> StrategyDraftInput:
+        _validate_object(payload, dto_name="StrategyDraftInput", stage=stage)
+        return cls(
+            analysis=freeze_json_mapping(_get_optional_mapping(payload, "analysis", stage=stage), stage=stage),
+            metadata=freeze_json_mapping(_get_optional_mapping(payload, "metadata", stage=stage), stage=stage),
+        )
+
+
+@dataclass(frozen=True)
+class StrategyDraftResult:
+    """策略草稿插件的输出结果"""
+    action: str
+    symbol: str | None = None
+    direction: str | None = None
+    time_horizon: str | None = None
+    rationale: str
+    risk_notes: tuple[str, ...] = field(default_factory=tuple)
+    confidence: float | None = None
+    requires_approval: bool = True
+    metadata: JsonObject = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        _validate_required_string("action", self.action)
+        _validate_optional_string("symbol", self.symbol)
+        _validate_optional_string("direction", self.direction)
+        _validate_optional_string("time_horizon", self.time_horizon)
+        _validate_required_string("rationale", self.rationale)
+        object.__setattr__(self, "risk_notes", _freeze_strings(self.risk_notes))
+        _validate_optional_float("confidence", self.confidence)
+        _validate_bool("requires_approval", self.requires_approval)
+        object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata))
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "action": self.action,
+            "symbol": self.symbol,
+            "direction": self.direction,
+            "time_horizon": self.time_horizon,
+            "rationale": self.rationale,
+            "risk_notes": list(self.risk_notes),
+            "confidence": self.confidence,
+            "requires_approval": self.requires_approval,
+            "metadata": to_json_value(self.metadata),
+        }
+
+    as_plugin_output = to_mapping
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any], *, stage: str = "invoke") -> StrategyDraftResult:
+        _validate_object(payload, dto_name="StrategyDraftResult", stage=stage)
+        return cls(
+            action=_get_required_string(payload, "action", stage=stage),
+            symbol=_get_optional_string(payload, "symbol", stage=stage),
+            direction=_get_optional_string(payload, "direction", stage=stage),
+            time_horizon=_get_optional_string(payload, "time_horizon", stage=stage),
+            rationale=_get_required_string(payload, "rationale", stage=stage),
+            risk_notes=_get_optional_string_tuple(payload, "risk_notes", stage=stage),
+            confidence=_get_optional_float(payload, "confidence", stage=stage),
+            requires_approval=_get_required_bool(payload, "requires_approval", stage=stage) if "requires_approval" in payload else True,
+            metadata=freeze_json_mapping(_get_optional_mapping(payload, "metadata", stage=stage), stage=stage),
+        )
+
+
 def _freeze_items(items: tuple[SourceItemDraft, ...] | list[SourceItemDraft]) -> tuple[SourceItemDraft, ...]:
     if not isinstance(items, list | tuple):
         raise dto_validation_error(
