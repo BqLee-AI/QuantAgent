@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from quantagent.core.config import settings
 from quantagent.core.events import EventBusHandler, EventBusSettings, build_event_bus_runtime
 from quantagent.core.registry import PluginRegistry, RegistryScanner
 from quantagent.core.runtime import PluginRuntimeService
@@ -51,7 +50,16 @@ async def run_demo() -> DemoResult:
         lines.append(f"❌ Required demo plugin missing: {PLACEHOLDER_PLUGIN_ID}")
         return DemoResult(exit_code=1, output="\n".join(lines))
 
-    event_runtime = build_event_bus_runtime(EventBusSettings.from_settings(settings))
+    # Demo 固定使用 memory backend，避免宿主环境把最小闭环演示拉到 Kafka/外部依赖上。
+    event_runtime = build_event_bus_runtime(
+        EventBusSettings(
+            backend="memory",
+            kafka_bootstrap_servers=None,
+            kafka_client_id="quantagent-demo",
+            kafka_default_group_id="quantagent-demo",
+            topic_prefix=None,
+        )
+    )
     consumer = _RecordingConsumer()
     await event_runtime.consumer.subscribe(
         topics=("source.event.captured",),
