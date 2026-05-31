@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import importlib
 import importlib.util
+import importlib.machinery
 from pathlib import Path
 import sys
+import threading
+import types
 
 from quantagent.core.registry.models import PluginRecord, PluginStatus
+
+
+_PLUGIN_LOAD_LOCK = threading.RLock()
 
 
 class PluginEntrypointLoadError(RuntimeError):
@@ -24,16 +31,15 @@ def load_plugin_entrypoint(record: PluginRecord) -> object:
     if module_path is None:
         raise PluginEntrypointLoadError("Plugin entrypoint module file was not found.")
 
-    spec_name = f"quantagent_plugin_{record.id.replace('.', '_')}"
-    spec = importlib.util.spec_from_file_location(spec_name, module_path)
-    if spec is None or spec.loader is None:
-        raise PluginEntrypointLoadError("Plugin entrypoint module could not be loaded.")
-
-    module = importlib.util.module_from_spec(spec)
+    plugin_root_name = f"quantagent_plugin_{record.id.replace('.', '_')}"
+    target_module_name = f"{plugin_root_name}.{module_name.strip()}"
     try:
-        with _plugin_import_root(plugin_dir):
-            sys.modules[spec_name] = module
-            spec.loader.exec_module(module)
+        # 插件加载会临时改写 import 视图；用全局锁串行化，避免并发请求互相污染 sys.modules/sys.path。
+        with _PLUGIN_LOAD_LOCK:
+            with _plugin_import_root(plugin_dir, plugin_root_name):
+                _purge_plugin_modules(plugin_root_name)
+                _ensure_plugin_root_package(plugin_root_name, plugin_dir)
+                module = importlib.import_module(target_module_name)
     except Exception as exc:  # pragma: no cover - defensive import boundary
         raise PluginEntrypointLoadError("Plugin entrypoint import failed.") from exc
 
@@ -63,12 +69,28 @@ def _is_path_inside_root(path: Path, root: Path) -> bool:
     return True
 
 
+def _ensure_plugin_root_package(plugin_root_name: str, plugin_dir: Path) -> None:
+    package = types.ModuleType(plugin_root_name)
+    package.__file__ = str(plugin_dir)
+    package.__package__ = plugin_root_name
+    package.__path__ = [str(plugin_dir)]  # type: ignore[attr-defined]
+    package.__spec__ = importlib.machinery.ModuleSpec(plugin_root_name, loader=None, is_package=True)
+    sys.modules[plugin_root_name] = package
+
+
+def _purge_plugin_modules(plugin_root_name: str) -> None:
+    for module_name in tuple(sys.modules):
+        if module_name == plugin_root_name or module_name.startswith(f"{plugin_root_name}."):
+            sys.modules.pop(module_name, None)
+
+
 class _plugin_import_root:
     """临时把插件根目录加入 import 搜索路径，允许 entrypoint 拆分同目录模块。"""
 
-    def __init__(self, plugin_dir: Path) -> None:
+    def __init__(self, plugin_dir: Path, plugin_root_name: str) -> None:
         self.plugin_path = plugin_dir
         self.plugin_dir = str(plugin_dir)
+        self.plugin_root_name = plugin_root_name
         self.inserted = False
         self.shadowed_modules: dict[str, object] = {}
 
@@ -86,6 +108,7 @@ class _plugin_import_root:
     def __exit__(self, _exc_type, _exc, _tb) -> None:
         for module_name in _top_level_module_names(self.plugin_path):
             sys.modules.pop(module_name, None)
+        _purge_plugin_modules(self.plugin_root_name)
         sys.modules.update(self.shadowed_modules)
         if self.inserted:
             try:
