@@ -157,7 +157,7 @@ class TavilySourcePluginTestCase(unittest.TestCase):
 
     def test_rejects_unsupported_capability(self) -> None:
         """测试不支持的 capability 报错。"""
-        with self.assertRaisesRegex(PluginRuntimeError, "PLUGIN_CAPABILITY_NOT_IMPLEMENTED"):
+        with self.assertRaises(PluginRuntimeError) as cm:
             asyncio.run(
                 self.plugin.invoke(
                     PluginInvokeRequest(
@@ -167,17 +167,39 @@ class TavilySourcePluginTestCase(unittest.TestCase):
                     )
                 )
             )
+        self.assertEqual(cm.exception.code, "PLUGIN_CAPABILITY_NOT_IMPLEMENTED")
 
     def test_rejects_missing_api_key(self) -> None:
         """测试缺失 API key 配置时报错。"""
-        with self.assertRaisesRegex(PluginRuntimeError, "PLUGIN_CONFIG_MISSING"):
-            asyncio.run(
-                self.plugin.invoke(
-                    PluginInvokeRequest(
-                        capability="source.search",
-                        request_id="req-tavily-missing-key",
-                        input={"query": "test"},
+        # 创建一个没有 API key 的插件实例
+        plugin_no_key, error = asyncio.run(
+            PluginRuntimeService().load_plugin(
+                _tavily_record(),
+                request_id="req-tavily-test-load-no-key",
+                config={},  # 空配置，无 API key
+                metadata={"origin": "tavily-plugin-test"},
+            )
+        )
+        if error is not None or plugin_no_key is None:
+            raise AssertionError(f"Failed to load plugin without API key: {error}")
+
+        try:
+            with self.assertRaises(PluginRuntimeError) as cm:
+                asyncio.run(
+                    plugin_no_key.invoke(
+                        PluginInvokeRequest(
+                            capability="source.search",
+                            request_id="req-tavily-missing-key",
+                            input={"query": "test"},
+                        )
                     )
+                )
+            self.assertEqual(cm.exception.code, "PLUGIN_CONFIG_MISSING")
+        finally:
+            asyncio.run(
+                PluginRuntimeService().stop_plugin(
+                    plugin_no_key,
+                    plugin_id=PLUGIN_ID,
                 )
             )
 
@@ -194,7 +216,7 @@ class TavilySourcePluginTestCase(unittest.TestCase):
             )
 
         with patch.object(type(self.plugin), "http_request", staticmethod(_fake_401)):
-            with self.assertRaisesRegex(PluginRuntimeError, "TAVILY_AUTH_FAILED"):
+            with self.assertRaises(PluginRuntimeError) as cm:
                 asyncio.run(
                     self.plugin.invoke(
                         PluginInvokeRequest(
@@ -204,6 +226,9 @@ class TavilySourcePluginTestCase(unittest.TestCase):
                         )
                     )
                 )
+            self.assertEqual(cm.exception.code, "TAVILY_AUTH_FAILED")
+            # 验证脱敏：不泄露原始错误详情
+            self.assertNotIn("api_key", str(cm.exception.details).lower())
 
     def test_upstream_timeout_is_wrapped(self) -> None:
         """测试上游超时错误被正确包装。"""
@@ -211,7 +236,7 @@ class TavilySourcePluginTestCase(unittest.TestCase):
             raise TimeoutError("Request timed out")
 
         with patch.object(type(self.plugin), "http_request", staticmethod(_fake_timeout)):
-            with self.assertRaisesRegex(PluginRuntimeError, "TAVILY_TIMEOUT"):
+            with self.assertRaises(PluginRuntimeError) as cm:
                 asyncio.run(
                     self.plugin.invoke(
                         PluginInvokeRequest(
@@ -221,6 +246,8 @@ class TavilySourcePluginTestCase(unittest.TestCase):
                         )
                     )
                 )
+            self.assertEqual(cm.exception.code, "TAVILY_TIMEOUT")
+            self.assertTrue(cm.exception.retryable)
 
     def test_readme_documents_plugin_boundary(self) -> None:
         """测试 README 说明插件边界。"""
