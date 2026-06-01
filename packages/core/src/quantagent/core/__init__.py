@@ -17,9 +17,11 @@ from quantagent.core.events import (
 )
 from quantagent.core.raw_events import (
     PersistSourceFetchResultSummary,
+    RawEventCaptureRecord,
     RawEventDedupeError,
     RawEventDedupeStrategy,
     RawEventOwnershipError,
+    RawEventPayloadError,
     RawEventPersistResult,
     RawEventRecord,
     RawEventService,
@@ -59,9 +61,11 @@ __all__ = [
     "KafkaEventBusPublisher",
     "PersistSourceFetchResultSummary",
     "RateLimitPolicyHint",
+    "RawEventCaptureRecord",
     "RawEventDedupeError",
     "RawEventDedupeStrategy",
     "RawEventOwnershipError",
+    "RawEventPayloadError",
     "RawEventPersistResult",
     "RawEventRecord",
     "RawEventService",

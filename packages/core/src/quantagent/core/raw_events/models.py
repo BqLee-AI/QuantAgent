@@ -15,29 +15,45 @@ class RawEventDedupeStrategy(StrEnum):
 class RawEventRecord:
     raw_event_id: str
     source_plugin_id: str
-    source_binding_id: str | None
-    scheduler_run_id: str | None
     external_id: str | None
     canonical_url: str | None
     title: str | None
     content: str | None
     author: str | None
     published_at: datetime | None
-    captured_at: datetime
-    last_seen_at: datetime
+    first_captured_at: datetime
+    last_captured_at: datetime
     raw_payload: dict[str, object]
     metadata: dict[str, object]
-    dedupe_key: str
+    canonical_dedupe_key: str
     dedupe_strategy: RawEventDedupeStrategy
     content_hash: str | None
-    duplicate_count: int
+    first_binding_id: str | None
+    first_run_id: str | None
+    duplicate_capture_count: int
     created_at: datetime
     updated_at: datetime
 
 
 @dataclass(frozen=True)
+class RawEventCaptureRecord:
+    capture_id: str
+    raw_event_id: str
+    source_plugin_id: str
+    source_binding_id: str | None
+    scheduler_run_id: str | None
+    capture_dedupe_key: str
+    capture_status: str
+    captured_at: datetime
+    request_id: str | None
+    metadata: dict[str, object]
+    created_at: datetime
+
+
+@dataclass(frozen=True)
 class RawEventPersistResult:
     raw_event: RawEventRecord
+    capture: RawEventCaptureRecord
     created: bool
 
 

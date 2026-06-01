@@ -21,8 +21,15 @@ class RawEventRepository:
     def get(self, raw_event_id: str) -> RawEventORM | None:
         return self._session.get(RawEventORM, raw_event_id)
 
-    def get_by_dedupe_key(self, dedupe_key: str) -> RawEventORM | None:
-        statement: Select[tuple[RawEventORM]] = select(RawEventORM).where(RawEventORM.dedupe_key == dedupe_key).limit(1)
+    def get_by_canonical_identity(self, *, source_plugin_id: str, canonical_dedupe_key: str) -> RawEventORM | None:
+        statement: Select[tuple[RawEventORM]] = (
+            select(RawEventORM)
+            .where(
+                RawEventORM.source_plugin_id == source_plugin_id,
+                RawEventORM.canonical_dedupe_key == canonical_dedupe_key,
+            )
+            .limit(1)
+        )
         return self._session.scalars(statement).first()
 
     def save(self, raw_event: RawEventORM) -> RawEventORM:
@@ -33,8 +40,8 @@ class RawEventRepository:
     def list_by_binding(self, *, source_binding_id: str, limit: int = DEFAULT_LIST_LIMIT) -> list[RawEventORM]:
         statement: Select[tuple[RawEventORM]] = (
             select(RawEventORM)
-            .where(RawEventORM.source_binding_id == source_binding_id)
-            .order_by(desc(RawEventORM.captured_at), desc(RawEventORM.raw_event_id))
+            .where(RawEventORM.first_binding_id == source_binding_id)
+            .order_by(desc(RawEventORM.first_captured_at), desc(RawEventORM.raw_event_id))
             .limit(_bounded_limit(limit))
         )
         return list(self._session.scalars(statement).all())
@@ -42,8 +49,8 @@ class RawEventRepository:
     def list_by_run(self, *, scheduler_run_id: str, limit: int = DEFAULT_LIST_LIMIT) -> list[RawEventORM]:
         statement: Select[tuple[RawEventORM]] = (
             select(RawEventORM)
-            .where(RawEventORM.scheduler_run_id == scheduler_run_id)
-            .order_by(desc(RawEventORM.captured_at), desc(RawEventORM.raw_event_id))
+            .where(RawEventORM.first_run_id == scheduler_run_id)
+            .order_by(desc(RawEventORM.first_captured_at), desc(RawEventORM.raw_event_id))
             .limit(_bounded_limit(limit))
         )
         return list(self._session.scalars(statement).all())

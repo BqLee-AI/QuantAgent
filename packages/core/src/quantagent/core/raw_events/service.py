@@ -3,22 +3,47 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 import hashlib
-from urllib.parse import urlsplit, urlunsplit
+import json
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import uuid4
 
 from quantagent.core.db.models.raw_event import RawEventORM
+from quantagent.core.db.models.raw_event_capture import RawEventCaptureORM
+from quantagent.core.db.repositories.raw_event_capture_repository import RawEventCaptureRepository
 from quantagent.core.db.repositories.raw_event_repository import RawEventRepository
 from quantagent.core.db.repositories.scheduler_run_repository import SchedulerRunRepository
 from quantagent.core.db.repositories.source_binding_repository import SourceBindingRepository
-from quantagent.core.events.codec import sanitize_mapping
+from quantagent.core.events.codec import REDACTED, is_sensitive_key, sanitize_mapping, sanitize_string
 from quantagent.core.raw_events.models import (
     PersistSourceFetchResultSummary,
+    RawEventCaptureRecord,
     RawEventDedupeStrategy,
     RawEventPersistResult,
     RawEventRecord,
 )
 from quantagent.plugin_sdk import SourceFetchResult
 from quantagent.plugin_sdk.io import SourceItemDraft
+
+MAX_RAW_PAYLOAD_BYTES = 128 * 1024
+RAW_PAYLOAD_ALLOWED_KEYS = frozenset(
+    {
+        "body",
+        "description",
+        "excerpt",
+        "feed",
+        "headers",
+        "language",
+        "links",
+        "provider",
+        "provider_item_id",
+        "published_at",
+        "summary",
+        "tags",
+        "title",
+        "url",
+    }
+)
+RAW_CAPTURE_STATUS_CAPTURED = "captured"
 
 
 class RawEventOwnershipError(ValueError):
@@ -29,21 +54,29 @@ class RawEventDedupeError(ValueError):
     """缺少稳定去重原料时拒绝入库，避免不同 source 自行发明去重规则。"""
 
 
+class RawEventPayloadError(ValueError):
+    """原始 payload 超出受控边界时拒绝入库，避免不受控大对象和敏感信息入库。"""
+
+
 class RawEventService:
     def __init__(
         self,
         *,
         raw_event_repository: RawEventRepository,
+        raw_event_capture_repository: RawEventCaptureRepository,
         source_binding_repository: SourceBindingRepository,
         scheduler_run_repository: SchedulerRunRepository,
         now_factory: Callable[[], datetime] | None = None,
-        id_factory: Callable[[], str] | None = None,
+        raw_event_id_factory: Callable[[], str] | None = None,
+        capture_id_factory: Callable[[], str] | None = None,
     ) -> None:
         self._raw_event_repository = raw_event_repository
+        self._raw_event_capture_repository = raw_event_capture_repository
         self._source_binding_repository = source_binding_repository
         self._scheduler_run_repository = scheduler_run_repository
         self._now_factory = now_factory or _utcnow
-        self._id_factory = id_factory or _default_raw_event_id
+        self._raw_event_id_factory = raw_event_id_factory or _default_raw_event_id
+        self._capture_id_factory = capture_id_factory or _default_capture_id
 
     def persist_source_fetch_result(
         self,
@@ -53,7 +86,7 @@ class RawEventService:
         source_binding_id: str | None = None,
         scheduler_run_id: str | None = None,
     ) -> PersistSourceFetchResultSummary:
-        resolved_binding_id = self._resolve_ownership(
+        ownership = self._resolve_ownership(
             source_plugin_id=source_plugin_id,
             source_binding_id=source_binding_id,
             scheduler_run_id=scheduler_run_id,
@@ -63,8 +96,9 @@ class RawEventService:
             persisted.append(
                 self._persist_item(
                     source_plugin_id=source_plugin_id,
-                    source_binding_id=resolved_binding_id,
+                    source_binding_id=ownership.binding_id,
                     scheduler_run_id=scheduler_run_id,
+                    request_id=ownership.request_id,
                     item=item,
                 )
             )
@@ -76,8 +110,9 @@ class RawEventService:
         source_plugin_id: str,
         source_binding_id: str | None,
         scheduler_run_id: str | None,
-    ) -> str | None:
+    ) -> _ResolvedOwnership:
         resolved_binding_id = source_binding_id
+        request_id: str | None = None
         if source_binding_id is not None:
             binding = self._source_binding_repository.get(source_binding_id)
             if binding is None:
@@ -85,7 +120,7 @@ class RawEventService:
             if binding.source_plugin_id != source_plugin_id:
                 raise RawEventOwnershipError("source binding plugin_id does not match raw event source_plugin_id")
         if scheduler_run_id is None:
-            return resolved_binding_id
+            return _ResolvedOwnership(binding_id=resolved_binding_id, request_id=None)
         run = self._scheduler_run_repository.get(scheduler_run_id)
         if run is None:
             raise RawEventOwnershipError(f"Unknown scheduler run: {scheduler_run_id}")
@@ -95,7 +130,8 @@ class RawEventService:
             resolved_binding_id = run.binding_id
         elif run.binding_id != resolved_binding_id:
             raise RawEventOwnershipError("scheduler run binding_id does not match raw event source_binding_id")
-        return resolved_binding_id
+        request_id = run.request_id
+        return _ResolvedOwnership(binding_id=resolved_binding_id, request_id=request_id)
 
     def _persist_item(
         self,
@@ -103,13 +139,12 @@ class RawEventService:
         source_plugin_id: str,
         source_binding_id: str | None,
         scheduler_run_id: str | None,
+        request_id: str | None,
         item: SourceItemDraft,
     ) -> RawEventPersistResult:
         canonical_url = _canonicalize_url(_metadata_string(item.metadata, "canonical_url") or item.url)
         published_at = _parse_datetime(item.published_at)
         captured_at = _parse_datetime(item.captured_at) or self._now_factory()
-        raw_payload = dict(sanitize_mapping(item.raw_payload))
-        metadata = dict(sanitize_mapping(item.metadata))
         content_hash = _content_hash(content=item.content, title=item.title)
         dedupe = _build_dedupe_identity(
             source_plugin_id=source_plugin_id,
@@ -118,75 +153,150 @@ class RawEventService:
             content_hash=content_hash,
             metadata=item.metadata,
         )
-        existing = self._raw_event_repository.get_by_dedupe_key(dedupe.key)
-        if existing is not None:
-            # V1 只保留 canonical row，并在重复命中时更新最近一次命中时间和补全缺失字段，
-            # 这样 #217/#224 后续读取不会被同一 source item 的重复行污染。
-            existing.last_seen_at = max(_ensure_utc(existing.last_seen_at), _ensure_utc(captured_at))
-            existing.duplicate_count += 1
-            if existing.scheduler_run_id is None and scheduler_run_id is not None:
-                existing.scheduler_run_id = scheduler_run_id
-            if existing.source_binding_id is None and source_binding_id is not None:
-                existing.source_binding_id = source_binding_id
+        payload = _prepare_raw_payload(item.raw_payload)
+        metadata = _prepare_capture_metadata(item.metadata, payload_truncated=payload.truncated)
+
+        existing = self._raw_event_repository.get_by_canonical_identity(
+            source_plugin_id=source_plugin_id,
+            canonical_dedupe_key=dedupe.key,
+        )
+        created = False
+        if existing is None:
+            existing = self._raw_event_repository.create(
+                RawEventORM(
+                    raw_event_id=self._raw_event_id_factory(),
+                    source_plugin_id=source_plugin_id,
+                    external_id=item.external_id,
+                    canonical_url=canonical_url,
+                    title=item.title,
+                    content=item.content,
+                    author=item.author,
+                    published_at=published_at,
+                    first_captured_at=captured_at,
+                    last_captured_at=captured_at,
+                    raw_payload=payload.payload,
+                    metadata_json=metadata,
+                    canonical_dedupe_key=dedupe.key,
+                    dedupe_strategy=dedupe.strategy.value,
+                    content_hash=content_hash,
+                    first_binding_id=source_binding_id,
+                    first_run_id=scheduler_run_id,
+                    duplicate_capture_count=0,
+                )
+            )
+            created = True
+        else:
+            # 幂等：同一 run 命中相同 canonical identity 时直接复用已有 capture，避免重试重复追加 ownership。
+            if scheduler_run_id is not None:
+                existing_capture = self._raw_event_capture_repository.get_by_run_and_raw_event(
+                    scheduler_run_id=scheduler_run_id,
+                    raw_event_id=existing.raw_event_id,
+                )
+                if existing_capture is not None:
+                    return RawEventPersistResult(
+                        raw_event=_to_record(existing),
+                        capture=_to_capture_record(existing_capture),
+                        created=False,
+                    )
+            existing.last_captured_at = max(_ensure_utc(existing.last_captured_at), _ensure_utc(captured_at))
+            existing.duplicate_capture_count += 1
             existing.title = existing.title or item.title
             existing.content = existing.content or item.content
             existing.author = existing.author or item.author
             existing.canonical_url = existing.canonical_url or canonical_url
             existing.external_id = existing.external_id or item.external_id
             existing.published_at = existing.published_at or published_at
-            if not existing.raw_payload and raw_payload:
-                existing.raw_payload = raw_payload
+            if not existing.raw_payload and payload.payload:
+                existing.raw_payload = payload.payload
             if not existing.metadata_json and metadata:
                 existing.metadata_json = metadata
-            saved = self._raw_event_repository.save(existing)
-            return RawEventPersistResult(raw_event=_to_record(saved), created=False)
-        created = self._raw_event_repository.create(
-            RawEventORM(
-                raw_event_id=self._id_factory(),
+            existing = self._raw_event_repository.save(existing)
+
+        capture_dedupe_key = _build_capture_dedupe_key(
+            scheduler_run_id=scheduler_run_id,
+            source_binding_id=source_binding_id,
+            raw_event_id=existing.raw_event_id,
+            captured_at=captured_at,
+        )
+        duplicate_capture = self._raw_event_capture_repository.get_by_capture_dedupe_key(capture_dedupe_key)
+        if duplicate_capture is not None:
+            return RawEventPersistResult(
+                raw_event=_to_record(existing),
+                capture=_to_capture_record(duplicate_capture),
+                created=created,
+            )
+        capture = self._raw_event_capture_repository.create(
+            RawEventCaptureORM(
+                capture_id=self._capture_id_factory(),
+                raw_event_id=existing.raw_event_id,
                 source_plugin_id=source_plugin_id,
                 source_binding_id=source_binding_id,
                 scheduler_run_id=scheduler_run_id,
-                external_id=item.external_id,
-                canonical_url=canonical_url,
-                title=item.title,
-                content=item.content,
-                author=item.author,
-                published_at=published_at,
+                capture_dedupe_key=capture_dedupe_key,
+                capture_status=RAW_CAPTURE_STATUS_CAPTURED,
                 captured_at=captured_at,
-                last_seen_at=captured_at,
-                raw_payload=raw_payload,
+                request_id=request_id,
                 metadata_json=metadata,
-                dedupe_key=dedupe.key,
-                dedupe_strategy=dedupe.strategy.value,
-                content_hash=content_hash,
             )
         )
-        return RawEventPersistResult(raw_event=_to_record(created), created=True)
+        return RawEventPersistResult(
+            raw_event=_to_record(existing),
+            capture=_to_capture_record(capture),
+            created=created,
+        )
+
+
+class _ResolvedOwnership:
+    def __init__(self, *, binding_id: str | None, request_id: str | None) -> None:
+        self.binding_id = binding_id
+        self.request_id = request_id
 
 
 def _to_record(raw_event: RawEventORM) -> RawEventRecord:
     return RawEventRecord(
         raw_event_id=raw_event.raw_event_id,
         source_plugin_id=raw_event.source_plugin_id,
-        source_binding_id=raw_event.source_binding_id,
-        scheduler_run_id=raw_event.scheduler_run_id,
         external_id=raw_event.external_id,
         canonical_url=raw_event.canonical_url,
         title=raw_event.title,
         content=raw_event.content,
         author=raw_event.author,
         published_at=raw_event.published_at,
-        captured_at=raw_event.captured_at,
-        last_seen_at=raw_event.last_seen_at,
+        first_captured_at=raw_event.first_captured_at,
+        last_captured_at=raw_event.last_captured_at,
         raw_payload=dict(raw_event.raw_payload or {}),
         metadata=dict(raw_event.metadata_json or {}),
-        dedupe_key=raw_event.dedupe_key,
+        canonical_dedupe_key=raw_event.canonical_dedupe_key,
         dedupe_strategy=RawEventDedupeStrategy(raw_event.dedupe_strategy),
         content_hash=raw_event.content_hash,
-        duplicate_count=raw_event.duplicate_count,
+        first_binding_id=raw_event.first_binding_id,
+        first_run_id=raw_event.first_run_id,
+        duplicate_capture_count=raw_event.duplicate_capture_count,
         created_at=raw_event.created_at,
         updated_at=raw_event.updated_at,
     )
+
+
+def _to_capture_record(capture: RawEventCaptureORM) -> RawEventCaptureRecord:
+    return RawEventCaptureRecord(
+        capture_id=capture.capture_id,
+        raw_event_id=capture.raw_event_id,
+        source_plugin_id=capture.source_plugin_id,
+        source_binding_id=capture.source_binding_id,
+        scheduler_run_id=capture.scheduler_run_id,
+        capture_dedupe_key=capture.capture_dedupe_key,
+        capture_status=capture.capture_status,
+        captured_at=capture.captured_at,
+        request_id=capture.request_id,
+        metadata=dict(capture.metadata_json or {}),
+        created_at=capture.created_at,
+    )
+
+
+class _PreparedPayload:
+    def __init__(self, *, payload: dict[str, object], truncated: bool) -> None:
+        self.payload = payload
+        self.truncated = truncated
 
 
 class _DedupeIdentity:
@@ -215,19 +325,63 @@ def _build_dedupe_identity(
             key=_sha256_key("canonical_url_content", source_plugin_id, normalized_url, content_hash),
             strategy=RawEventDedupeStrategy.CANONICAL_URL_CONTENT,
         )
-    dedupe_hint = _normalized_text(_metadata_string(metadata, "dedupe_hint"))
+    dedupe_hint = _normalized_text(_metadata_string(metadata, "provider_dedupe_hint") or _metadata_string(metadata, "dedupe_hint"))
     if dedupe_hint is not None:
         return _DedupeIdentity(
             key=_sha256_key("source_hint", source_plugin_id, dedupe_hint),
             strategy=RawEventDedupeStrategy.SOURCE_HINT,
         )
     raise RawEventDedupeError(
-        "raw event requires external_id, canonical_url + content_hash, or metadata.dedupe_hint for dedupe"
+        "raw event requires external_id, canonical_url + content_hash, or metadata.provider_dedupe_hint for dedupe"
     )
+
+
+def _prepare_raw_payload(raw_payload: Mapping[str, object]) -> _PreparedPayload:
+    sanitized = _materialize_json_object(sanitize_mapping(raw_payload))
+    if _json_size_bytes(sanitized) <= MAX_RAW_PAYLOAD_BYTES:
+        return _PreparedPayload(payload=sanitized, truncated=False)
+    allowlisted = {key: value for key, value in sanitized.items() if key in RAW_PAYLOAD_ALLOWED_KEYS}
+    if _json_size_bytes(allowlisted) <= MAX_RAW_PAYLOAD_BYTES:
+        allowlisted["payload_truncated"] = True
+        return _PreparedPayload(payload=allowlisted, truncated=True)
+    raise RawEventPayloadError("raw payload exceeds 128 KiB after allowlisted trimming")
+
+
+def _prepare_capture_metadata(metadata: Mapping[str, object], *, payload_truncated: bool) -> dict[str, object]:
+    sanitized = _materialize_json_object(sanitize_mapping(metadata))
+    if payload_truncated:
+        sanitized["payload_truncated"] = True
+    return sanitized
+
+
+def _build_capture_dedupe_key(
+    *,
+    scheduler_run_id: str | None,
+    source_binding_id: str | None,
+    raw_event_id: str,
+    captured_at: datetime,
+) -> str:
+    if scheduler_run_id is not None:
+        return _sha256_key("run_capture", scheduler_run_id, raw_event_id)
+    # 无 run_id 时仍保留最小 capture ledger；captured_at 进入 key 以避免不同批次被错误幂等化。
+    return _sha256_key(
+        "binding_capture",
+        source_binding_id or "",
+        raw_event_id,
+        _ensure_utc(captured_at).isoformat(),
+    )
+
+
+def _json_size_bytes(value: Mapping[str, object]) -> int:
+    return len(json.dumps(value, ensure_ascii=True, sort_keys=True).encode("utf-8"))
 
 
 def _default_raw_event_id() -> str:
     return f"rawevt_{uuid4().hex}"
+
+
+def _default_capture_id() -> str:
+    return f"rawevtcap_{uuid4().hex}"
 
 
 def _utcnow() -> datetime:
@@ -261,6 +415,18 @@ def _metadata_string(metadata: Mapping[str, object], key: str) -> str | None:
     return normalized or None
 
 
+def _materialize_json_object(value: Mapping[str, object]) -> dict[str, object]:
+    return {str(key): _materialize_json_value(item) for key, item in value.items()}
+
+
+def _materialize_json_value(value: object) -> object:
+    if isinstance(value, Mapping):
+        return _materialize_json_object(value)
+    if isinstance(value, tuple | list):
+        return [_materialize_json_value(item) for item in value]
+    return value
+
+
 def _canonicalize_url(value: str | None) -> str | None:
     normalized = _normalized_text(value)
     if normalized is None:
@@ -268,13 +434,27 @@ def _canonicalize_url(value: str | None) -> str | None:
     try:
         parsed = urlsplit(normalized)
     except ValueError:
-        return normalized
+        return sanitize_string(normalized)
     if not parsed.scheme and not parsed.netloc:
-        return normalized
+        return sanitize_string(normalized)
     path = parsed.path or ""
     if path != "/" and path.endswith("/"):
         path = path.rstrip("/")
-    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, parsed.query, ""))
+    sanitized_query = _sanitize_query(parsed.query)
+    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, sanitized_query, ""))
+
+
+def _sanitize_query(query: str) -> str:
+    if not query:
+        return ""
+    safe_pairs: list[tuple[str, str]] = []
+    for key, value in parse_qsl(query, keep_blank_values=True):
+        if is_sensitive_key(key):
+            continue
+        if value == REDACTED:
+            continue
+        safe_pairs.append((key, sanitize_string(value)))
+    return urlencode(safe_pairs, doseq=True)
 
 
 def _parse_datetime(value: str | None) -> datetime | None:
