@@ -34,7 +34,8 @@ The system SHALL load `SourceBinding` ownership and binding status before routin
 #### Scenario: Non-active binding is not routed
 - **WHEN** worker receives a captured event whose binding exists but is not `active`
 - **THEN** worker MUST NOT route the event to downstream industry processing
-- **AND** worker MUST produce a controlled ignored or failed result with a structured reason code
+- **AND** worker MUST produce a controlled `ignored` result with structured reason code `SOURCE_BINDING_NOT_ACTIVE`
+- **AND** worker MUST treat the message as `ack_and_record_ignored` instead of a retryable failure
 
 ### Requirement: V1 successful routing MUST only support `industry` owner
 The system SHALL support successful captured-event routing only for `owner_type == "industry"` in V1, while keeping other owner types behind controlled failure semantics.
@@ -44,6 +45,45 @@ The system SHALL support successful captured-event routing only for `owner_type 
 - **THEN** worker MUST return a controlled unsupported-owner failure
 - **AND** worker MUST NOT fall back to routing by `plugin_id`
 - **AND** worker MUST NOT guess a target owner from payload metadata
+
+### Requirement: `industry_gateway` MUST remain a core port with structured results
+The system SHALL keep `industry_gateway` as a core worker-routing port instead of directly importing or branching on concrete industry plugin implementations.
+
+#### Scenario: V1 gateway can be fake or no-op but still returns structured result
+- **WHEN** V1 implementation has not yet connected a real industry processing seam
+- **THEN** `industry_gateway` MAY use a fake or no-op adapter
+- **AND** the adapter MUST still return a structured result that includes status, reason code, and target reference fields
+- **AND** worker routing MUST classify the final route result from that structured gateway response rather than from log strings
+
+#### Scenario: Gateway does not directly import industry plugins
+- **WHEN** worker routing invokes `industry_gateway`
+- **THEN** the gateway MUST depend on a core port / protocol boundary
+- **AND** the gateway MUST NOT directly import `plugins/industries/*` modules
+- **AND** the gateway MUST NOT hardcode plugin registration with owner-specific `if/else` branches
+
+### Requirement: Worker MUST expose stable route-result mapping for failure and duplicate semantics
+The system SHALL publish a stable mapping from worker routing reason codes to route status, consumer disposition, retryability, and audit requirements.
+
+#### Scenario: Binding identity missing maps to non-retryable failure
+- **WHEN** worker returns reason code `CAPTURED_EVENT_BINDING_ID_MISSING`
+- **THEN** route status MUST be `failed`
+- **AND** consumer disposition MUST be `ack_and_record_failure`
+- **AND** retryable MUST be `false`
+- **AND** audit MUST be required
+
+#### Scenario: Missing binding maps to non-retryable failure
+- **WHEN** worker returns reason code `SOURCE_BINDING_NOT_FOUND`
+- **THEN** route status MUST be `failed`
+- **AND** consumer disposition MUST be `ack_and_record_failure`
+- **AND** retryable MUST be `false`
+- **AND** audit MUST be required
+
+#### Scenario: Duplicate message maps to duplicate disposition
+- **WHEN** worker returns reason code `CAPTURED_EVENT_DUPLICATE`
+- **THEN** route status MUST be `duplicate`
+- **AND** consumer disposition MUST be `ack_and_record_duplicate`
+- **AND** retryable MUST be `false`
+- **AND** audit MUST be required
 
 ### Requirement: Worker captured-event routing MUST be idempotent and auditable
 The system SHALL express duplicate handling and routing outcomes as structured worker-side results instead of relying on implicit consumer behavior or raw log strings.
@@ -58,3 +98,10 @@ The system SHALL express duplicate handling and routing outcomes as structured w
 - **THEN** worker MUST return a structured routing failure
 - **AND** the result MUST preserve `binding_id`, `owner_type`, `owner_id`, and message identity for audit
 - **AND** worker MUST NOT silently swallow the failure
+
+#### Scenario: Downstream gateway failure remains retryable and auditable
+- **WHEN** worker returns reason code `INDUSTRY_ENTRYPOINT_FAILED`
+- **THEN** route status MUST be `failed`
+- **AND** consumer disposition MUST be `nack_or_schedule_retry`
+- **AND** retryable MUST be `true`
+- **AND** audit MUST be required

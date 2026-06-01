@@ -61,7 +61,7 @@ packages/core/tests/
 - `captured_event_decoder.py` 只做 envelope -> routing input 映射和字段校验。
 - `service.py` 负责查询 binding、过滤状态、检测重复、调用 resolver/gateway，并产出结构化结果。
 - `owner_resolver.py` 只把 `owner_type + owner_id` 转成受控入口引用，不直接 import 具体行业实现。
-- `industry_gateway.py` 是 worker 与后续行业处理服务之间的 port；V1 可以先返回受控调用结果，不要求完整行业链路。
+- `industry_gateway.py` 是 worker 与后续行业处理服务之间的 core port；V1 可以先用 fake / no-op 实现占位，但无论是否真正触发行业处理，都必须返回结构化 `IndustryGatewayResult`，且禁止直接 import 行业插件或在 gateway 内硬编码插件注册分支。
 
 选择这套分层而不是在 `apps/worker/main.py` 里直接写 if/else，原因：
 
@@ -126,7 +126,26 @@ else:
 
 - 立刻做 multi-owner registry。放弃原因是没有现成真源支撑，容易越过 issue 范围。
 
-### 4. 重复消息检测使用“消息级幂等键 + 结构化结果”，但不在本轮定义持久化去重基础设施
+### 4. `industry_gateway` 在 V1 收敛为 core port，允许 fake / no-op，但结果必须结构化
+
+`industry_gateway.py` 在 V1 的定位不是“直接跑行业插件”，而是 `packages/core` 暴露给 worker routing service 的受控 port。它的职责只有两类：
+
+- 接收已完成 owner 解析的 `IndustryEntrypointRef` 和 captured event 路由输入；
+- 返回结构化 `IndustryGatewayResult`，让 routing service 能统一产出 `WorkerRouteResult`，而不是靠异常字符串或插件私有返回值猜测结果。
+
+V1 约束：
+
+- gateway 所在位置必须是 `packages/core/src/quantagent/core/worker_routing/industry_gateway.py` 或等价 core seam，不能下沉到具体行业插件目录。
+- gateway 可以先接 future service seam、fake adapter 或 no-op adapter，但返回值必须稳定包含 `status`、`reason_code`、`target_ref`、`attempted_at`、`error_summary`（失败时）等结构化字段。
+- gateway 不得直接 import `plugins/industries/*`、行业包 Python 模块、插件 class，或写死 `if industry == "oil"` 之类注册逻辑。
+- worker handler 和 routing service 只能依赖 gateway port / protocol，不依赖任何具体行业实现细节。
+
+原因：
+
+- 这条 seam 是后续接 AgentRuntime / ToolRegistry / industry package 的唯一安全入口，必须先把依赖方向固定在 core port。
+- V1 没有要求真实行业链路已落地，因此 fake / no-op 是允许的；但如果返回值不结构化，实现 PR 就会重新滑回“看日志或吞异常”的状态。
+
+### 5. 重复消息检测使用“消息级幂等键 + 结构化结果”，但不在本轮定义持久化去重基础设施
 
 V1 结果模型建议：
 
@@ -152,9 +171,9 @@ WorkerRouteResult
 
 - 完全依赖 Kafka consumer group 保障不重复。放弃原因是这只能减少重复消费，不能替代业务幂等语义。
 
-### 5. 失败路径采用“结构化失败 + 可审计结果”，不把异常静默吞掉
+### 6. 失败路径采用“结构化失败 + 可审计结果”，不把异常静默吞掉
 
-V1 至少覆盖以下失败码：
+V1 路由结果矩阵至少覆盖以下 reason code：
 
 - `CAPTURED_EVENT_BINDING_ID_MISSING`
 - `SOURCE_BINDING_NOT_FOUND`
@@ -163,19 +182,29 @@ V1 至少覆盖以下失败码：
 - `CAPTURED_EVENT_DUPLICATE`
 - `INDUSTRY_ENTRYPOINT_FAILED`
 
+| reason_code | route_status | consumer_disposition | retryable | audit_required |
+| --- | --- | --- | --- | --- |
+| `CAPTURED_EVENT_BINDING_ID_MISSING` | `failed` | `ack_and_record_failure` | `false` | `true` |
+| `SOURCE_BINDING_NOT_FOUND` | `failed` | `ack_and_record_failure` | `false` | `true` |
+| `SOURCE_BINDING_NOT_ACTIVE` | `ignored` | `ack_and_record_ignored` | `false` | `true` |
+| `CAPTURED_EVENT_OWNER_UNSUPPORTED` | `failed` | `ack_and_record_failure` | `false` | `true` |
+| `CAPTURED_EVENT_DUPLICATE` | `duplicate` | `ack_and_record_duplicate` | `false` | `true` |
+| `INDUSTRY_ENTRYPOINT_FAILED` | `failed` | `nack_or_schedule_retry` | `true` | `true` |
+
 语义：
 
-- binding 缺失或 owner 不支持：worker 记录受控失败，不调用下游入口。
-- binding 非 active：返回 `ignored` 或 `failed` 的受控结果，由 spec 固定其对 ack/重试的影响。
-- 重复消息：返回 `duplicate`，不得再次触发下游副作用。
-- 行业入口失败：返回 `failed`，保留 `binding_id` / `owner_id` / `message_id` 审计上下文。
+- `consumer_disposition` 是 worker consumer 对本条消息的处理决定真源，必须和 `WorkerRouteResult` 一起可审计，不能只藏在 transport 实现里。
+- `CAPTURED_EVENT_BINDING_ID_MISSING`、`SOURCE_BINDING_NOT_FOUND`、`CAPTURED_EVENT_OWNER_UNSUPPORTED` 都属于契约或配置问题；V1 统一 `ack_and_record_failure`，避免无意义重试。
+- `SOURCE_BINDING_NOT_ACTIVE` 明确收敛为 `ignored`，因为该 binding 已存在但当前不允许投递；worker 应确认消费并记录忽略原因，而不是把它当作瞬时故障反复重试。
+- `CAPTURED_EVENT_DUPLICATE` 必须确认消费并记录 duplicate 审计，不得再次触发下游副作用。
+- `INDUSTRY_ENTRYPOINT_FAILED` 是唯一在 V1 映射中默认 `retryable=true` 的场景；consumer 可以选择 `nack` 或调度受控重试，但无论采用哪种 transport 细节，都必须保留结构化失败结果。
 
 原因：
 
 - 仓库规则要求关键状态变化与高风险动作可审计。
 - 若继续只靠日志字符串，后续 #217 的 replay 与 #221 的归属链路都无法稳定复用。
 
-### 6. 与 #217 / #221 的边界以“输入位点”和“输出位点”协作，不交叉实现
+### 7. 与 #217 / #221 的边界以“输入位点”和“输出位点”协作，不交叉实现
 
 与 #217 的协作：
 
@@ -221,5 +250,3 @@ V1 至少覆盖以下失败码：
 ## Open Questions
 
 - `binding_id` 放在 captured 事件 `payload`、`headers`，还是两者都保留；默认建议至少在一个稳定字段中强制存在，并避免只有 header 可见。
-- `SOURCE_BINDING_NOT_ACTIVE` 在 V1 应归类为 `ignored` 还是 `failed`；默认建议写成受控 ignored 结果，但保留审计。
-- `industry_gateway` V1 是直接调用 future service seam，还是先落一个 no-op / fake gateway 作为占位；实现前需要在 OpenSpec 审核中确认。
