@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Quant Atom Feed</title>
+  <updated>2026-06-01T10:00:00Z</updated>
+  <author>
+    <name>Quant Desk</name>
+  </author>
+  <id>https://example.com/atom</id>
+  <entry>
+    <title>Memory Pricing Turns Up</title>
+    <link rel="alternate" href="https://example.com/articles/memory-pricing"/>
+    <id>atom-entry-1</id>
+    <updated>2026-06-01T10:15:00Z</updated>
+    <published>2026-06-01T10:05:00Z</published>
+    <summary type="html">&lt;p&gt;Spot prices moved higher after supply tightened.&lt;/p&gt;</summary>
+    <author>
+      <name>Taylor Lin</name>
+    </author>
+  </entry>
+</feed>
