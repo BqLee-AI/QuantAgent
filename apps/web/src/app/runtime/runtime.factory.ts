@@ -3,6 +3,7 @@ import { PluginConfigApi } from "@/features/plugins";
 import { AuthApi } from "@/shared/auth/api";
 import type { RuntimeConfig } from "@/shared/config";
 import { createModelProviderApi } from "@/features/models/api";
+import { createRuntimeInspectApi } from "@/features/runtime/api";
 
 import type { AppRuntime, AuthRuntimeBridge } from "./runtime.types";
 
@@ -11,10 +12,7 @@ export interface CreateAppRuntimeOptions {
   config: RuntimeConfig;
 }
 
-export function createAppRuntime({
-  auth,
-  config,
-}: CreateAppRuntimeOptions): AppRuntime {
+export function createAppRuntime({ auth, config }: CreateAppRuntimeOptions): AppRuntime {
   const apiClient = createApiClient({
     baseURL: config.apiBaseUrl || undefined,
     getCsrfToken: auth.getCsrfToken,
@@ -23,6 +21,7 @@ export function createAppRuntime({
     withCredentials: true,
   });
   const modelProviderApi = createModelProviderApi(apiClient);
+  const runtimeInspectApi = createRuntimeInspectApi(apiClient);
 
   return {
     apiClient,
@@ -32,6 +31,7 @@ export function createAppRuntime({
       models: modelProviderApi,
       // 中文注释：兼容当前 PR 分支里仍在使用 `modelProviders` 的调用点，避免一次重构同时打断旧引用。
       modelProviders: modelProviderApi,
+      runtimeInspect: runtimeInspectApi,
     },
     realtime: {
       client: null,
