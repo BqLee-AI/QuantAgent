@@ -28,6 +28,12 @@ def _coerce_optional_mapping(value: Mapping[str, Any] | None, *, field_name: str
     return freeze_json_mapping(value, stage=field_name)
 
 
+def _reject_unknown_fields(payload: Mapping[str, Any], *, field_name: str, allowed_fields: set[str]) -> None:
+    unknown_fields = sorted(key for key in payload if key not in allowed_fields)
+    if unknown_fields:
+        raise ValueError(f"{field_name} contains unsupported fields: {', '.join(unknown_fields)}")
+
+
 @dataclass(frozen=True)
 class SchedulePolicyHint:
     interval_seconds: int
@@ -52,6 +58,11 @@ class SchedulePolicyHint:
 
     @classmethod
     def from_mapping(cls, payload: Mapping[str, Any]) -> SchedulePolicyHint:
+        _reject_unknown_fields(
+            payload,
+            field_name="schedule_policy",
+            allowed_fields={"interval_seconds", "jitter_seconds", "enabled", "metadata"},
+        )
         if "interval_seconds" not in payload:
             raise ValueError("schedule_policy.interval_seconds is required.")
         return cls(
@@ -88,6 +99,11 @@ class RetryPolicyHint:
 
     @classmethod
     def from_mapping(cls, payload: Mapping[str, Any]) -> RetryPolicyHint:
+        _reject_unknown_fields(
+            payload,
+            field_name="retry_policy",
+            allowed_fields={"max_attempts", "backoff_seconds", "max_backoff_seconds", "metadata"},
+        )
         if "max_attempts" not in payload:
             raise ValueError("retry_policy.max_attempts is required.")
         return cls(
@@ -122,6 +138,11 @@ class RateLimitPolicyHint:
 
     @classmethod
     def from_mapping(cls, payload: Mapping[str, Any]) -> RateLimitPolicyHint:
+        _reject_unknown_fields(
+            payload,
+            field_name="rate_limit_policy",
+            allowed_fields={"requests_per_window", "window_seconds", "scope", "metadata"},
+        )
         if "requests_per_window" not in payload:
             raise ValueError("rate_limit_policy.requests_per_window is required.")
         if "window_seconds" not in payload:

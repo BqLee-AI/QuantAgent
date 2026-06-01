@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+import os
 import re
 from collections.abc import Mapping
 from dataclasses import replace
@@ -17,7 +18,11 @@ from quantagent.core.runtime import PluginRuntimeInvocation, PluginRuntimeServic
 from quantagent.core.scheduling.clock import SchedulingClock, SystemSchedulingClock
 from quantagent.core.scheduling.models import PluginRunRecord, PluginRunStatus, PluginTriggerRequest
 from quantagent.core.scheduling.repository import PluginRunRepository
-from quantagent.core.source_binding import build_runtime_source_config, is_effective_source_config_mapping
+from quantagent.core.source_binding import (
+    build_runtime_source_config,
+    is_effective_source_config_mapping,
+    resolve_runtime_source_config,
+)
 from quantagent.plugin_sdk import PluginRuntimeError, SourceFetchResult, freeze_json_mapping
 from quantagent.plugin_sdk.io import JsonObject, JsonValue
 
@@ -245,8 +250,62 @@ def _build_plugin_runtime_config(record: PluginRecord, request: PluginTriggerReq
     # 现有 source 插件仍普遍直接读取 context.config；这里先把新快照合同适配成旧插件可消费的 config 视图。
     if record.manifest is not None and record.manifest.type.value == "source":
         if is_effective_source_config_mapping(request.effective_config):
-            return build_runtime_source_config(request.effective_config)
+            _validate_effective_config_plugin_id(record, request)
+            # 为什么这里做 runtime-only 解引用：兼容旧 source 插件读取扁平 config，
+            # 但 secret 明文仍只在真正 invoke 前短暂存在，不能回写到快照或审计记录。
+            return freeze_json_mapping(
+                resolve_runtime_source_config(
+                    request.effective_config,
+                    secret_resolver=_resolve_runtime_secret_ref,
+                ).config,
+                stage="config",
+            )
     return freeze_json_mapping(request.effective_config, stage="config")
+
+
+def _validate_effective_config_plugin_id(record: PluginRecord, request: PluginTriggerRequest) -> None:
+    manifest = record.manifest
+    if manifest is None:
+        return
+    source_plugin_id = request.effective_config.get("source_plugin_id")
+    if source_plugin_id == manifest.id:
+        return
+    raise PluginRuntimeError(
+        code="PLUGIN_EFFECTIVE_CONFIG_PLUGIN_MISMATCH",
+        message="EffectiveSourceConfig.source_plugin_id does not match the target source plugin.",
+        stage="invoke",
+        details={
+            "plugin_id": manifest.id,
+            "source_plugin_id": source_plugin_id,
+        },
+    )
+
+
+def _resolve_runtime_secret_ref(secret_ref: str) -> Any:
+    if secret_ref.startswith("env://"):
+        env_name = secret_ref.removeprefix("env://").strip()
+        if not env_name:
+            raise PluginRuntimeError(
+                code="PLUGIN_SECRET_REF_INVALID",
+                message="Secret reference must include an environment variable name.",
+                stage="invoke",
+                details={"secret_ref": secret_ref},
+            )
+        secret_value = os.environ.get(env_name)
+        if secret_value is None:
+            raise PluginRuntimeError(
+                code="PLUGIN_SECRET_REF_UNRESOLVED",
+                message="Runtime secret reference could not be resolved.",
+                stage="invoke",
+                details={"secret_ref": secret_ref, "resolver": "env"},
+            )
+        return secret_value
+    raise PluginRuntimeError(
+        code="PLUGIN_SECRET_REF_UNSUPPORTED",
+        message="Runtime secret reference scheme is not supported by the scheduler compatibility layer.",
+        stage="invoke",
+        details={"secret_ref": secret_ref},
+    )
 
 
 def _ensure_run(run: PluginRunRecord | None) -> PluginRunRecord:

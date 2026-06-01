@@ -181,6 +181,37 @@ class SourceBindingContractTestCase(unittest.TestCase):
         self.assertFalse("config_fingerprint" in runtime_config)
         self.assertTrue(is_effective_source_config_mapping(snapshot.to_mapping()))
 
+    def test_effective_config_detection_rejects_legacy_flat_config_shape(self) -> None:
+        self.assertFalse(
+            is_effective_source_config_mapping(
+                {
+                    "config": {"feeds": ["https://legacy.example/rss.xml"]},
+                    "validated_at": "2026-06-01T00:00:00+00:00",
+                }
+            )
+        )
+
+    def test_effective_config_from_mapping_rejects_unknown_top_level_fields(self) -> None:
+        snapshot = EffectiveSourceConfigComposer().compose(
+            template=SourceBindingTemplate(
+                source_plugin_id="quantagent.official.source.rss",
+                required=True,
+                config_override={"feeds": ["https://override.example/rss.xml"]},
+            ),
+            plugin_schema={
+                "type": "object",
+                "properties": {
+                    "feeds": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["feeds"],
+                "additionalProperties": False,
+            },
+        ).to_mapping()
+        snapshot["unexpected"] = True
+
+        with self.assertRaisesRegex(ValueError, "EffectiveSourceConfig contains unsupported fields"):
+            build_runtime_source_config(snapshot)
+
     def test_runtime_secret_resolution_keeps_snapshot_auditable(self) -> None:
         snapshot = EffectiveSourceConfigComposer().compose(
             template=SourceBindingTemplate(
@@ -215,3 +246,13 @@ class SourceBindingContractTestCase(unittest.TestCase):
         self.assertEqual(snapshot.config["api_key_ref"]["secret_ref"], "env://TAVILY_API_KEY")
         self.assertEqual(resolved.config["api_key_ref"], "resolved-secret")
         self.assertEqual(resolved.config["timeout_seconds"], 8)
+
+    def test_policy_hints_reject_unknown_fields(self) -> None:
+        with self.assertRaisesRegex(ValueError, "schedule_policy contains unsupported fields"):
+            SchedulePolicyHint.from_mapping({"interval_seconds": 60, "cron": "* * * * *"})
+
+        with self.assertRaisesRegex(ValueError, "retry_policy contains unsupported fields"):
+            RetryPolicyHint.from_mapping({"max_attempts": 3, "strategy": "linear"})
+
+        with self.assertRaisesRegex(ValueError, "rate_limit_policy contains unsupported fields"):
+            RateLimitPolicyHint.from_mapping({"requests_per_window": 10, "window_seconds": 60, "burst": 1})

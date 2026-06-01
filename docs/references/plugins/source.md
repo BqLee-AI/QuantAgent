@@ -92,7 +92,8 @@ source defaults
 当前仓库还没有正式 `SourceBinding` 持久化模型与 scheduler loop，因此存在一层兼容适配：
 
 - `PluginTriggerRequest.effective_config` 仍是调度入口字段。
-- 如果它传入的是新 `EffectiveSourceConfig` 快照，`PluginSchedulingService` 会在调用 `source` 插件前提取其中的 `config`，把它适配成旧插件仍能读取的扁平 `context.config`。
+- 如果它传入的是新 `EffectiveSourceConfig` 快照，`PluginSchedulingService` 会先校验其中的 `source_plugin_id` 与当前目标插件一致，再在调用 `source` 插件前提取其中的 `config`，把它适配成旧插件仍能读取的扁平 `context.config`。
+- 对结构化 `secret_ref`，平台只在真正 runtime invoke 前做短暂解引用；当前兼容层只支持 `env://<ENV_NAME>` 形式，不会把解引用后的明文回写到快照、审计或 API 输出。
 - 如果传入的还是旧形态扁平配置，平台保持原样透传。
 
 为什么必须这样做：

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 import tempfile
 import types
@@ -20,7 +21,7 @@ from quantagent.core.scheduling import (
     PluginTriggerRequest,
     PluginTriggerType,
 )
-from quantagent.core.source_binding import EffectiveSourceConfigComposer, SourceBindingTemplate
+from quantagent.core.source_binding import EffectiveSourceConfigComposer, SecretValueRef, SourceBindingTemplate
 from quantagent.core.events import InMemoryEventBus
 from quantagent.plugin_sdk import BasePlugin, PluginInvokeResult, PluginRuntimeError
 
@@ -288,6 +289,96 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(run.status, PluginRunStatus.SUCCEEDED)
         self.assertEqual(captured["config"]["feeds"], ("https://feeds.example.com/runtime.xml",))
         self.assertNotIn("config_fingerprint", captured["config"])
+
+    async def test_source_plugin_resolves_runtime_secret_refs_from_effective_config_snapshot(self) -> None:
+        captured = {}
+
+        class InspectingSourcePlugin(BasePlugin):
+            async def invoke(self, request):
+                captured["config"] = self.context.config
+                return PluginInvokeResult(output={"ok": True})
+
+        self._install_module("test_scheduling_source_secret_resolution", InspectingSourcePlugin)
+        service = self._service(self._record(entrypoint="test_scheduling_source_secret_resolution:plugin"))
+        snapshot = EffectiveSourceConfigComposer().compose(
+            template=SourceBindingTemplate(
+                source_plugin_id="quantagent.test.scheduling",
+                required=True,
+                config_override={
+                    "api_key_ref": SecretValueRef(secret_ref="env://TAVILY_API_KEY").to_mapping(),
+                    "timeout_seconds": 8,
+                },
+            ),
+            plugin_schema={
+                "type": "object",
+                "properties": {
+                    "api_key_ref": {
+                        "type": "object",
+                        "properties": {"secret_ref": {"type": "string"}, "metadata": {"type": "object"}},
+                        "required": ["secret_ref"],
+                        "additionalProperties": False,
+                    },
+                    "timeout_seconds": {"type": "number", "exclusiveMinimum": 0, "maximum": 30},
+                },
+                "required": ["api_key_ref"],
+                "additionalProperties": False,
+            },
+        )
+
+        old_value = os.environ.get("TAVILY_API_KEY")
+        os.environ["TAVILY_API_KEY"] = "runtime-secret-value"
+        try:
+            run = await service.trigger(
+                self._request(
+                    request_id="req-effective-config-secret",
+                    effective_config=snapshot.to_mapping(),
+                )
+            )
+        finally:
+            if old_value is None:
+                os.environ.pop("TAVILY_API_KEY", None)
+            else:
+                os.environ["TAVILY_API_KEY"] = old_value
+
+        self.assertEqual(run.status, PluginRunStatus.SUCCEEDED)
+        self.assertEqual(captured["config"]["api_key_ref"], "runtime-secret-value")
+        self.assertEqual(captured["config"]["timeout_seconds"], 8)
+
+    async def test_source_plugin_fails_when_effective_config_plugin_id_mismatches_manifest(self) -> None:
+        class NeverReachedPlugin(BasePlugin):
+            async def invoke(self, request):
+                raise AssertionError("runtime invoke should not be reached for plugin id mismatch")
+
+        self._install_module("test_scheduling_source_plugin_mismatch", NeverReachedPlugin)
+        service = self._service(self._record(entrypoint="test_scheduling_source_plugin_mismatch:plugin"))
+        snapshot = EffectiveSourceConfigComposer().compose(
+            template=SourceBindingTemplate(
+                source_plugin_id="quantagent.official.source.other",
+                required=True,
+                config_override={"feeds": ["https://feeds.example.com/runtime.xml"]},
+            ),
+            plugin_schema={
+                "type": "object",
+                "properties": {
+                    "feeds": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["feeds"],
+                "additionalProperties": False,
+            },
+        )
+
+        run = await service.trigger(
+            self._request(
+                request_id="req-effective-config-plugin-mismatch",
+                effective_config=snapshot.to_mapping(),
+            )
+        )
+
+        self.assertEqual(run.status, PluginRunStatus.FAILED)
+        self.assertEqual(run.error_summary["code"], "PLUGIN_EFFECTIVE_CONFIG_PLUGIN_MISMATCH")
+        self.assertEqual(run.error_summary["stage"], "invoke")
+        self.assertEqual(run.error_summary["details"]["plugin_id"], "quantagent.test.scheduling")
+        self.assertEqual(run.error_summary["details"]["source_plugin_id"], "quantagent.official.source.other")
 
     async def test_concurrent_triggers_keep_run_state_isolated(self) -> None:
         release = asyncio.Event()

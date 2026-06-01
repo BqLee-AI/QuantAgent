@@ -82,6 +82,7 @@ class EffectiveSourceConfig:
 
     @classmethod
     def from_mapping(cls, payload: Mapping[str, Any]) -> EffectiveSourceConfig:
+        _validate_effective_config_payload(payload)
         config = payload.get("config")
         if not isinstance(config, Mapping):
             raise ValueError("EffectiveSourceConfig.config must be an object.")
@@ -198,9 +199,11 @@ class EffectiveSourceConfigComposer:
 
 
 def is_effective_source_config_mapping(value: Mapping[str, Any]) -> bool:
-    if "config" not in value or not isinstance(value.get("config"), Mapping):
+    try:
+        _validate_effective_config_payload(value)
+    except ValueError:
         return False
-    return any(key in value for key in ("config_fingerprint", "validated_at", "template_refs"))
+    return True
 
 
 def build_runtime_source_config(value: Mapping[str, Any] | EffectiveSourceConfig) -> JsonObject:
@@ -228,6 +231,39 @@ def _coerce_effective_config(value: Mapping[str, Any] | EffectiveSourceConfig) -
     if isinstance(value, EffectiveSourceConfig):
         return value
     return EffectiveSourceConfig.from_mapping(value)
+
+
+def _validate_effective_config_payload(payload: Mapping[str, Any]) -> None:
+    required_fields = {
+        "source_plugin_id",
+        "config",
+        "config_fingerprint",
+        "template_refs",
+        "validated_at",
+    }
+    missing_fields = sorted(field for field in required_fields if field not in payload)
+    if missing_fields:
+        raise ValueError(f"EffectiveSourceConfig is missing required fields: {', '.join(missing_fields)}")
+
+    unknown_fields = sorted(
+        key
+        for key in payload
+        if key
+        not in {
+            "source_plugin_id",
+            "config",
+            "schedule_policy",
+            "retry_policy",
+            "rate_limit_policy",
+            "config_fingerprint",
+            "source_schema_version",
+            "template_refs",
+            "validated_at",
+            "metadata",
+        }
+    )
+    if unknown_fields:
+        raise ValueError(f"EffectiveSourceConfig contains unsupported fields: {', '.join(unknown_fields)}")
 
 
 def _schema_properties(schema: Mapping[str, Any]) -> Mapping[str, Any]:
