@@ -1,84 +1,71 @@
 # QuantAgent Scheduler
 
-`apps/scheduler` 是 QuantAgent 调度侧的 composition root。它负责组装 runtime 并触发后续 scheduling / source ingestion 流程，但不负责定义消息协议或把 event bus 直接暴露给插件。
+`apps/scheduler` 是 QuantAgent 调度侧的 composition root。它负责组装完整调度链路（EventBusRuntime + PluginRegistry + PluginSchedulingService），触发一次 `source.fetch`，将结果通过事件总线发布，然后优雅退出。
 
 ## 当前职责
 
-- 读取 `quantagent.core.config.settings`
-- 通过 `build_event_bus_runtime(...)` 组装 event bus runtime
-- 为 future scheduling loop / trigger orchestration 提供启动入口
+- 组装 `SchedulerRuntime`（封装 EventBusRuntime、PluginSchedulingService、PluginRegistry）
+- 通过 `SCHEDULE_PLUGIN_ID` 环境变量指定触发哪个插件（默认 placeholder-source）
+- 触发一次 `source.fetch`，结果发布到 Kafka（或 memory bus）
+- 输出结构化 JSON 日志（run_id、status、duration_ms、plugin_id、capability）
 
 ## 当前非目标
 
-- 不把 SourceBinding、retry policy、EventEnvelope 协议写死在入口层
+- 不实现定时循环调度（interval loop）
 - 不向插件暴露 event bus publisher
-- 不在这里补完整长期调度循环
-- 不替代 `PluginSchedulingService`
+- 不处理非 `source.fetch` capability 的调度
+- 不实现重试或失败补偿
 
-## 当前代码入口
-
-当前实现只有最小入口：
+## 代码入口
 
 ```python
-from quantagent.scheduler.main import create_scheduler_runtime, run
+from quantagent.scheduler.main import create_scheduler_runtime, run, SchedulerRuntime
 ```
 
 语义：
 
-- `create_scheduler_runtime()`
-  组装并返回 `EventBusRuntime`
-- `run()`
-  固定 scheduler 的 composition root；当前不启动完整长期调度循环
+- `SchedulerRuntime` — composition root dataclass，封装 event_bus、scheduling、registry
+- `create_scheduler_runtime()` — 组装并返回 `SchedulerRuntime`
+- `run()` — CLI 入口，触发一次 source.fetch 后退出
 
-## 推荐扩展方式
+## 环境变量
 
-后续如果要接入真实调度链路，遵守这个形态：
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `SCHEDULE_PLUGIN_ID` | `quantagent.official.source.placeholder` | 要触发的插件完整 ID |
+| `EVENT_BUS_BACKEND` | `kafka` | 事件总线后端（`kafka` 或 `memory`，memory 仅用于测试） |
+| `EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS` | — | Kafka broker 地址（kafka 后端时必填） |
+| `EVENT_BUS_KAFKA_CLIENT_ID` | `quantagent-scheduler` | Kafka client ID |
+| `EVENT_BUS_KAFKA_DEFAULT_GROUP_ID` | `quantagent-scheduler` | Kafka consumer group ID |
+| `EVENT_BUS_TOPIC_PREFIX` | — | 事件 topic 前缀 |
 
-```text
-scheduler main
-  -> load settings
-  -> build_event_bus_runtime(...)
-  -> call PluginSchedulingService / SourceIngestionService
-  -> platform service constructs EventEnvelope
-  -> publish through EventBusPublisher
-```
+> **注意**: scheduler 的 `EVENT_BUS_BACKEND` 默认为 `kafka`（通过 `os.environ.get` 覆盖），不修改 `packages/core` 的 `Settings` 全局默认值（保持 `memory`）。
 
-不要在 scheduler 里做这些事：
-
-- 直接把 publisher 传给插件
-- 手写 source output -> envelope 映射
-- 直接 import Kafka client
-- 在入口层冻结业务 topic 之外的私有 topic 字符串
-
-## 配置来源
-
-scheduler 使用和 core 一致的 event bus 配置：
-
-- `EVENT_BUS_BACKEND`
-- `EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS`
-- `EVENT_BUS_KAFKA_CLIENT_ID`
-- `EVENT_BUS_KAFKA_DEFAULT_GROUP_ID`
-- `EVENT_BUS_TOPIC_PREFIX`
-
-默认本地行为：
-
-- `memory`
-  适合最小本地开发和无 Kafka 环境
-- `kafka`
-  需要显式配置 Kafka bootstrap servers
-
-如果需要启用 Kafka backend，安装时要带上 Kafka extra：
+## Docker Compose 验证
 
 ```bash
-uv sync --extra kafka --package quantagent-scheduler --package quantagent-core
+# 端到端验证（需要 Kafka profile）
+docker compose --profile kafka up scheduler
+
+# 指定自定义插件
+SCHEDULE_PLUGIN_ID=quantagent.official.source.tavily docker compose --profile kafka up scheduler
 ```
 
-## 本地验证
+## 本地验证（memory 后端，无需 Kafka）
 
-当前最小验证：
+```bash
+EVENT_BUS_BACKEND=memory quantagent-scheduler
+```
+
+## 单元测试
 
 ```bash
 uv run --package quantagent-scheduler python -m unittest discover -s apps/scheduler/src/tests
 ```
 
-当前测试只验证 composition root 默认走 `memory` backend，不验证完整长期调度 loop。
+测试覆盖：
+- memory 后端组装与事件发布
+- Kafka 后端组装（mock）
+- Kafka 发布失败隔离
+- 插件未找到优雅失败
+- 结构化日志输出

@@ -45,15 +45,16 @@ services:
       target: runtime
     image: quantagent-api:local
     command: ["quantagent-scheduler"]
+    environment:
+      EVENT_BUS_BACKEND: kafka
+      EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SCHEDULE_PLUGIN_ID: ${SCHEDULE_PLUGIN_ID:-quantagent.official.source.placeholder}
     volumes:
       - ./apps/scheduler:/app/apps/scheduler
       - ./runtime:/app/runtime
     depends_on:
-      db:
-        condition: service_healthy
       kafka:
         condition: service_healthy
-        required: false
       migrate:
         condition: service_completed_successfully
         required: false
