@@ -1,0 +1,5 @@
+schema: spec-driven
+change_id: raw-event-persistence-dedupe-binding-v1
+title: 定义 RawEvent 持久化、去重与 Binding 归属 V1
+status: draft
+created: 2026-06-02

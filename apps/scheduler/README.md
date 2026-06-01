@@ -1,34 +1,40 @@
 # QuantAgent Scheduler
 
-`apps/scheduler` 是 QuantAgent 调度侧的 composition root。它负责组装 runtime 并触发后续 scheduling / source ingestion 流程，但不负责定义消息协议或把 event bus 直接暴露给插件。
+`apps/scheduler` 是 QuantAgent 调度侧的 composition root。它负责组装 runtime、数据库 session、registry 与 core scheduling service，并驱动 `SourceBinding` interval loop；但不负责定义消息协议或把 event bus 直接暴露给插件。
 
 ## 当前职责
 
 - 读取 `quantagent.core.config.settings`
 - 通过 `build_event_bus_runtime(...)` 组装 event bus runtime
-- 为 future scheduling loop / trigger orchestration 提供启动入口
+- 通过 `SourceBindingSchedulerLoopService` 扫描 due `SourceBinding`
+- 调用 source runtime 并写入 `SchedulerRun` / `SourceBinding` 摘要
+- 在成功抓到条目后发布 `source.event.captured`
 
 ## 当前非目标
 
 - 不把 SourceBinding、retry policy、EventEnvelope 协议写死在入口层
 - 不向插件暴露 event bus publisher
-- 不在这里补完整长期调度循环
-- 不替代 `PluginSchedulingService`
+- 不在这里实现分布式锁、复杂 retry/backoff、RawEvent 持久化或 worker routing
+- 不替代 `packages/core` 中的 binding/run service 与 loop orchestration
 
 ## 当前代码入口
 
-当前实现只有最小入口：
+当前实现提供两个入口：
 
 ```python
-from quantagent.scheduler.main import create_scheduler_runtime, run
+from quantagent.scheduler.main import create_scheduler_app, create_scheduler_runtime, run, run_once
 ```
 
 语义：
 
 - `create_scheduler_runtime()`
   组装并返回 `EventBusRuntime`
+- `create_scheduler_app()`
+  组装 registry、runtime、DB session 和 `SourceBindingSchedulerLoopService`
+- `run_once()`
+  执行一个固定 tick：扫描 due bindings、触发 source.fetch、记录 run、回写 `next_run_at`
 - `run()`
-  固定 scheduler 的 composition root；当前不启动完整长期调度循环
+  进入单进程固定轮询 loop，轮询间隔由共享 settings 控制
 
 ## 推荐扩展方式
 
@@ -38,7 +44,8 @@ from quantagent.scheduler.main import create_scheduler_runtime, run
 scheduler main
   -> load settings
   -> build_event_bus_runtime(...)
-  -> call PluginSchedulingService / SourceIngestionService
+  -> build SourceBindingSchedulerLoopService
+  -> call run_once / run_forever
   -> platform service constructs EventEnvelope
   -> publish through EventBusPublisher
 ```
@@ -49,6 +56,7 @@ scheduler main
 - 手写 source output -> envelope 映射
 - 直接 import Kafka client
 - 在入口层冻结业务 topic 之外的私有 topic 字符串
+- 直接在入口层拼 ORM 查询、`next_run_at` 计算或 run 状态机
 
 ## 配置来源
 
@@ -59,6 +67,9 @@ scheduler 使用和 core 一致的 event bus 配置：
 - `EVENT_BUS_KAFKA_CLIENT_ID`
 - `EVENT_BUS_KAFKA_DEFAULT_GROUP_ID`
 - `EVENT_BUS_TOPIC_PREFIX`
+- `SCHEDULER_POLL_INTERVAL_SECONDS`
+- `SCHEDULER_DUE_LIMIT`
+- `SCHEDULER_RUN_TIMEOUT_MS`
 
 默认本地行为：
 
@@ -81,4 +92,14 @@ uv sync --extra kafka --package quantagent-scheduler --package quantagent-core
 uv run --package quantagent-scheduler python -m unittest discover -s apps/scheduler/src/tests
 ```
 
-当前测试只验证 composition root 默认走 `memory` backend，不验证完整长期调度 loop。
+当前测试验证：
+
+- composition root 默认走 `memory` backend
+- `run_once()` 会按 `SourceBinding` 扫描 due bindings
+- 成功 run 会写 `SchedulerRun`、回写 `next_run_at` 并发布 `source.event.captured`
+
+明确边界：
+
+- `#217` 只落地单进程 fixed tick + due binding 扫描
+- `#221` 的 RawEvent 持久化/去重不在这里
+- `#224` 的 worker binding/owner 路由不在这里

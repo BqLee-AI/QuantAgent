@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from sqlalchemy import Select, desc, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from quantagent.core.db.models.raw_event_capture import RawEventCaptureORM
@@ -15,6 +16,22 @@ class RawEventCaptureRepository:
         self._session.add(capture)
         self._session.flush()
         return capture
+
+    def get_or_create_by_capture_dedupe_key(self, capture: RawEventCaptureORM) -> tuple[RawEventCaptureORM, bool]:
+        existing = self.get_by_capture_dedupe_key(capture.capture_dedupe_key)
+        if existing is not None:
+            return existing, False
+        try:
+            # capture ledger 以唯一键保证幂等；冲突后回读已存在 ownership 行。
+            with self._session.begin_nested():
+                self._session.add(capture)
+                self._session.flush()
+            return capture, True
+        except IntegrityError:
+            existing = self.get_by_capture_dedupe_key(capture.capture_dedupe_key)
+            if existing is None:
+                raise
+            return existing, False
 
     def save(self, capture: RawEventCaptureORM) -> RawEventCaptureORM:
         self._session.add(capture)

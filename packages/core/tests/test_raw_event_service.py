@@ -4,9 +4,12 @@ from datetime import UTC, datetime
 import unittest
 
 from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
 from quantagent.core.db.base import Base
+from quantagent.core.db.models.raw_event import RawEventORM
+from quantagent.core.db.models.raw_event_capture import RawEventCaptureORM
 from quantagent.core.db.models.source_binding import SourceBindingORM
 from quantagent.core.db.models.scheduler_run import SchedulerRunORM
 from quantagent.core.db.repositories.raw_event_capture_repository import RawEventCaptureRepository
@@ -122,7 +125,12 @@ class RawEventServiceTestCase(unittest.TestCase):
                         published_at="2026-06-01T08:00:00Z",
                         captured_at="2026-06-01T09:59:00Z",
                         raw_payload={"cookie": "session=abc", "body": "payload"},
-                        metadata={"canonical_url": "https://example.com/news/1/?token=secret", "feed": "rss"},
+                        metadata={
+                            "canonical_url": "https://example.com/news/1/?token=secret",
+                            "feed": "rss",
+                            "private_policy": {"strategy": "do-not-store"},
+                            "token": "secret",
+                        },
                     ),
                 )
             ),
@@ -139,6 +147,9 @@ class RawEventServiceTestCase(unittest.TestCase):
         self.assertEqual(saved.canonical_url, "https://example.com/news/1")
         self.assertEqual(saved.dedupe_strategy, RawEventDedupeStrategy.EXTERNAL_ID)
         self.assertEqual(saved.raw_payload["cookie"], "[REDACTED]")
+        self.assertEqual(saved.metadata["feed"], "rss")
+        self.assertNotIn("private_policy", saved.metadata)
+        self.assertNotIn("token", saved.metadata)
         self.assertEqual(capture.request_id, "req-raw-1")
 
     def test_duplicate_result_reuses_canonical_row_and_appends_capture_for_new_run(self) -> None:
@@ -187,6 +198,14 @@ class RawEventServiceTestCase(unittest.TestCase):
             len(self.raw_event_capture_repository.list_by_binding(source_binding_id="binding-raw-2", limit=10)),
             1,
         )
+        self.assertEqual(
+            self.raw_event_repository.list_by_run(scheduler_run_id="run-raw-2", limit=10)[0].raw_event_id,
+            initial.items[0].raw_event.raw_event_id,
+        )
+        self.assertEqual(
+            self.raw_event_repository.list_by_binding(source_binding_id="binding-raw-2", limit=10)[0].raw_event_id,
+            initial.items[0].raw_event.raw_event_id,
+        )
 
     def test_same_run_retry_is_idempotent_for_capture_ledger(self) -> None:
         initial = self.service.persist_source_fetch_result(
@@ -212,6 +231,222 @@ class RawEventServiceTestCase(unittest.TestCase):
             len(self.raw_event_capture_repository.list_by_run(scheduler_run_id="run-raw-1", limit=10)),
             1,
         )
+        self.assertEqual(duplicate.items[0].raw_event.duplicate_capture_count, 0)
+
+    def test_without_run_same_capture_key_is_idempotent_and_does_not_increment_duplicate_count(self) -> None:
+        initial = self.service.persist_source_fetch_result(
+            source_plugin_id="quantagent.official.source.rss",
+            source_binding_id="binding-raw-1",
+            result=SourceFetchResult(
+                items=(
+                    SourceItemDraft(
+                        external_id="entry-no-run-retry",
+                        title="No run retry",
+                        captured_at="2026-06-01T09:00:00Z",
+                    ),
+                )
+            ),
+        )
+        duplicate = self.service.persist_source_fetch_result(
+            source_plugin_id="quantagent.official.source.rss",
+            source_binding_id="binding-raw-1",
+            result=SourceFetchResult(
+                items=(
+                    SourceItemDraft(
+                        external_id="entry-no-run-retry",
+                        title="No run retry again",
+                        captured_at="2026-06-01T09:00:00Z",
+                    ),
+                )
+            ),
+        )
+
+        self.assertFalse(duplicate.items[0].created)
+        self.assertEqual(initial.items[0].capture.capture_id, duplicate.items[0].capture.capture_id)
+        self.assertEqual(duplicate.items[0].raw_event.duplicate_capture_count, 0)
+        self.assertEqual(
+            len(self.raw_event_capture_repository.list_by_binding(source_binding_id="binding-raw-1", limit=10)),
+            1,
+        )
+
+    def test_without_run_distinct_captured_at_appends_capture_and_increments_duplicate_count(self) -> None:
+        initial = self.service.persist_source_fetch_result(
+            source_plugin_id="quantagent.official.source.rss",
+            source_binding_id="binding-raw-1",
+            result=SourceFetchResult(
+                items=(
+                    SourceItemDraft(
+                        external_id="entry-no-run-new-capture",
+                        title="No run first",
+                        captured_at="2026-06-01T09:00:00Z",
+                    ),
+                )
+            ),
+        )
+        duplicate = self.service.persist_source_fetch_result(
+            source_plugin_id="quantagent.official.source.rss",
+            source_binding_id="binding-raw-1",
+            result=SourceFetchResult(
+                items=(
+                    SourceItemDraft(
+                        external_id="entry-no-run-new-capture",
+                        title="No run later",
+                        captured_at="2026-06-01T09:05:00Z",
+                    ),
+                )
+            ),
+        )
+
+        self.assertFalse(duplicate.items[0].created)
+        self.assertNotEqual(initial.items[0].capture.capture_id, duplicate.items[0].capture.capture_id)
+        self.assertEqual(duplicate.items[0].raw_event.duplicate_capture_count, 1)
+        self.assertEqual(
+            len(self.raw_event_capture_repository.list_by_binding(source_binding_id="binding-raw-1", limit=10)),
+            2,
+        )
+
+    def test_canonical_unique_conflict_reads_existing_row(self) -> None:
+        initial = self.service.persist_source_fetch_result(
+            source_plugin_id="quantagent.official.source.rss",
+            source_binding_id="binding-raw-1",
+            result=SourceFetchResult(items=(SourceItemDraft(external_id="entry-canonical-race"),)),
+        )
+        self.session.commit()
+        pending_flush_error = [True]
+        original_flush = self.session.flush
+        original_lookup = self.raw_event_repository.get_by_canonical_identity
+
+        def fail_once_for_savepoint(*args: object, **kwargs: object) -> object:
+            if pending_flush_error[0] and self.session.in_nested_transaction():
+                pending_flush_error[0] = False
+                raise IntegrityError("insert raw_events", {}, Exception("unique"))
+            return original_flush(*args, **kwargs)
+
+        lookup_calls = [0]
+
+        def miss_then_read_existing(*, source_plugin_id: str, canonical_dedupe_key: str) -> RawEventORM | None:
+            lookup_calls[0] += 1
+            if lookup_calls[0] == 1:
+                return None
+            return original_lookup(source_plugin_id=source_plugin_id, canonical_dedupe_key=canonical_dedupe_key)
+
+        self.session.flush = fail_once_for_savepoint  # type: ignore[method-assign]
+        self.raw_event_repository.get_by_canonical_identity = miss_then_read_existing  # type: ignore[method-assign]
+        try:
+            duplicate, created = self.raw_event_repository.get_or_create_by_canonical_identity(
+                RawEventORM(
+                    raw_event_id="rawevt-race-loser",
+                    source_plugin_id="quantagent.official.source.rss",
+                    external_id="entry-canonical-race",
+                    canonical_url=None,
+                    title=None,
+                    content=None,
+                    author=None,
+                    published_at=None,
+                    first_captured_at=self.clock_value,
+                    last_captured_at=self.clock_value,
+                    raw_payload={},
+                    metadata_json={},
+                    canonical_dedupe_key=initial.items[0].raw_event.canonical_dedupe_key,
+                    dedupe_strategy=RawEventDedupeStrategy.EXTERNAL_ID.value,
+                    content_hash=None,
+                    first_binding_id="binding-raw-1",
+                    first_run_id=None,
+                    duplicate_capture_count=0,
+                )
+            )
+        finally:
+            self.raw_event_repository.get_by_canonical_identity = original_lookup  # type: ignore[method-assign]
+            self.session.flush = original_flush  # type: ignore[method-assign]
+
+        self.assertFalse(created)
+        self.assertEqual(duplicate.raw_event_id, initial.items[0].raw_event.raw_event_id)
+
+    def test_capture_unique_conflict_reads_existing_row(self) -> None:
+        initial = self.service.persist_source_fetch_result(
+            source_plugin_id="quantagent.official.source.rss",
+            source_binding_id="binding-raw-1",
+            result=SourceFetchResult(
+                items=(
+                    SourceItemDraft(
+                        external_id="entry-capture-race",
+                        captured_at="2026-06-01T09:00:00Z",
+                    ),
+                )
+            ),
+        )
+        self.session.commit()
+        pending_flush_error = [True]
+        original_flush = self.session.flush
+        original_lookup = self.raw_event_capture_repository.get_by_capture_dedupe_key
+
+        def fail_once_for_capture_savepoint(*args: object, **kwargs: object) -> object:
+            if pending_flush_error[0] and self.session.in_nested_transaction():
+                pending_flush_error[0] = False
+                raise IntegrityError("insert raw_event_captures", {}, Exception("unique"))
+            return original_flush(*args, **kwargs)
+
+        lookup_calls = [0]
+
+        def miss_then_read_existing(capture_dedupe_key: str) -> RawEventCaptureORM | None:
+            lookup_calls[0] += 1
+            if lookup_calls[0] == 1:
+                return None
+            return original_lookup(capture_dedupe_key)
+
+        self.session.flush = fail_once_for_capture_savepoint  # type: ignore[method-assign]
+        self.raw_event_capture_repository.get_by_capture_dedupe_key = miss_then_read_existing  # type: ignore[method-assign]
+        try:
+            duplicate, created = self.raw_event_capture_repository.get_or_create_by_capture_dedupe_key(
+                RawEventCaptureORM(
+                    capture_id="rawevtcap-race-loser",
+                    raw_event_id=initial.items[0].raw_event.raw_event_id,
+                    source_plugin_id="quantagent.official.source.rss",
+                    source_binding_id="binding-raw-1",
+                    scheduler_run_id=None,
+                    capture_dedupe_key=initial.items[0].capture.capture_dedupe_key,
+                    capture_status="captured",
+                    captured_at=datetime(2026, 6, 1, 9, 0, tzinfo=UTC),
+                    request_id=None,
+                    metadata_json={},
+                )
+            )
+        finally:
+            self.raw_event_capture_repository.get_by_capture_dedupe_key = original_lookup  # type: ignore[method-assign]
+            self.session.flush = original_flush  # type: ignore[method-assign]
+
+        self.assertFalse(created)
+        self.assertEqual(duplicate.capture_id, initial.items[0].capture.capture_id)
+
+    def test_service_returns_existing_capture_without_incrementing_after_capture_conflict_recovery(self) -> None:
+        initial = self.service.persist_source_fetch_result(
+            source_plugin_id="quantagent.official.source.rss",
+            source_binding_id="binding-raw-1",
+            result=SourceFetchResult(
+                items=(
+                    SourceItemDraft(
+                        external_id="entry-capture-retry",
+                        captured_at="2026-06-01T09:00:00Z",
+                    ),
+                )
+            ),
+        )
+        duplicate = self.service.persist_source_fetch_result(
+                source_plugin_id="quantagent.official.source.rss",
+                source_binding_id="binding-raw-1",
+                result=SourceFetchResult(
+                    items=(
+                        SourceItemDraft(
+                            external_id="entry-capture-retry",
+                            captured_at="2026-06-01T09:00:00Z",
+                        ),
+                    )
+                ),
+            )
+
+        self.assertFalse(duplicate.items[0].created)
+        self.assertEqual(duplicate.items[0].capture.capture_id, initial.items[0].capture.capture_id)
+        self.assertEqual(duplicate.items[0].raw_event.duplicate_capture_count, 0)
 
     def test_fallback_dedupe_uses_canonical_url_and_content_hash(self) -> None:
         summary = self.service.persist_source_fetch_result(

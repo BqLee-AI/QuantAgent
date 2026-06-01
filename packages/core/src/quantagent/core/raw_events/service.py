@@ -44,6 +44,21 @@ RAW_PAYLOAD_ALLOWED_KEYS = frozenset(
     }
 )
 RAW_CAPTURE_STATUS_CAPTURED = "captured"
+METADATA_ALLOWED_KEYS = frozenset(
+    {
+        "batch_id",
+        "canonical_url",
+        "correlation_id",
+        "feed",
+        "item_index",
+        "provider",
+        "provider_dedupe_hint",
+        "provider_item_id",
+        "request_id",
+        "source",
+        "trace_id",
+    }
+)
 
 
 class RawEventOwnershipError(ValueError):
@@ -154,63 +169,30 @@ class RawEventService:
             metadata=item.metadata,
         )
         payload = _prepare_raw_payload(item.raw_payload)
-        metadata = _prepare_capture_metadata(item.metadata, payload_truncated=payload.truncated)
+        metadata = _project_persisted_metadata(item.metadata, payload_truncated=payload.truncated)
 
-        existing = self._raw_event_repository.get_by_canonical_identity(
-            source_plugin_id=source_plugin_id,
-            canonical_dedupe_key=dedupe.key,
-        )
-        created = False
-        if existing is None:
-            existing = self._raw_event_repository.create(
-                RawEventORM(
-                    raw_event_id=self._raw_event_id_factory(),
-                    source_plugin_id=source_plugin_id,
-                    external_id=item.external_id,
-                    canonical_url=canonical_url,
-                    title=item.title,
-                    content=item.content,
-                    author=item.author,
-                    published_at=published_at,
-                    first_captured_at=captured_at,
-                    last_captured_at=captured_at,
-                    raw_payload=payload.payload,
-                    metadata_json=metadata,
-                    canonical_dedupe_key=dedupe.key,
-                    dedupe_strategy=dedupe.strategy.value,
-                    content_hash=content_hash,
-                    first_binding_id=source_binding_id,
-                    first_run_id=scheduler_run_id,
-                    duplicate_capture_count=0,
-                )
+        existing, created = self._raw_event_repository.get_or_create_by_canonical_identity(
+            RawEventORM(
+                raw_event_id=self._raw_event_id_factory(),
+                source_plugin_id=source_plugin_id,
+                external_id=item.external_id,
+                canonical_url=canonical_url,
+                title=item.title,
+                content=item.content,
+                author=item.author,
+                published_at=published_at,
+                first_captured_at=captured_at,
+                last_captured_at=captured_at,
+                raw_payload=payload.payload,
+                metadata_json=metadata,
+                canonical_dedupe_key=dedupe.key,
+                dedupe_strategy=dedupe.strategy.value,
+                content_hash=content_hash,
+                first_binding_id=source_binding_id,
+                first_run_id=scheduler_run_id,
+                duplicate_capture_count=0,
             )
-            created = True
-        else:
-            # 幂等：同一 run 命中相同 canonical identity 时直接复用已有 capture，避免重试重复追加 ownership。
-            if scheduler_run_id is not None:
-                existing_capture = self._raw_event_capture_repository.get_by_run_and_raw_event(
-                    scheduler_run_id=scheduler_run_id,
-                    raw_event_id=existing.raw_event_id,
-                )
-                if existing_capture is not None:
-                    return RawEventPersistResult(
-                        raw_event=_to_record(existing),
-                        capture=_to_capture_record(existing_capture),
-                        created=False,
-                    )
-            existing.last_captured_at = max(_ensure_utc(existing.last_captured_at), _ensure_utc(captured_at))
-            existing.duplicate_capture_count += 1
-            existing.title = existing.title or item.title
-            existing.content = existing.content or item.content
-            existing.author = existing.author or item.author
-            existing.canonical_url = existing.canonical_url or canonical_url
-            existing.external_id = existing.external_id or item.external_id
-            existing.published_at = existing.published_at or published_at
-            if not existing.raw_payload and payload.payload:
-                existing.raw_payload = payload.payload
-            if not existing.metadata_json and metadata:
-                existing.metadata_json = metadata
-            existing = self._raw_event_repository.save(existing)
+        )
 
         capture_dedupe_key = _build_capture_dedupe_key(
             scheduler_run_id=scheduler_run_id,
@@ -223,9 +205,10 @@ class RawEventService:
             return RawEventPersistResult(
                 raw_event=_to_record(existing),
                 capture=_to_capture_record(duplicate_capture),
-                created=created,
+                created=False,
             )
-        capture = self._raw_event_capture_repository.create(
+
+        capture, capture_created = self._raw_event_capture_repository.get_or_create_by_capture_dedupe_key(
             RawEventCaptureORM(
                 capture_id=self._capture_id_factory(),
                 raw_event_id=existing.raw_event_id,
@@ -239,6 +222,26 @@ class RawEventService:
                 metadata_json=metadata,
             )
         )
+        if not capture_created:
+            return RawEventPersistResult(
+                raw_event=_to_record(existing),
+                capture=_to_capture_record(capture),
+                created=False,
+            )
+        if not created:
+            existing.last_captured_at = max(_ensure_utc(existing.last_captured_at), _ensure_utc(captured_at))
+            existing.title = existing.title or item.title
+            existing.content = existing.content or item.content
+            existing.author = existing.author or item.author
+            existing.canonical_url = existing.canonical_url or canonical_url
+            existing.external_id = existing.external_id or item.external_id
+            existing.published_at = existing.published_at or published_at
+            if not existing.raw_payload and payload.payload:
+                existing.raw_payload = payload.payload
+            if not existing.metadata_json and metadata:
+                existing.metadata_json = metadata
+            existing = self._raw_event_repository.save(existing)
+            existing = self._raw_event_repository.increment_duplicate_capture_count(existing)
         return RawEventPersistResult(
             raw_event=_to_record(existing),
             capture=_to_capture_record(capture),
@@ -347,8 +350,10 @@ def _prepare_raw_payload(raw_payload: Mapping[str, object]) -> _PreparedPayload:
     raise RawEventPayloadError("raw payload exceeds 128 KiB after allowlisted trimming")
 
 
-def _prepare_capture_metadata(metadata: Mapping[str, object], *, payload_truncated: bool) -> dict[str, object]:
-    sanitized = _materialize_json_object(sanitize_mapping(metadata))
+def _project_persisted_metadata(metadata: Mapping[str, object], *, payload_truncated: bool) -> dict[str, object]:
+    # metadata 入库只保留追踪和去重所需的最小投影，避免完整插件上下文或私有策略长期落库。
+    projected = {key: value for key, value in metadata.items() if key in METADATA_ALLOWED_KEYS}
+    sanitized = _materialize_json_object(sanitize_mapping(projected))
     if payload_truncated:
         sanitized["payload_truncated"] = True
     return sanitized

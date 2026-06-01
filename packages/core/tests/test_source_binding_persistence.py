@@ -86,6 +86,44 @@ class SourceBindingPersistenceTestCase(unittest.TestCase):
 
         self.assertEqual([item.binding_id for item in due_bindings], ["binding-due"])
 
+    def test_claim_due_binding_only_succeeds_once_for_same_snapshot(self) -> None:
+        next_run_at = self.clock.now() - timedelta(minutes=1)
+        self.binding_service.create_binding(
+            CreateSourceBindingInput(
+                binding_id="binding-claim",
+                owner_type="industry",
+                owner_id="semiconductor",
+                source_plugin_id="quantagent.official.source.rss",
+                effective_config_snapshot={"feed": "https://example.com/rss"},
+                schedule_policy={"interval_seconds": 60},
+                retry_policy={"max_attempts": 2},
+                rate_limit_policy={"requests_per_minute": 10},
+                next_run_at=next_run_at,
+                created_by="issue-217",
+            )
+        )
+
+        claimed = self.binding_service.claim_due_binding(
+            "binding-claim",
+            expected_next_run_at=next_run_at,
+            claimed_at=self.clock.now(),
+            actor="scheduler-a",
+        )
+        second = self.binding_service.claim_due_binding(
+            "binding-claim",
+            expected_next_run_at=next_run_at,
+            claimed_at=self.clock.now(),
+            actor="scheduler-b",
+        )
+
+        self.assertIsNotNone(claimed)
+        self.assertIsNone(second)
+        current = self.binding_repository.get("binding-claim")
+        self.assertIsNotNone(current)
+        assert current is not None
+        self.assertIsNone(current.next_run_at)
+        self.assertEqual(current.updated_by, "scheduler-a")
+
     def test_run_finish_and_binding_summary_update_keep_history_fields_stable(self) -> None:
         binding = self.binding_service.create_binding(
             CreateSourceBindingInput(

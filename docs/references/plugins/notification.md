@@ -22,6 +22,7 @@
 - Discord 的公钥、allowlist、响应文本和错误语义都留在插件层与插件配置层，不再留在 `apps/api`。
 - 这说明通知插件链路已经从“部分插件化”进一步收敛为“宿主通用、协议在插件”的模型。
 - 合理方向不是把 webhook ingress 全丢给插件，而是把 API 层收敛成 **通用 ingress 宿主**，由插件负责渠道协议适配，由平台负责 invoke、审计、持久化、事件发布和后续审批/通知链路衔接。
+- 对于 `notification.receive`，平台现在还需要进一步承担三件事：先落 `receive fact`，再追加 append-only 审计，最后通过显式 `approval handoff` seam 把标准化输入交给后续审批域；这三件事都不应该继续留在插件或 API host 里。
 
 ## Notification 插件在 QuantAgent 里的职责边界
 
@@ -253,10 +254,30 @@ POST /api/v1/integrations/notifications/ingress
 - Discord 插件自己负责验签、allowlist、payload 解析、HTTP 状态码和 response 生成。
 - API 与 core 不再解释 Discord 私有码，也不再维护 Discord 专属 env 名称。
 
+下一步平台侧还需要补齐：
+
+```text
+NotificationReceiveResult.item
+  -> NotificationReceiveFact
+  -> NotificationIngressAuditEntry (append-only)
+  -> NotificationApprovalHandoffPort
+```
+
+这里的关键边界：
+
+- `NotificationReceiveFact` 是 notification ingress 平台事实，不是 approval record。
+- `NotificationIngressAuditEntry` 只记录“平台收到了什么、何时移交了什么”，不是审批结论。
+- `NotificationApprovalHandoffPort` 只是移交 seam，不是 approval orchestration 本身。
+
+这样后续可以让 `#241` 或其他 approval change 在更高层消费这条 seam，而不是让 notification ingress 直接承担审批状态机、topic 或 Policy Gate。
+
 ## 当前实现做对了什么
 
 1. API host 已经通用化。
    宿主公开入口是 `/api/v1/integrations/notifications/ingress`，不再以 provider 名称进入路由真源。
+
+2. 平台职责已经明确可继续下沉到 core。
+   现在的正确方向不是在 API 层继续加 Discord/Telegram 特化逻辑，而是让 `packages/core` 在 ingress 成功后承担 receive fact、审计与 handoff。
 
 2. 插件配置边界收回到插件层。
    Discord 的 `public_key`、`response_text`、allowlist、timestamp tolerance 都通过 `NOTIFICATION_INGRESS_PLUGIN_CONFIG` 传入。
