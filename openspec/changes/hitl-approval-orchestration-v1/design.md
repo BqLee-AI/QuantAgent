@@ -238,6 +238,16 @@ approval 域需要提供 `NotificationApprovalHandoffPort` 的实现或 adapter�
 
 真实 Discord / Telegram / Email / WebSocket provider、发送调度器和投递状态不进入本轮；但外部通知输入进入 approval 的 seam 已经存在，后续实现应接入该 seam，而不是另造并行 fake 回流路径。
 
+### 6.1 通知测试按链路层次收口
+
+当前通知能力需要按三层分别验证，避免把“已有插件能力”误写成“平台发送闭环已完成”：
+
+1. `notification.requested` 发送请求事件：HITL 只验证 approval 编排会发布脱敏、可被人工理解的发送请求事件。测试应断言 payload 包含 `approval_id`、`action_request_id`、summary、确认等级、过期策略和允许通道，并且不包含完整 prompt、secret、token、cookie、私有策略或 broker credential。
+2. `notification.receive -> NotificationReceiveFact -> NotificationApprovalHandoffPort` 回流 seam：这是当前已打通且和 HITL 直接相关的通知链路。HITL 后续实现必须深化测试，覆盖 handoff request 映射为 `ApprovalInput`、找不到审批 ID、终态后输入、重复输入、模糊文本和 manual-only 弱确认等路径。
+3. `notification.send` 插件能力：Discord 插件已有发送 DTO 和 webhook 发送能力，但平台 dispatcher 尚未实现。HITL change 不把真实 provider 发送、dispatcher 选插件、调用 `notification.send` 或发布 `notification.completed` 作为本轮验收；这些应由后续 notification dispatcher / sender change 承接。
+
+真实 Discord webhook smoke 只能作为手动或 env-gated 补充验证，不进入默认 core approval 单测，也不能作为 HITL 编排已具备生产通知发送闭环的证据。
+
 ### 7. In-memory repository 只验证状态机和关联查找
 
 第一刀使用 `InMemoryApprovalRepository` 保存：
@@ -340,12 +350,19 @@ uv run python -m unittest packages/core/tests/test_approval_harness.py
 uv run python -m unittest packages/core/tests/test_notification_ingress.py
 ```
 
+通知相关验证分层：
+
+- `test_approval_orchestration.py` / `test_approval_harness.py`：验证 `notification.requested` payload 形状、脱敏边界，以及 handoff adapter 进入 `ApprovalInput` evaluation 后不绕过 Policy Gate。
+- `test_notification_ingress.py`：验证 receive fact、append-only ingress audit、handoff 成功 / 失败和 correlation 规则。
+- Discord plugin tests / smoke：只验证插件自身 `notification.send` 能力；真实 webhook smoke 需要显式环境变量和人工触发，不作为默认 CI gate。
+
 人工 review 需要核对：
 
 - `packages/core` 没有依赖 FastAPI、React、apps、具体插件或真实 broker。
 - 新增 topic 同步到 Event Bus stable spec、README 和 contract tests。
 - Event payload 不包含 ORM、API envelope、Plugin DTO、DB session 或不可 JSON 序列化对象。
 - approval handoff adapter 只消费 notification ingress 的 `NotificationApprovalHandoffRequest`，不把 notification ingress 变成 approval service。
+- 测试说明没有把 `notification.requested` 或 Discord 插件 smoke 误称为平台真实发送闭环。
 - approve、dry-run 和 completed 文义没有被写成 live trading 或真实执行成功。
 
 ## Risks / Trade-offs

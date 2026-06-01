@@ -81,6 +81,14 @@
 - **AND** 消息包含审批 ID、动作摘要、风险方向、确认等级、过期动作、允许通道和安全上下文
 - **AND** 消息不包含 secret、token、cookie、完整 prompt、私有策略、交易密钥或未经允许的敏感交易细节
 
+#### Scenario: notification.requested 不是真实发送完成
+- **WHEN** approval 编排发布 `notification.requested`
+- **THEN** 该事件只表示平台请求发送一条通知
+- **AND** 它不表示 notification dispatcher 已选择插件
+- **AND** 它不表示 `notification.send` 已被调用
+- **AND** 它不表示外部 provider 已送达
+- **AND** 它不表示 `notification.completed` 已发布
+
 #### Scenario: 消息不能充当直接放行凭证
 - **WHEN** 用户看到 `HumanAuthorizationMessage`
 - **THEN** 该消息只能用于生成人工输入或引导确认
@@ -113,6 +121,19 @@
 - **AND** 编排服务保存由 handoff 转换出的 `ApprovalInput`
 - **AND** 编排服务生成 `ApprovalEvaluation`
 - **AND** handoff adapter 不自行判定 approve / reject / request_reanalysis
+
+#### Scenario: handoff adapter 找不到审批时安全失败
+- **WHEN** `NotificationApprovalHandoffRequest` 无法解析出有效 `approval_id`
+- **OR** 解析出的 `approval_id` 不存在
+- **THEN** adapter 返回安全失败或 ignored 结果
+- **AND** Policy Gate 不被调用
+- **AND** executor 不被调用
+
+#### Scenario: handoff adapter 不改写终态审批
+- **WHEN** `NotificationApprovalHandoffRequest` 引用已经 completed、expired、rejected、blocked 或 escalated 的审批
+- **THEN** adapter 返回 ignored / already_completed 摘要或结构化错误
+- **AND** 编排服务不得改变最终 decision
+- **AND** executor 不被调用
 
 #### Scenario: 找不到审批请求不会执行动作
 - **WHEN** `approval.input_received` 引用不存在的 `approval_id`
@@ -233,6 +254,13 @@
 - **AND** 不需要真实数据库
 - **AND** 不需要真实 notification provider
 - **AND** 不需要真实 broker、真实密钥、生产账户或外部网络
+
+#### Scenario: 真实 Discord smoke 不属于默认 HITL 验收
+- **WHEN** 开发者运行 HITL approval 默认单元测试
+- **THEN** 测试不要求真实 Discord webhook
+- **AND** 测试不要求真实 notification provider token 或 secret
+- **AND** Discord webhook smoke 只能作为手动或 env-gated 补充验证
+- **AND** smoke 通过不表示平台 notification dispatcher 已实现
 
 ### Requirement: HITL 编排保持最小幂等边界
 

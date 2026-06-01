@@ -52,4 +52,7 @@
 - [x] 6.5 新增 `test_approval_event_bus_topics.py`，覆盖新增 topic 和 handler envelope 适配。
 - [x] 6.6 新增 `test_approval_harness.py`，覆盖完整 fake 消息闭环和脱敏消息生成。
 - [ ] 6.7 扩展 harness / tests，覆盖 `NotificationApprovalHandoffPort` adapter 从 notification receive handoff 到 `ApprovalInput` evaluation 的链路。
-- [ ] 6.8 后续实现运行 core event bus、notification ingress 与 approval 相关 unittest，验证无真实 Kafka、数据库、notification provider、broker 或外部网络依赖。
+- [ ] 6.8 增补 `notification.requested` payload 测试，断言它只表示发送请求事件，不表示 dispatcher 已调用插件、provider 已送达或 `notification.completed` 已发布。
+- [ ] 6.9 增补 handoff adapter 失败路径测试：无法解析 approval id、审批不存在、终态后输入、重复 input、模糊文本和 manual-only 弱确认都不得触发 executor。
+- [ ] 6.10 明确 Discord webhook smoke 只作为手动或 env-gated 补充验证，不进入默认 HITL / core approval 单测。
+- [ ] 6.11 后续实现运行 core event bus、notification ingress 与 approval 相关 unittest，验证无真实 Kafka、数据库、notification provider、broker 或外部网络依赖。
