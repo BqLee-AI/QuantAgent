@@ -28,9 +28,13 @@
 - **WHEN** `SCHEDULE_PLUGIN_ID` 指定的插件未在 registry 中注册
 - **THEN** `trigger()` 返回 `PluginRunRecord`（status=FAILED），日志输出 `PLUGIN_NOT_FOUND` 错误信息，进程以非零退出码退出
 
-#### Scenario: Kafka 不可用时启动失败
-- **WHEN** `EVENT_BUS_BACKEND=kafka` 且 `EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS` 未配置或不可达
-- **THEN** `create_scheduler_runtime()` 在 `build_event_bus_runtime()` 阶段抛出 `EventBusError`，进程以非零退出码退出
+#### Scenario: Kafka 配置缺失时启动失败
+- **WHEN** `EVENT_BUS_BACKEND=kafka` 且 `EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS` 为空
+- **THEN** `create_scheduler_runtime()` 在 `build_event_bus_runtime()` 阶段抛出 `EventBusError`（code=`EVENT_BUS_KAFKA_CONFIG_MISSING`），进程以非零退出码退出
+
+#### Scenario: Kafka broker 不可达时发布失败隔离
+- **WHEN** `EVENT_BUS_BACKEND=kafka` 且配置完整但 broker 不可达，插件触发成功
+- **THEN** `_maybe_publish_source_event()` 捕获 `EventBusError(EVENT_PUBLISH_FAILED)` 并输出 warning 日志，`PluginRunRecord.status` 仍为 `SUCCEEDED`，进程以退出码 0 退出
 
 ### Requirement: 事件总线后端策略——Kafka 为默认
 
@@ -95,3 +99,19 @@ Scheduler app SHALL 默认使用 Kafka 作为事件总线后端。`EVENT_BUS_BAC
 #### Scenario: 触发失败后仍执行清理
 - **WHEN** 插件触发失败或事件发布失败
 - **THEN** 仍调用 `event_bus.close()` 释放资源，进程退出码为 1
+
+### Requirement: Docker Compose scheduler 服务端到端验证
+
+`docker-compose.yml` 中的 scheduler 服务 SHALL 显式配置事件总线环境变量，`depends_on` SHALL 依赖 Kafka 服务健康检查通过后才启动。通过 `docker compose --profile kafka up scheduler` 即可完成端到端验证。
+
+#### Scenario: Docker Compose 启动 scheduler 并触发插件
+- **WHEN** 执行 `docker compose --profile kafka up scheduler` 且 placeholder-source 已打包到镜像
+- **THEN** scheduler 等待 Kafka 健康检查通过后启动，触发 `source.fetch`，事件发布到 Kafka，scheduler 以退出码 0 退出
+
+#### Scenario: Docker Compose 中 Kafka 未就绪时 scheduler 等待
+- **WHEN** `docker compose --profile kafka up scheduler` 但 Kafka healthcheck 未通过
+- **THEN** scheduler 等待 Kafka 健康检查通过后再启动，不提前失败
+
+#### Scenario: Docker Compose 移除 scheduler 对 db 的依赖
+- **WHEN** 查看 `docker-compose.yml` 中 scheduler 服务的 `depends_on`
+- **THEN** scheduler 不依赖 `db` 服务，只依赖 `kafka` 和可选的 `migrate`

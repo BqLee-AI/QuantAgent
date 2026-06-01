@@ -131,13 +131,77 @@ class SchedulerRuntime:
 - 与 API app 行为一致，减少配置面
 - 如果需要自定义路径，是独立的配置增强 issue，不属于本次范围
 
+### D7: Kafka 连接策略——懒连接 + 启动时校验配置 + 发布失败隔离
+
+**决策**: Kafka producer 采用懒连接（首次 `publish()` 时才真正连接），启动时只校验配置完整性（`EventBusSettings.validate()`），不预建连接。
+
+**异常处理分层**:
+
+| 阶段 | 异常行为 | 处理策略 |
+|---|---|---|
+| **启动配置校验** | `EVENT_BUS_BACKEND=kafka` 但 `BOOTSTRAP_SERVERS` 为空 | `EventBusError(EVENT_BUS_KAFKA_CONFIG_MISSING)`，进程快速失败 |
+| **首次 publish 连接** | Kafka broker 不可达 | `KafkaEventBusPublisher._get_producer()` 抛出异常，被 `EventBusError(EVENT_PUBLISH_FAILED)` 包裹 |
+| **publish 失败** | 连接断开、broker 下线、网络抖动 | `PluginSchedulingService._maybe_publish_source_event()` catch + logging.warning，**不改变 PluginRunRecord 状态** |
+| **close() 清理** | producer.stop() 失败 | `EventBusRuntime.close()` 内部 `_maybe_close()` 捕获并忽略 |
+
+**V1 不做重试**:
+- `KafkaEventBusPublisher` 不内置重试逻辑（当前代码无 retry）
+- `_maybe_publish_source_event()` 已有 catch + warning 模式，发布失败不影响调度结果
+- 重试是 interval loop 的职责（后续 issue），单次触发场景下重试无意义
+- 如果 Kafka 持续不可用，调度记录仍为 SUCCEEDED，但事件不会到达 worker——运维通过日志 warning 发现
+
+**理由**:
+- 懒连接避免 scheduler 启动时因 Kafka 未就绪而阻塞（Docker Compose depends_on 有 healthcheck，但网络抖动仍可能发生）
+- 发布失败隔离遵循 #204 已建立的 `_maybe_publish_source_event` 模式
+- 不引入重试复杂度，保持 V1 简单可验证
+
+### D8: Docker Compose scheduler 服务配置
+
+**决策**: 在 `docker-compose.yml` 中为 scheduler 服务显式配置事件总线环境变量，确保 Kafka 路径可端到端验证。
+
+```yaml
+scheduler:
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: runtime
+  image: quantagent-api:local
+  command: ["quantagent-scheduler"]
+  environment:
+    EVENT_BUS_BACKEND: kafka
+    EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    SCHEDULE_PLUGIN_ID: ${SCHEDULE_PLUGIN_ID:-quantagent.official.source.placeholder}
+  volumes:
+    - ./apps/scheduler:/app/apps/scheduler
+    - ./runtime:/app/runtime
+  depends_on:
+    kafka:
+      condition: service_healthy
+    migrate:
+      condition: service_completed_successfully
+      required: false
+```
+
+**关键变更**:
+- 移除 `depends_on: db`（scheduler 不直接访问数据库，审计记录在内存中）
+- `depends_on: kafka` 改为 `required: true`（默认值），确保 Kafka 就绪后才启动
+- 显式设置 `EVENT_BUS_BACKEND=kafka` 和 `EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=kafka:9092`
+- 通过 `SCHEDULE_PLUGIN_ID` 环境变量支持自定义插件触发
+- Kafka profile 需要配合使用：`docker compose --profile kafka up scheduler`
+
+**理由**:
+- 当前 docker-compose.yml 的 scheduler 服务缺少事件总线环境变量，依赖隐式默认值不可靠
+- `depends_on: kafka: required: false` 在 Kafka 未启动时会让 scheduler 静默失败
+- 显式配置让 `docker compose --profile kafka up scheduler` 成为端到端验证的单一命令
+
 ## Risks / Trade-offs
 
 | 风险 | 缓解措施 |
 |---|---|
 | placeholder-source 插件未安装导致 get_plugin() 返回 None | `PluginSchedulingService.trigger()` 已有 `PLUGIN_NOT_FOUND` 错误处理，日志会打印具体 plugin_id |
-| Kafka 不可用时启动失败 | `EventBusSettings.validate()` 在启动时校验 bootstrap servers，快速失败并给出明确错误信息 |
-| 单次触发无重试机制 | Non-goal；重试和补偿在后续 interval loop issue 中设计 |
+| Kafka broker 启动慢，首次 publish 连接失败 | 懒连接 + 发布失败隔离；`_maybe_publish_source_event()` catch + warning，调度记录仍为 SUCCEEDED |
+| Kafka 持续不可用，事件丢失 | V1 单次触发无重试；运维通过 warning 日志发现；后续 interval loop issue 设计重试策略 |
+| Docker Compose 中 scheduler 依赖 db 但实际不需要 | 本次移除 `depends_on: db`，scheduler 只依赖 Kafka |
 | `asyncio.run()` 不支持嵌套调用 | `run()` 是顶层入口，不会在已有 event loop 内被调用；测试直接调用内部异步函数绕过 |
 
 ## Open Questions

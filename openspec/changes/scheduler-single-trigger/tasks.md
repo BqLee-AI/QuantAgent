@@ -16,6 +16,12 @@
 - [ ] 3.1 确认 `Settings.EVENT_BUS_BACKEND` 默认值为 `"kafka"`（当前为 `"memory"`，需要改为 `"kafka"` 使 scheduler 默认走 Kafka；注意只改 scheduler app 的 settings 子集，不影响 core 全局默认）
 - [ ] 3.2 在 `apps/scheduler` 的环境配置中新增 `SCHEDULE_PLUGIN_ID` 默认值说明
 
+## 3.5 Docker Compose 配置
+
+- [ ] 3.5.1 更新 `docker-compose.yml` 中 scheduler 服务：添加 `environment` 块（`EVENT_BUS_BACKEND=kafka`、`EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=kafka:9092`、`SCHEDULE_PLUGIN_ID`）
+- [ ] 3.5.2 更新 scheduler `depends_on`：移除 `db` 依赖，`kafka` 改为 `required: true`（默认），保留可选 `migrate`
+- [ ] 3.5.3 验证 `docker compose --profile kafka config` 输出包含正确的 scheduler 环境变量和依赖
+
 ## 4. Memory 后端单元测试
 
 - [ ] 4.1 更新 `test_scheduler_runtime_uses_memory_backend_by_default`：验证 `SchedulerRuntime`（而非原 `EventBusRuntime`）的 `event_bus.backend` 和 `event_bus.publisher`
@@ -33,3 +39,9 @@
 - [ ] 6.1 新增测试：`SCHEDULE_PLUGIN_ID` 指定的插件未注册时，trigger 返回 FAILED 状态
 - [ ] 6.2 新增测试：`run()` 在触发失败时仍调用 `runtime.close()`
 - [ ] 6.3 新增测试：结构化日志输出包含正确字段（用 `caplog` 或 mock logger 验证）
+
+## 7. Kafka 异常处理测试
+
+- [ ] 7.1 新增测试：Kafka 后端下 mock `KafkaEventBusPublisher.publish` 抛出 `EventBusError(EVENT_PUBLISH_FAILED)`，验证 `trigger()` 返回的 `PluginRunRecord.status` 仍为 `SUCCEEDED`（发布失败不影响调度结果）
+- [ ] 7.2 新增测试：Kafka 发布失败时验证 warning 日志包含 `run_id`、`plugin_id`、`error_type`、`error_message`
+- [ ] 7.3 新增测试：Kafka 后端下 `SchedulerRuntime.close()` 正常调用 `KafkaEventBusPublisher.close()` 和 `KafkaEventBusConsumer.close()`，不抛异常
