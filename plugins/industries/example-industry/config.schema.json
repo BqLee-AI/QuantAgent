@@ -1,0 +1,11 @@
+{
+  "title": "Example Industry Package Config",
+  "type": "object",
+  "properties": {
+    "watchlist_name": {
+      "type": "string",
+      "description": "示例行业包的人类可读 watchlist 名称。"
+    }
+  },
+  "additionalProperties": false
+}

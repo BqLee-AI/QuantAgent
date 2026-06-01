@@ -31,6 +31,13 @@ class PluginSource(StrEnum):
 
 
 @dataclass(frozen=True)
+class SourceBindingManifest:
+    source_plugin_id: str
+    required: bool
+    config_template: str
+
+
+@dataclass(frozen=True)
 class PluginManifest:
     id: str
     name: str
@@ -42,11 +49,13 @@ class PluginManifest:
     description: str | None = None
     permissions: tuple[str, ...] = ()
     dependencies: Mapping[str, Any] = field(default_factory=dict)
+    source_bindings: tuple[SourceBindingManifest, ...] = ()
 
     def __post_init__(self) -> None:
         # Frozen dataclasses only freeze the top-level attribute; wrap mappings so
         # callers cannot mutate cached registry records through nested dicts.
         object.__setattr__(self, "dependencies", MappingProxyType(dict(self.dependencies)))
+        object.__setattr__(self, "source_bindings", tuple(self.source_bindings))
 
 
 @dataclass(frozen=True)

@@ -1,0 +1,16 @@
+id: quantagent.official.industry.example
+name: Example Industry Package
+type: industry
+version: 0.1.0
+entrypoint: industry_plugin:plugin
+description: Example official industry package that demonstrates source_bindings asset layout.
+capabilities:
+  - industry.analysis
+config_schema: config.schema.json
+source_bindings:
+  - source_plugin_id: quantagent.official.source.rss
+    required: true
+    config_template: templates/source_bindings/rss.default.yaml
+  - source_plugin_id: quantagent.official.source.readability
+    required: false
+    config_template: templates/source_bindings/readability.fallback.yaml

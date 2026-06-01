@@ -14,6 +14,7 @@ from quantagent.api.schemas.plugins import (
     PluginRecordResponse,
     PluginRescanResponse,
     PluginScanSummaryResponse,
+    SourceBindingManifestResponse,
 )
 from quantagent.api.services.plugin_registry import find_repo_root, get_plugin_registry
 from quantagent.core.registry import (
@@ -113,6 +114,14 @@ def _manifest_response(manifest: PluginManifest) -> PluginManifestResponse:
         description=manifest.description,
         permissions=list(manifest.permissions),
         dependencies=dict(manifest.dependencies),
+        source_bindings=[
+            SourceBindingManifestResponse(
+                source_plugin_id=item.source_plugin_id,
+                required=item.required,
+                config_template=item.config_template,
+            )
+            for item in manifest.source_bindings
+        ],
     )
 
 

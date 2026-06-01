@@ -1397,6 +1397,27 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(placeholder["manifest"]["type"], "source")
         self.assertEqual(placeholder["path"], "plugins/sources/placeholder-source")
 
+        example_industry = next(
+            plugin for plugin in plugins if plugin["id"] == "quantagent.official.industry.example"
+        )
+        self.assertEqual(example_industry["manifest"]["type"], "industry")
+        self.assertEqual(example_industry["path"], "plugins/industries/example-industry")
+        self.assertEqual(
+            example_industry["manifest"]["source_bindings"],
+            [
+                {
+                    "source_plugin_id": "quantagent.official.source.rss",
+                    "required": True,
+                    "config_template": "templates/source_bindings/rss.default.yaml",
+                },
+                {
+                    "source_plugin_id": "quantagent.official.source.readability",
+                    "required": False,
+                    "config_template": "templates/source_bindings/readability.fallback.yaml",
+                },
+            ],
+        )
+
         detail_response = self.client.get("/api/v1/plugins/quantagent.official.source.placeholder")
         self.assertEqual(detail_response.status_code, 200)
         self.assertEqual(detail_response.json()["data"]["id"], "quantagent.official.source.placeholder")
@@ -2297,6 +2318,11 @@ class ApiAppTestCase(unittest.TestCase):
 
         plugins_schema = self._resolve_response_schema(schema, "/api/v1/plugins")
         self.assertTrue({"code", "data", "msg", "error"}.issubset(plugins_schema["properties"].keys()))
+        plugin_record_variants = plugins_schema["properties"]["data"]["anyOf"]
+        plugin_record_array_schema = next(variant for variant in plugin_record_variants if variant.get("type") == "array")
+        plugin_record_schema = self._resolve_schema_ref(schema, plugin_record_array_schema["items"])
+        manifest_schema = self._resolve_schema_ref(schema, plugin_record_schema["properties"]["manifest"]["anyOf"][0])
+        self.assertIn("source_bindings", manifest_schema["properties"])
 
         wallet_account_schema = self._resolve_response_schema(schema, "/api/v1/wallet/accounts/{account_id}")
         wallet_account_data_schema = self._resolve_schema_ref(schema, wallet_account_schema["properties"]["data"])

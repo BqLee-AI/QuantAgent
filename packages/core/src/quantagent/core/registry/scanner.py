@@ -15,6 +15,7 @@ from quantagent.core.registry.models import (
     PluginSource,
     PluginStatus,
     PluginType,
+    SourceBindingManifest,
 )
 
 
@@ -200,6 +201,18 @@ class RegistryScanner:
                 root=root,
             )
 
+        source_bindings, source_bindings_error = _parse_source_bindings(
+            scanner=self,
+            manifest_data=manifest_data,
+            plugin_dir=plugin_dir,
+            plugin_id=manifest_id,
+            plugin_type=plugin_type,
+            source=source,
+            root=root,
+        )
+        if source_bindings_error is not None:
+            return source_bindings_error
+
         plugin_id = _required_string(manifest_data, "id")
         name = _required_string(manifest_data, "name")
         version = _required_string(manifest_data, "version")
@@ -239,6 +252,7 @@ class RegistryScanner:
             description=_optional_string(manifest_data.get("description")),
             permissions=_string_tuple(manifest_data.get("permissions")),
             dependencies=manifest_data.get("dependencies") if isinstance(manifest_data.get("dependencies"), dict) else {},
+            source_bindings=source_bindings,
         )
         return PluginRecord(
             id=manifest.id,
@@ -385,6 +399,102 @@ def _resolve_inside_plugin_dir(plugin_dir: Path, configured_path: str | None) ->
     except (OSError, RuntimeError, ValueError):
         return None
     return resolved_schema_path
+
+
+def _parse_source_bindings(
+    *,
+    scanner: RegistryScanner,
+    manifest_data: dict[str, Any],
+    plugin_dir: Path,
+    plugin_id: str | None,
+    plugin_type: PluginType,
+    source: PluginSource,
+    root: Path,
+) -> tuple[tuple[SourceBindingManifest, ...], PluginRecord | None]:
+    raw_source_bindings = manifest_data.get("source_bindings")
+    if raw_source_bindings is None:
+        return (), None
+    if plugin_type is not PluginType.INDUSTRY:
+        return (), scanner._error_record(
+            source=source,
+            plugin_dir=plugin_dir,
+            plugin_id=plugin_id,
+            code="PLUGIN_SOURCE_BINDINGS_UNSUPPORTED_TYPE",
+            message="Only industry plugins may declare source_bindings.",
+            stage="validate",
+            details={"type": plugin_type.value},
+            root=root,
+        )
+    if not isinstance(raw_source_bindings, list) or not raw_source_bindings:
+        return (), scanner._error_record(
+            source=source,
+            plugin_dir=plugin_dir,
+            plugin_id=plugin_id,
+            code="PLUGIN_SOURCE_BINDINGS_INVALID",
+            message="Plugin source_bindings must be a non-empty list.",
+            stage="validate",
+            root=root,
+        )
+
+    parsed_items: list[SourceBindingManifest] = []
+    for index, item in enumerate(raw_source_bindings):
+        if not isinstance(item, dict):
+            return (), scanner._error_record(
+                source=source,
+                plugin_dir=plugin_dir,
+                plugin_id=plugin_id,
+                code="PLUGIN_SOURCE_BINDING_ITEM_INVALID",
+                message="Plugin source_bindings items must be mappings.",
+                stage="validate",
+                details={"index": index},
+                root=root,
+            )
+        source_plugin_id = _optional_string(item.get("source_plugin_id"))
+        config_template = _optional_string(item.get("config_template"))
+        required = item.get("required")
+        if source_plugin_id is None or config_template is None or not isinstance(required, bool):
+            return (), scanner._error_record(
+                source=source,
+                plugin_dir=plugin_dir,
+                plugin_id=plugin_id,
+                code="PLUGIN_SOURCE_BINDING_FIELD_INVALID",
+                message="Plugin source_bindings items require source_plugin_id, required, and config_template.",
+                stage="validate",
+                details={"index": index},
+                root=root,
+            )
+        config_template_path = _resolve_inside_plugin_dir(plugin_dir, config_template)
+        if config_template_path is None:
+            return (), scanner._error_record(
+                source=source,
+                plugin_dir=plugin_dir,
+                plugin_id=plugin_id,
+                code="PLUGIN_SOURCE_BINDING_TEMPLATE_OUTSIDE_PLUGIN",
+                message="Plugin source binding templates must resolve inside the plugin directory.",
+                stage="validate",
+                details={"index": index, "config_template": config_template},
+                root=root,
+            )
+        if not config_template_path.is_file():
+            return (), scanner._error_record(
+                source=source,
+                plugin_dir=plugin_dir,
+                plugin_id=plugin_id,
+                code="PLUGIN_SOURCE_BINDING_TEMPLATE_NOT_FOUND",
+                message="Plugin source binding template file does not exist.",
+                stage="validate",
+                details={"index": index, "config_template": config_template},
+                root=root,
+            )
+        # 行业包这里只声明模板入口，不能借 manifest 越权承接运行态主对象。
+        parsed_items.append(
+            SourceBindingManifest(
+                source_plugin_id=source_plugin_id,
+                required=required,
+                config_template=config_template,
+            )
+        )
+    return tuple(parsed_items), None
 
 
 def _is_path_inside_root(path: Path, root: Path) -> bool:

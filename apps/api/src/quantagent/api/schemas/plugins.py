@@ -20,6 +20,14 @@ class PluginErrorResponse(BaseModel):
     retryable: bool = False
 
 
+class SourceBindingManifestResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_plugin_id: str = Field(min_length=1)
+    required: bool
+    config_template: str = Field(min_length=1)
+
+
 class PluginManifestResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -33,6 +41,7 @@ class PluginManifestResponse(BaseModel):
     description: str | None = None
     permissions: list[str] = Field(default_factory=list)
     dependencies: dict[str, Any] = Field(default_factory=dict)
+    source_bindings: list[SourceBindingManifestResponse] = Field(default_factory=list)
 
 
 class PluginRecordResponse(BaseModel):

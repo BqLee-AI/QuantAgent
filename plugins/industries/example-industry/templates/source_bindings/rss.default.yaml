@@ -1,0 +1,8 @@
+feeds:
+  - https://example.com/example-industry/feed.xml
+keywords:
+  - example supply
+  - example demand
+category_allowlist:
+  - macro
+  - company

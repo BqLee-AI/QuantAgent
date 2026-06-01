@@ -259,6 +259,99 @@ class PluginRegistryScannerTestCase(unittest.TestCase):
         with self.assertRaises(TypeError):
             manifest.dependencies["new"] = "value"  # type: ignore[index]
 
+    def test_industry_plugin_source_bindings_are_scanned_from_repo(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        registry = PluginRegistry(
+            RegistryScanner(
+                official_root=repo_root / "plugins",
+                runtime_root=repo_root / "runtime" / "plugins",
+            )
+        )
+
+        record = registry.get_plugin("quantagent.official.industry.example")
+
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertEqual(record.status, PluginStatus.VALID)
+        self.assertIsNotNone(record.manifest)
+        assert record.manifest is not None
+        self.assertEqual(record.manifest.type, PluginType.INDUSTRY)
+        self.assertEqual(
+            tuple(item.source_plugin_id for item in record.manifest.source_bindings),
+            (
+                "quantagent.official.source.rss",
+                "quantagent.official.source.readability",
+            ),
+        )
+        self.assertEqual(
+            tuple(item.required for item in record.manifest.source_bindings),
+            (True, False),
+        )
+        self.assertEqual(
+            tuple(item.config_template for item in record.manifest.source_bindings),
+            (
+                "templates/source_bindings/rss.default.yaml",
+                "templates/source_bindings/readability.fallback.yaml",
+            ),
+        )
+
+    def test_source_bindings_templates_must_stay_inside_plugin_dir(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            plugin_dir = root / "plugins" / "industries" / "bad-industry"
+            self._write_plugin(
+                plugin_dir,
+                plugin_id="quantagent.official.industry.bad",
+                plugin_type="industry",
+            )
+            manifest_text = (plugin_dir / "plugin.yaml").read_text(encoding="utf-8")
+            (plugin_dir / "plugin.yaml").write_text(
+                manifest_text
+                + (
+                    "source_bindings:\n"
+                    "  - source_plugin_id: quantagent.official.source.rss\n"
+                    "    required: true\n"
+                    "    config_template: ../outside.yaml\n"
+                ),
+                encoding="utf-8",
+            )
+
+            records = RegistryScanner(official_root=root / "plugins", runtime_root=root / "runtime").scan()
+
+        record = records[0]
+        self.assertEqual(record.status, PluginStatus.INVALID)
+        self.assertEqual(record.last_error.code, "PLUGIN_SOURCE_BINDING_TEMPLATE_OUTSIDE_PLUGIN")
+
+    def test_only_industry_plugins_may_declare_source_bindings(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            plugin_dir = root / "plugins" / "sources" / "bad-source"
+            self._write_plugin(
+                plugin_dir,
+                plugin_id="quantagent.official.source.bad",
+                plugin_type="source",
+            )
+            template_dir = plugin_dir / "templates" / "source_bindings"
+            template_dir.mkdir(parents=True)
+            (template_dir / "rss.default.yaml").write_text("feeds: []\n", encoding="utf-8")
+            manifest_text = (plugin_dir / "plugin.yaml").read_text(encoding="utf-8")
+            (plugin_dir / "plugin.yaml").write_text(
+                manifest_text
+                + (
+                    "source_bindings:\n"
+                    "  - source_plugin_id: quantagent.official.source.rss\n"
+                    "    required: true\n"
+                    "    config_template: templates/source_bindings/rss.default.yaml\n"
+                ),
+                encoding="utf-8",
+            )
+
+            records = RegistryScanner(official_root=root / "plugins", runtime_root=root / "runtime").scan()
+
+        record = records[0]
+        self.assertEqual(record.status, PluginStatus.INVALID)
+        self.assertEqual(record.last_error.code, "PLUGIN_SOURCE_BINDINGS_UNSUPPORTED_TYPE")
+
     def test_scans_official_discord_plugin_from_repo(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
         registry = PluginRegistry(
