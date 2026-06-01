@@ -2,7 +2,8 @@
 
 - [x] 1.1 提交 OpenSpec-only PR，只包含 `industry-source-bindings-manifest-template-v1` 的 proposal、design、tasks、spec 和必要元数据。
 - [x] 1.2 在 PR 说明中明确：本 PR 只定义行业包 `source_bindings` 的 manifest/template 目录与样例约定，不实现插件代码、runtime、持久化或调度逻辑。
-- [x] 1.3 等维护者在 PR 下明确评论“没问题”或批准后，再进入任何行业包样例或实现代码 PR。
+- [ ] 1.3 等维护者在 OpenSpec-only PR #229 下明确评论“没问题”或批准后，再进入任何行业包样例或实现代码 PR。
+  - 当前状态：截至 2026-06-01，PR #229 仍未获得维护者明确评论“没问题”或批准；当前实现 PR #234 必须标记为 `blocked-on-#229` / `do-not-merge-until-approved`，不能把该 gate 视为已完成。
 
 ## 2. Manifest 与模板目录约定
 
