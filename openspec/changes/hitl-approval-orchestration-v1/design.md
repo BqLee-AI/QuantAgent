@@ -153,6 +153,7 @@ ApprovalEvaluation
 
 ApprovalDecision
   approval_id
+  action_request_id
   status
   intent
   policy_gate_status
@@ -170,7 +171,7 @@ ApprovalDecision
 - `ApprovalDecision.policy_gate_status` 只能表达 `not_required`、`allowed`、`denied`、`unavailable`、`failed` 这类 gate 结果，不能表达 broker 执行成功。
 - `ApprovalDecision.execution_status` 只能表达 `not_requested`、`mock_requested`、`dry_run_requested`、`request_failed` 这类请求摘要，不能表达 live trading、真实成交或真实 broker 成功。
 
-`approval.completed` payload 的最小字段应从 `ApprovalDecision` 映射，至少包含 `approval_id`、`action_request_id`、`status`、`intent`、`policy_gate_status`、`execution_status`、`reason_summary` 和安全的 `correlation_id` / `causation_id`。它是完成事件摘要，不是持久化审批详情、审计记录或 broker 执行回执。
+`approval.completed` payload 的最小字段来自 `ApprovalDecision` 与关联 `ApprovalRequest` / `ActionRequest` 的安全上下文。`ApprovalDecision` 必须直接携带 `approval_id`、`action_request_id`、`status`、`intent`、`policy_gate_status`、`execution_status` 和 `reason_summary`；`correlation_id` / `causation_id` 这类追踪字段可以由关联请求或 envelope 上下文补齐。它是完成事件摘要，不是持久化审批详情、审计记录或 broker 执行回执。
 
 ### 4. PolicyGate 是执行前 port，不实现完整策略引擎
 
