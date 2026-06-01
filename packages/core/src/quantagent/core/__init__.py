@@ -15,11 +15,28 @@ from quantagent.core.events import (
     KafkaEventBusConsumer,
     KafkaEventBusPublisher,
 )
+from quantagent.core.source_binding import (
+    EffectiveSourceConfig,
+    EffectiveSourceConfigComposer,
+    RateLimitPolicyHint,
+    ResolvedSourceExecutionConfig,
+    RetryPolicyHint,
+    SchedulePolicyHint,
+    SecretValueRef,
+    SourceBindingTemplate,
+    SourceBindingTemplateLoader,
+    build_runtime_source_config,
+    extract_defaults_from_schema,
+    is_effective_source_config_mapping,
+    resolve_runtime_source_config,
+)
 
 __all__ = [
     "__version__",
     "DEFAULT_EVENT_SCHEMA_VERSION",
     "DEFAULT_EVENT_TOPICS",
+    "EffectiveSourceConfig",
+    "EffectiveSourceConfigComposer",
     "EventBusCodec",
     "EventBusConsumer",
     "EventBusError",
@@ -31,6 +48,17 @@ __all__ = [
     "InMemoryEventBus",
     "KafkaEventBusConsumer",
     "KafkaEventBusPublisher",
+    "RateLimitPolicyHint",
+    "ResolvedSourceExecutionConfig",
+    "RetryPolicyHint",
+    "SchedulePolicyHint",
+    "SecretValueRef",
+    "SourceBindingTemplate",
+    "SourceBindingTemplateLoader",
+    "build_runtime_source_config",
+    "extract_defaults_from_schema",
+    "is_effective_source_config_mapping",
+    "resolve_runtime_source_config",
 ]
 
 __version__ = "0.1.0"

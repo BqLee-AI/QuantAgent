@@ -14,6 +14,8 @@ from quantagent.plugin_sdk.io import (
     NotificationSendResult,
     PluginInput,
     PluginResult,
+    JsonObject,
+    JsonValue,
     SourceFetchInput,
     SourceFetchResult,
     SourceItemDraft,
@@ -22,6 +24,7 @@ from quantagent.plugin_sdk.io import (
     dto_validation_error,
     freeze_json_mapping,
     freeze_json_value,
+    to_json_value,
 )
 from quantagent.plugin_sdk.runtime import (
     BasePlugin,
@@ -45,6 +48,8 @@ __all__ = [
     "EvidenceLike",
     "EvidenceSearchResult",
     "HealthCheckResult",
+    "JsonObject",
+    "JsonValue",
     "NotificationSendInput",
     "NotificationReceiveItem",
     "NotificationReceiveResult",
@@ -64,4 +69,5 @@ __all__ = [
     "dto_validation_error",
     "freeze_json_mapping",
     "freeze_json_value",
+    "to_json_value",
 ]

@@ -17,6 +17,7 @@ from quantagent.core.runtime import PluginRuntimeInvocation, PluginRuntimeServic
 from quantagent.core.scheduling.clock import SchedulingClock, SystemSchedulingClock
 from quantagent.core.scheduling.models import PluginRunRecord, PluginRunStatus, PluginTriggerRequest
 from quantagent.core.scheduling.repository import PluginRunRepository
+from quantagent.core.source_binding import build_runtime_source_config, is_effective_source_config_mapping
 from quantagent.plugin_sdk import PluginRuntimeError, SourceFetchResult, freeze_json_mapping
 from quantagent.plugin_sdk.io import JsonObject, JsonValue
 
@@ -162,11 +163,12 @@ class PluginSchedulingService:
         return self._repository.update(run), started_monotonic
 
     async def _invoke_runtime(self, record: PluginRecord, request: PluginTriggerRequest) -> PluginRuntimeInvocation:
+        runtime_config = _build_plugin_runtime_config(record, request)
         invoke_coro = self._runtime.invoke(
             record,
             capability=request.capability,
             request_id=request.request_id,
-            config=request.effective_config,
+            config=runtime_config,
             input=request.input,
             metadata=request.metadata,
         )
@@ -237,6 +239,14 @@ def _plugin_version(record: PluginRecord | None) -> str | None:
     if record is None or record.manifest is None:
         return None
     return record.manifest.version
+
+
+def _build_plugin_runtime_config(record: PluginRecord, request: PluginTriggerRequest) -> JsonObject:
+    # 现有 source 插件仍普遍直接读取 context.config；这里先把新快照合同适配成旧插件可消费的 config 视图。
+    if record.manifest is not None and record.manifest.type.value == "source":
+        if is_effective_source_config_mapping(request.effective_config):
+            return build_runtime_source_config(request.effective_config)
+    return freeze_json_mapping(request.effective_config, stage="config")
 
 
 def _ensure_run(run: PluginRunRecord | None) -> PluginRunRecord:

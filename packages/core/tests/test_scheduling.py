@@ -20,6 +20,7 @@ from quantagent.core.scheduling import (
     PluginTriggerRequest,
     PluginTriggerType,
 )
+from quantagent.core.source_binding import EffectiveSourceConfigComposer, SourceBindingTemplate
 from quantagent.core.events import InMemoryEventBus
 from quantagent.plugin_sdk import BasePlugin, PluginInvokeResult, PluginRuntimeError
 
@@ -250,6 +251,43 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
         for forbidden in ("db", "session", "scheduler", "event_bus", "service", "secret_resolver"):
             self.assertFalse(hasattr(context, forbidden))
         self.assertNotIn("scheduler", captured["input"])
+
+    async def test_source_plugin_receives_flat_runtime_config_from_effective_config_snapshot(self) -> None:
+        captured = {}
+
+        class InspectingSourcePlugin(BasePlugin):
+            async def invoke(self, request):
+                captured["config"] = self.context.config
+                return PluginInvokeResult(output={"ok": True, "feeds": self.context.config["feeds"]})
+
+        self._install_module("test_scheduling_source_effective_config", InspectingSourcePlugin)
+        service = self._service(self._record(entrypoint="test_scheduling_source_effective_config:plugin"))
+        snapshot = EffectiveSourceConfigComposer().compose(
+            template=SourceBindingTemplate(
+                source_plugin_id="quantagent.test.scheduling",
+                required=True,
+                config_override={"feeds": ["https://feeds.example.com/runtime.xml"]},
+            ),
+            plugin_schema={
+                "type": "object",
+                "properties": {
+                    "feeds": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": ["feeds"],
+                "additionalProperties": False,
+            },
+        )
+
+        run = await service.trigger(
+            self._request(
+                request_id="req-effective-config",
+                effective_config=snapshot.to_mapping(),
+            )
+        )
+
+        self.assertEqual(run.status, PluginRunStatus.SUCCEEDED)
+        self.assertEqual(captured["config"]["feeds"], ("https://feeds.example.com/runtime.xml",))
+        self.assertNotIn("config_fingerprint", captured["config"])
 
     async def test_concurrent_triggers_keep_run_state_isolated(self) -> None:
         release = asyncio.Event()
