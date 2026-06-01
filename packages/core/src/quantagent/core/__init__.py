@@ -15,6 +15,15 @@ from quantagent.core.events import (
     KafkaEventBusConsumer,
     KafkaEventBusPublisher,
 )
+from quantagent.core.raw_events import (
+    PersistSourceFetchResultSummary,
+    RawEventDedupeError,
+    RawEventDedupeStrategy,
+    RawEventOwnershipError,
+    RawEventPersistResult,
+    RawEventRecord,
+    RawEventService,
+)
 from quantagent.core.source_binding import (
     EffectiveSourceConfig,
     EffectiveSourceConfigComposer,
@@ -48,7 +57,14 @@ __all__ = [
     "InMemoryEventBus",
     "KafkaEventBusConsumer",
     "KafkaEventBusPublisher",
+    "PersistSourceFetchResultSummary",
     "RateLimitPolicyHint",
+    "RawEventDedupeError",
+    "RawEventDedupeStrategy",
+    "RawEventOwnershipError",
+    "RawEventPersistResult",
+    "RawEventRecord",
+    "RawEventService",
     "ResolvedSourceExecutionConfig",
     "RetryPolicyHint",
     "SchedulePolicyHint",
