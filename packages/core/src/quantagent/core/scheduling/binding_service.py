@@ -46,6 +46,12 @@ class SourceBindingService:
         due_at = now or self._clock.now()
         return [_to_record(item) for item in self._repository.list_due_bindings(now=due_at, limit=limit)]
 
+    def get_binding(self, binding_id: str) -> SourceBindingRecord | None:
+        binding = self._repository.get(binding_id)
+        if binding is None:
+            return None
+        return _to_record(binding)
+
     def claim_due_binding(
         self,
         binding_id: str,

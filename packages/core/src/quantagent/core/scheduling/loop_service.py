@@ -441,6 +441,7 @@ class SourceBindingSchedulerLoopService:
                 producer="scheduler-loop",
                 request_id=request_id,
                 plugin_id=binding.source_plugin_id,
+                binding_id=binding.binding_id,
                 causation_id=run_id,
                 correlation_id=request_id,
             )

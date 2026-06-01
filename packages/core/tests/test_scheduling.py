@@ -593,6 +593,7 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(envelope.topic, "source.event.captured")
         self.assertIn("plugin_id", envelope.payload)
         self.assertEqual(envelope.payload["plugin_id"], "quantagent.test.scheduling")
+        self.assertNotIn("binding_id", envelope.payload)
 
     async def test_trigger_without_publisher_behaves_identically(self) -> None:
         """无 publisher 时行为不变"""

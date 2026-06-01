@@ -202,6 +202,8 @@ class SourceBindingSchedulerLoopServiceTestCase(unittest.IsolatedAsyncioTestCase
         self.assertEqual(len(self.event_handler.seen), 1)
         self.assertEqual(self.event_handler.seen[0].topic, "source.event.captured")
         self.assertEqual(self.event_handler.seen[0].causation_id, runs[0].run_id)
+        self.assertEqual(self.event_handler.seen[0].payload["binding_id"], binding.binding_id)
+        self.assertEqual(self.event_handler.seen[0].headers["binding_id"], binding.binding_id)
 
     async def test_invalid_schedule_policy_records_failed_run_and_clears_next_run(self) -> None:
         registry = PluginRegistry(StaticScanner([]))

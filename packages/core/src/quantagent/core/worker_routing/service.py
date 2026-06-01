@@ -1,0 +1,169 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+
+from quantagent.core.scheduling import SourceBindingRecord, SourceBindingService
+from quantagent.core.worker_routing.industry_gateway import IndustryGateway
+from quantagent.core.worker_routing.models import (
+    CapturedSourceEventInput,
+    ConsumerDisposition,
+    WorkerRouteResult,
+    WorkerRouteStatus,
+)
+from quantagent.core.worker_routing.owner_resolver import OwnerRoutingResolutionError, SourceBindingOwnerResolver
+
+
+class WorkerCapturedEventRoutingService:
+    def __init__(
+        self,
+        *,
+        binding_service: SourceBindingService,
+        owner_resolver: SourceBindingOwnerResolver,
+        industry_gateway: IndustryGateway,
+        duplicate_guard: Callable[[str], bool] | None = None,
+    ) -> None:
+        self._binding_service = binding_service
+        self._owner_resolver = owner_resolver
+        self._industry_gateway = industry_gateway
+        guard = duplicate_guard or InMemoryMessageDuplicateGuard()
+        self._has_seen = guard if callable(guard) else guard.has_seen
+        self._remember = None if callable(guard) else guard.remember
+
+    async def route(self, event: CapturedSourceEventInput) -> WorkerRouteResult:
+        if event.binding_id is None:
+            result = _route_result(
+                event,
+                reason_code="CAPTURED_EVENT_BINDING_ID_MISSING",
+                status=WorkerRouteStatus.FAILED,
+                disposition=ConsumerDisposition.ACK_AND_RECORD_FAILURE,
+                retryable=False,
+            )
+            self._record_if_terminal(result)
+            return result
+        if self._has_seen(event.message_id):
+            return _route_result(
+                event,
+                reason_code="CAPTURED_EVENT_DUPLICATE",
+                status=WorkerRouteStatus.DUPLICATE,
+                disposition=ConsumerDisposition.ACK_AND_RECORD_DUPLICATE,
+                retryable=False,
+            )
+
+        binding = self._get_binding(event.binding_id)
+        if binding is None:
+            result = _route_result(
+                event,
+                reason_code="SOURCE_BINDING_NOT_FOUND",
+                status=WorkerRouteStatus.FAILED,
+                disposition=ConsumerDisposition.ACK_AND_RECORD_FAILURE,
+                retryable=False,
+            )
+            self._record_if_terminal(result)
+            return result
+        try:
+            target = self._owner_resolver.resolve(binding)
+        except OwnerRoutingResolutionError as exc:
+            status = WorkerRouteStatus.IGNORED if exc.reason_code == "SOURCE_BINDING_NOT_ACTIVE" else WorkerRouteStatus.FAILED
+            disposition = (
+                ConsumerDisposition.ACK_AND_RECORD_IGNORED
+                if exc.reason_code == "SOURCE_BINDING_NOT_ACTIVE"
+                else ConsumerDisposition.ACK_AND_RECORD_FAILURE
+            )
+            result = _route_result(
+                event,
+                reason_code=exc.reason_code,
+                status=status,
+                disposition=disposition,
+                retryable=False,
+                owner_type=exc.owner_type,
+                owner_id=exc.owner_id,
+            )
+            self._record_if_terminal(result)
+            return result
+
+        gateway_result = await self._industry_gateway.invoke(target=target, event=event)
+        if gateway_result.status == "failed":
+            return _route_result(
+                event,
+                reason_code=gateway_result.reason_code or "INDUSTRY_ENTRYPOINT_FAILED",
+                status=WorkerRouteStatus.FAILED,
+                disposition=ConsumerDisposition.NACK_OR_SCHEDULE_RETRY,
+                retryable=True,
+                owner_type=target.owner_type,
+                owner_id=target.owner_id,
+                route_target=gateway_result.target_ref,
+                extra_audit={"gateway_error": gateway_result.error_summary},
+            )
+        result = _route_result(
+            event,
+            reason_code=gateway_result.reason_code,
+            status=WorkerRouteStatus.ROUTED,
+            disposition=ConsumerDisposition.ACK_AND_RECORD_ROUTED,
+            retryable=False,
+            owner_type=target.owner_type,
+            owner_id=target.owner_id,
+            route_target=gateway_result.target_ref,
+        )
+        self._record_if_terminal(result)
+        return result
+
+    def _get_binding(self, binding_id: str) -> SourceBindingRecord | None:
+        return self._binding_service.get_binding(binding_id)
+
+    def _record_if_terminal(self, result: WorkerRouteResult) -> None:
+        if result.retryable or self._remember is None:
+            return
+        self._remember(result.message_id)
+
+
+class InMemoryMessageDuplicateGuard:
+    def __init__(self) -> None:
+        self._seen_message_ids: set[str] = set()
+
+    def has_seen(self, message_id: str) -> bool:
+        return message_id in self._seen_message_ids
+
+    def remember(self, message_id: str) -> None:
+        self._seen_message_ids.add(message_id)
+
+
+def _route_result(
+    event: CapturedSourceEventInput,
+    *,
+    reason_code: str | None,
+    status: WorkerRouteStatus,
+    disposition: ConsumerDisposition,
+    retryable: bool,
+    owner_type: str | None = None,
+    owner_id: str | None = None,
+    route_target: str | None = None,
+    extra_audit: dict[str, object] | None = None,
+) -> WorkerRouteResult:
+    audit_payload: dict[str, object] = {
+        "message_id": event.message_id,
+        "binding_id": event.binding_id,
+        "request_id": event.request_id,
+        "plugin_id": event.plugin_id,
+        "owner_type": owner_type,
+        "owner_id": owner_id,
+        "route_target": route_target,
+        "reason_code": reason_code,
+        "item_count": event.item_count,
+    }
+    if extra_audit:
+        audit_payload.update(extra_audit)
+    return WorkerRouteResult(
+        message_id=event.message_id,
+        binding_id=event.binding_id,
+        status=status,
+        consumer_disposition=disposition,
+        retryable=retryable,
+        audit_required=True,
+        reason_code=reason_code,
+        owner_type=owner_type,
+        owner_id=owner_id,
+        route_target=route_target,
+        request_id=event.request_id,
+        plugin_id=event.plugin_id,
+        audit_payload=audit_payload,
+    )

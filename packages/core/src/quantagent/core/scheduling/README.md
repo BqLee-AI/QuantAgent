@@ -24,3 +24,4 @@
 - `SchedulerRun` 是 append-only 的调度历史真源。
 - `last_*` / `next_*` 只服务 due 查询和只读摘要，不能替代 run 历史。
 - interval loop 只支持单进程 fixed tick + due binding 扫描；分布式锁、复杂 retry/backoff、RawEvent 持久化与 worker routing 不属于这里。
+- scheduler 发布 `source.event.captured` 时必须复用稳定 `binding_id`；worker 侧路由不得回退成按 `plugin_id` 猜 owner。

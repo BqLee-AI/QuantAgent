@@ -21,15 +21,17 @@
 当前实现只有最小入口：
 
 ```python
-from quantagent.worker.main import create_worker_runtime, run
+from quantagent.worker.main import create_worker_app, create_worker_runtime, run
 ```
 
 语义：
 
 - `create_worker_runtime()`
   组装并返回 `EventBusRuntime`
+- `create_worker_app()`
+  组装 worker 的 session、captured-event handler 和 event bus runtime
 - `run()`
-  固定 worker 的 composition root；当前不启动完整消费 loop
+  固定 worker 的 composition root；当前不启动长期 loop，但已经把 `source.event.captured` 的路由 handler 装配好
 
 ## 推荐扩展方式
 
@@ -39,7 +41,7 @@ from quantagent.worker.main import create_worker_runtime, run
 worker main
   -> load settings
   -> build_event_bus_runtime(...)
-  -> create domain handler(s)
+  -> create routing service / audit sink / domain handler(s)
   -> subscribe to topic(s)
   -> keep lifecycle / shutdown at worker boundary
 ```

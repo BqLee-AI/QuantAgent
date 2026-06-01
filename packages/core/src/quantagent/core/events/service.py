@@ -65,23 +65,25 @@ class SourceEventPublisher:
         producer: str,
         request_id: str,
         plugin_id: str,
+        binding_id: str | None = None,
         causation_id: str | None = None,
         correlation_id: str | None = None,
     ) -> EventEnvelope:
         envelope = EventEnvelope(
             id=(self.id_factory or _default_event_id_factory)(),
             topic="source.event.captured",
-            payload=_source_fetch_payload(result, plugin_id=plugin_id),
+            payload=_source_fetch_payload(result, plugin_id=plugin_id, binding_id=binding_id),
             producer=producer,
             created_at=datetime.now(UTC).isoformat(),
             correlation_id=correlation_id or request_id,
             causation_id=causation_id,
             headers=freeze_json_mapping(
-                {
-                    "request_id": request_id,
-                    "plugin_id": plugin_id,
-                    "item_count": len(result.items),
-                },
+                _source_fetch_headers(
+                    request_id=request_id,
+                    plugin_id=plugin_id,
+                    item_count=len(result.items),
+                    binding_id=binding_id,
+                ),
                 stage="publish",
             ),
             retry_count=0,
@@ -93,16 +95,29 @@ def _default_event_id_factory() -> str:
     return f"evt_{uuid4().hex}"
 
 
-def _source_fetch_payload(result: SourceFetchResult, *, plugin_id: str) -> JsonObject:
-    return freeze_json_mapping(
-        {
-            "plugin_id": plugin_id,
-            "items": [item.to_mapping() for item in result.items],
-            "next_cursor": result.next_cursor,
-            "metadata": dict(result.metadata),
-        },
-        stage="publish",
-    )
+def _source_fetch_payload(
+    result: SourceFetchResult,
+    *,
+    plugin_id: str,
+    binding_id: str | None,
+) -> JsonObject:
+    payload: dict[str, Any] = {
+        "plugin_id": plugin_id,
+        "items": [item.to_mapping() for item in result.items],
+        "next_cursor": result.next_cursor,
+        "metadata": dict(result.metadata),
+    }
+    if binding_id is not None:
+        payload["binding_id"] = binding_id
+    return freeze_json_mapping(payload, stage="publish")
+
+
+def _source_fetch_headers(**values: Any) -> JsonObject:
+    return {
+        key: value
+        for key, value in values.items()
+        if value is not None
+    }
 
 
 async def _maybe_close(value: Any) -> None:

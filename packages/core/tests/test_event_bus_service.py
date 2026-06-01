@@ -40,12 +40,15 @@ class SourceEventPublisherTestCase(unittest.IsolatedAsyncioTestCase):
             producer="plugin-scheduling",
             request_id="req-1",
             plugin_id="quantagent.official.source.placeholder",
+            binding_id="binding-evt-1",
         )
 
         self.assertEqual(envelope.id, "evt-fixed")
         self.assertEqual(envelope.topic, "source.event.captured")
         self.assertEqual(envelope.headers["request_id"], "req-1")
+        self.assertEqual(envelope.headers["binding_id"], "binding-evt-1")
         self.assertEqual(envelope.payload["plugin_id"], "quantagent.official.source.placeholder")
+        self.assertEqual(envelope.payload["binding_id"], "binding-evt-1")
         self.assertEqual(envelope.payload["items"][0]["external_id"], "news-1")
         self.assertEqual(len(handler.payloads), 1)
 
