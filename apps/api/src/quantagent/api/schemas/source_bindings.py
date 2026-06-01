@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 SourceBindingStatusValue = Literal["active", "paused", "disabled"]
-TriggerModeValue = Literal["manual", "interval"]
 RunStatusValue = Literal["queued", "running", "succeeded", "failed", "timeout", "cancelled"]
 AllowedActionValue = Literal["pause", "resume", "run-now"]
 
@@ -77,47 +76,6 @@ class SourceBindingDetailResponse(BaseModel):
     recent_run_refs: list[SourceBindingRunRefResponse] = Field(default_factory=list)
 
 
-class SchedulerRunSummaryResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str = Field(min_length=1)
-    binding_id: str = Field(min_length=1)
-    source_plugin_id: str = Field(min_length=1)
-    trigger_mode: TriggerModeValue
-    status: RunStatusValue
-    started_at: datetime | None = None
-    finished_at: datetime | None = None
-    duration_ms: int | None = Field(default=None, ge=0)
-    attempt_index: int | None = Field(default=None, ge=0)
-    captured_count: int | None = Field(default=None, ge=0)
-    failure_summary: dict[str, Any] = Field(default_factory=dict)
-
-
-class SchedulerRunDetailResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str = Field(min_length=1)
-    binding_id: str = Field(min_length=1)
-    source_plugin_id: str = Field(min_length=1)
-    trigger_mode: TriggerModeValue
-    status: RunStatusValue
-    started_at: datetime | None = None
-    finished_at: datetime | None = None
-    duration_ms: int | None = Field(default=None, ge=0)
-    attempt_index: int | None = Field(default=None, ge=0)
-    captured_count: int | None = Field(default=None, ge=0)
-    failure_summary: dict[str, Any] = Field(default_factory=dict)
-    request_id: str = Field(min_length=1)
-    actor: dict[str, Any] = Field(default_factory=dict)
-    correlation_id: str | None = None
-    binding_snapshot_ref: str = Field(min_length=1)
-    output_summary: dict[str, Any] = Field(default_factory=dict)
-    error_code: str | None = None
-    error_stage: str | None = None
-    error_retryable: bool | None = None
-    audit_ref: str = Field(min_length=1)
-
-
 class SourceBindingStateActionAcceptedResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -142,11 +100,4 @@ class SourceBindingListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     items: list[SourceBindingSummaryResponse]
-    next_cursor: str | None = None
-
-
-class SchedulerRunListResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    items: list[SchedulerRunSummaryResponse]
     next_cursor: str | None = None

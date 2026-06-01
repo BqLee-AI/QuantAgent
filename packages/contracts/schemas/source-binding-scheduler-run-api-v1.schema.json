@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://quantagent.dev/contracts/source-binding-scheduler-run-api-v1.schema.json",
-  "title": "SourceBinding SchedulerRun API V1",
+  "title": "SourceBinding API V1 With Runtime Inspect SchedulerRun Relation",
   "type": "object",
   "additionalProperties": false,
   "properties": {
@@ -33,31 +33,6 @@
           "type": "array",
           "items": { "enum": ["pause", "resume", "run-now"] }
         }
-      }
-    },
-    "schedulerRunSummary": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "id",
-        "binding_id",
-        "source_plugin_id",
-        "trigger_mode",
-        "status",
-        "failure_summary"
-      ],
-      "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "binding_id": { "type": "string", "minLength": 1 },
-        "source_plugin_id": { "type": "string", "minLength": 1 },
-        "trigger_mode": { "enum": ["manual", "interval"] },
-        "status": { "enum": ["queued", "running", "succeeded", "failed", "timeout", "cancelled"] },
-        "started_at": { "type": ["string", "null"], "format": "date-time" },
-        "finished_at": { "type": ["string", "null"], "format": "date-time" },
-        "duration_ms": { "type": ["integer", "null"], "minimum": 0 },
-        "attempt_index": { "type": ["integer", "null"], "minimum": 0 },
-        "captured_count": { "type": ["integer", "null"], "minimum": 0 },
-        "failure_summary": { "type": "object" }
       }
     },
     "bindingActionAccepted": {

@@ -7,7 +7,7 @@
 ## What Changes
 
 - 定义 `SourceBinding` V1 只读 REST 资源族，包括列表、详情和最近调度历史的关联读取边界。
-- 定义 `SchedulerRun` V1 只读 REST 资源族，包括列表、详情、与 binding 的关联引用和分页/过滤约束。
+- 定义 `SourceBinding` 与运行历史的关联读取语义，并明确全局 `SchedulerRun` 公开 REST 资源族复用已合并的 Runtime Inspect `/api/v1/scheduler-runs*` 真源，不再在本 change 中定义第二套不兼容 contract。
 - 定义 `pause`、`resume`、`run-now` 三个 binding 动作的 HTTP 路径、接受语义、错误 envelope、幂等语义和审计要求。
 - 明确 `retry` 不进入本次 V1 动作承诺，只作为后续扩展保留，不在本 change 中定义公开动作路径。
 - 定义 list/detail/action response 的 DTO 分层，禁止直接暴露 ORM model、完整 `effective_config`、secret-bearing payload 或调度引擎内部对象。
@@ -26,7 +26,7 @@
 
 ## Impact
 
-- `apps/api`: 后续需要新增 `/api/v1/source-bindings`、`/api/v1/scheduler-runs` 及相关 `actions` router、schema 和错误映射，但本 PR 不实现代码。
+- `apps/api`: 后续需要新增 `/api/v1/source-bindings` 及相关 `actions` router、schema 和错误映射；若需要表达运行历史，只能通过 binding-scoped 关联语义或复用已存在的 Runtime Inspect `/api/v1/scheduler-runs*`。
 - `packages/core`: 后续需要提供 binding/run query service、action service、repository seam 和审计/权限检查边界，但本 PR 不实现持久化或调度器。
 - `packages/contracts`: 后续需要将公开 DTO、枚举和 action response 收敛到跨端契约生成物，但本 PR 不生成任何 artifact。
 - `apps/web` / Plugin Detail：后续可以基于同一只读字段集展示 SourceBinding 使用情况和 SchedulerRun 历史，而不自行发明协议。

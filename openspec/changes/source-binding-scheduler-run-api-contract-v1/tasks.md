@@ -7,9 +7,9 @@
 
 ## 2. API 契约实现切片
 
-- [x] 2.1 在 `apps/api` 定义 `source-bindings` 与 `scheduler-runs` 的 request/response schema，保持 DTO 与 ORM / plugin DTO 分层。
+- [x] 2.1 在 `apps/api` 定义 `source-bindings` 的 request/response schema，并让 binding 关联 run 历史复用既有 Runtime Inspect `scheduler-runs` 公开模型，保持 DTO 与 ORM / plugin DTO 分层。
 - [x] 2.2 在 `apps/api` 增加 `GET /api/v1/source-bindings`、`GET /api/v1/source-bindings/{binding_id}`、`GET /api/v1/source-bindings/{binding_id}/scheduler-runs` router，并统一走 `ApiResponse[T]`。
-- [x] 2.3 在 `apps/api` 增加 `GET /api/v1/scheduler-runs` 与 `GET /api/v1/scheduler-runs/{run_id}` router，支持 cursor / limit / status / trigger_mode 过滤。
+- [x] 2.3 不在本 change 中定义第二套 `GET /api/v1/scheduler-runs*` router；全局 `scheduler-runs` 公开资源复用 Runtime Inspect 已合并接口，本 change 只保留 binding-scoped 关联语义。
 - [x] 2.4 在 `apps/api` 增加 binding actions router：`pause`、`resume`、`run-now`，并把非法状态流转映射到稳定错误码。
 
 ## 3. Core service 与 repository seam
@@ -21,7 +21,7 @@
 
 ## 4. 契约联动与验证
 
-- [x] 4.1 将公开 DTO、枚举和 action response 同步到 `packages/contracts` 或等价生成真源，避免前端自行发明字段。
+- [x] 4.1 将 `source-bindings` 公开 DTO、枚举和 action response 同步到 `packages/contracts` 或等价生成真源，并明确 run 历史关联字段复用 Runtime Inspect `scheduler-runs` 模型，避免前端自行发明字段。
 - [x] 4.2 为 API 路由添加最小测试，覆盖 envelope、not found、permission denied、非法状态流转和 `run-now accepted` 语义。
 - [x] 4.3 为 core service 添加最小测试，覆盖 `pause`/`resume` 幂等、`run-now` 审计写入和 capability 拒绝路径。
 - [x] 4.4 运行 `openspec validate source-binding-scheduler-run-api-contract-v1 --type change --strict --json`，并在实现 PR 中补充 API 测试结果。

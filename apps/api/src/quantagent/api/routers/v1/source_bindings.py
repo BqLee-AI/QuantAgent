@@ -19,11 +19,14 @@ from quantagent.api.http.errors import AppError, BadRequestError, NotFoundError
 from quantagent.api.http.responses import ApiResponse
 from quantagent.api.observability import events
 from quantagent.api.observability.logging import log_audit_event
+from quantagent.api.schemas.runtime_inspect import (
+    RuntimeInspectPageInfo,
+    RuntimeListMeta,
+    RuntimeListResponse,
+    SchedulerRunSummary,
+)
 from quantagent.api.schemas.source_bindings import (
     EffectiveConfigSummaryResponse,
-    SchedulerRunDetailResponse,
-    SchedulerRunListResponse,
-    SchedulerRunSummaryResponse,
     SourceBindingDetailResponse,
     SourceBindingListResponse,
     SourceBindingRunNowAcceptedResponse,
@@ -49,7 +52,6 @@ from quantagent.core.scheduling import (
 
 
 router = APIRouter(prefix="/source-bindings", tags=["source-bindings"])
-runs_router = APIRouter(prefix="/scheduler-runs", tags=["scheduler-runs"])
 
 
 @router.get("", response_model=ApiResponse[SourceBindingListResponse], dependencies=[Depends(require_capability(SOURCE_BINDING_READ_CAPABILITY))])
@@ -99,7 +101,7 @@ def get_source_binding(
 
 @router.get(
     "/{binding_id}/scheduler-runs",
-    response_model=ApiResponse[SchedulerRunListResponse],
+    response_model=ApiResponse[RuntimeListResponse[SchedulerRunSummary]],
     dependencies=[Depends(require_capability(SOURCE_BINDING_READ_CAPABILITY))],
 )
 def list_source_binding_runs(
@@ -111,7 +113,7 @@ def list_source_binding_runs(
     cursor: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=200),
     session: Session = Depends(get_db_session),
-) -> ApiResponse[SchedulerRunListResponse]:
+) -> ApiResponse[RuntimeListResponse[SchedulerRunSummary]]:
     service = get_scheduling_query_service(session)
     try:
         page = service.list_binding_runs(
@@ -131,9 +133,13 @@ def list_source_binding_runs(
     except ValueError as exc:
         raise BadRequestError("Invalid scheduler run query", details={"reason": str(exc)}) from exc
     return ApiResponse.success(
-        SchedulerRunListResponse(
+        RuntimeListResponse(
             items=[_run_summary_response(item) for item in page.items if isinstance(item, SchedulerRunSummaryView)],
-            next_cursor=page.next_cursor,
+            meta=RuntimeListMeta(
+                state="empty" if not page.items else "ready",
+                page=RuntimeInspectPageInfo(page=1, page_size=limit, returned=len(page.items)),
+                unavailable=None,
+            ),
         )
     )
 
@@ -213,53 +219,6 @@ def run_now_source_binding(
     return ApiResponse.success(_run_now_response(accepted))
 
 
-@runs_router.get("", response_model=ApiResponse[SchedulerRunListResponse], dependencies=[Depends(require_capability(SOURCE_BINDING_READ_CAPABILITY))])
-def list_scheduler_runs(
-    binding_id: str | None = Query(default=None),
-    status: str | None = Query(default=None),
-    trigger_mode: str | None = Query(default=None),
-    started_after: datetime | None = Query(default=None),
-    started_before: datetime | None = Query(default=None),
-    cursor: str | None = Query(default=None),
-    limit: int = Query(default=50, ge=1, le=200),
-    session: Session = Depends(get_db_session),
-) -> ApiResponse[SchedulerRunListResponse]:
-    service = get_scheduling_query_service(session)
-    try:
-        page = service.list_runs(
-            SchedulerRunQuery(
-                binding_id=binding_id,
-                status=_parse_run_status(status),
-                trigger_mode=_parse_trigger_mode(trigger_mode),
-                started_after=started_after,
-                started_before=started_before,
-                cursor=cursor,
-                limit=limit,
-            )
-        )
-    except ValueError as exc:
-        raise BadRequestError("Invalid scheduler run query", details={"reason": str(exc)}) from exc
-    return ApiResponse.success(
-        SchedulerRunListResponse(
-            items=[_run_summary_response(item) for item in page.items if isinstance(item, SchedulerRunSummaryView)],
-            next_cursor=page.next_cursor,
-        )
-    )
-
-
-@runs_router.get("/{run_id}", response_model=ApiResponse[SchedulerRunDetailResponse], dependencies=[Depends(require_capability(SOURCE_BINDING_READ_CAPABILITY))])
-def get_scheduler_run(
-    run_id: str,
-    session: Session = Depends(get_db_session),
-) -> ApiResponse[SchedulerRunDetailResponse]:
-    service = get_scheduling_query_service(session)
-    try:
-        detail = service.get_run_detail(run_id)
-    except SchedulingQueryNotFoundError as exc:
-        raise NotFoundError("Scheduler run not found", details={"run_id": exc.resource_id}) from exc
-    return ApiResponse.success(_run_detail_response(detail))
-
-
 def _handle_binding_state_action(
     *,
     action: str,
@@ -328,35 +287,18 @@ def _binding_detail_response(item) -> SourceBindingDetailResponse:
     )
 
 
-def _run_summary_response(item: SchedulerRunSummaryView) -> SchedulerRunSummaryResponse:
-    return SchedulerRunSummaryResponse(
-        id=item.id,
+def _run_summary_response(item: SchedulerRunSummaryView) -> SchedulerRunSummary:
+    return SchedulerRunSummary(
+        run_id=item.id,
         binding_id=item.binding_id,
-        source_plugin_id=item.source_plugin_id,
-        trigger_mode=item.trigger_mode.value,
+        plugin_id=item.source_plugin_id,
+        request_id=None,
+        trigger_type=item.trigger_mode.value,
         status=item.status.value,
         started_at=item.started_at,
-        finished_at=item.finished_at,
+        ended_at=item.finished_at,
         duration_ms=item.duration_ms,
-        attempt_index=item.attempt_index,
-        captured_count=item.captured_count,
-        failure_summary=_json_data(item.failure_summary),
-    )
-
-
-def _run_detail_response(item) -> SchedulerRunDetailResponse:
-    summary = _run_summary_response(item.summary)
-    return SchedulerRunDetailResponse(
-        **summary.model_dump(),
-        request_id=item.request_id,
-        actor=_json_data(item.actor),
-        correlation_id=item.correlation_id,
-        binding_snapshot_ref=item.binding_snapshot_ref,
-        output_summary=_json_data(item.output_summary),
-        error_code=item.error_code,
-        error_stage=item.error_stage,
-        error_retryable=item.error_retryable,
-        audit_ref=item.audit_ref,
+        error_summary=_runtime_error_summary(item),
     )
 
 
@@ -389,6 +331,20 @@ def _run_now_response(item) -> SourceBindingRunNowAcceptedResponse:
         requested_run_ref=item.requested_run_ref,
         audit_ref=item.audit_ref,
     )
+
+
+def _runtime_error_summary(item: SchedulerRunSummaryView) -> dict[str, object] | None:
+    summary = _json_data(item.failure_summary)
+    if not summary or not isinstance(summary, dict):
+        return None
+    code = summary.get("code") or "SCHEDULER_RUN_FAILED"
+    message = summary.get("message") or "Scheduler run failed."
+    return {
+        "error_code": code,
+        "error_message_summary": message,
+        "failure_stage": summary.get("stage"),
+        "retryable": summary.get("retryable"),
+    }
 
 
 def _parse_binding_status(value: str | None):

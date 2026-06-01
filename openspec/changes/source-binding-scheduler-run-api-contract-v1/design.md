@@ -21,7 +21,7 @@ issue #226 处在四类真源的交汇处：
 **Goals:**
 
 - 定义 `SourceBinding` V1 的只读资源边界：列表、详情、关联最近 run 历史。
-- 定义 `SchedulerRun` V1 的只读资源边界：列表、详情、按 binding 过滤与引用。
+- 定义 `SourceBinding` 与全局 `SchedulerRun` 公开资源的关系：binding-scoped 历史只做关联读取，全局 `/api/v1/scheduler-runs*` 复用 Runtime Inspect 已合并真源。
 - 定义 binding 动作 `pause`、`resume`、`run-now` 的路径、返回、错误和幂等语义。
 - 定义 V1 公开 DTO 分层，包括 list/detail/action response、过滤参数、状态枚举和脱敏规则。
 - 约束后续实现的分层蓝图：router / schema / service / repository / scheduler entrypoint 的职责与调用方向。
@@ -49,15 +49,12 @@ GET  /api/v1/source-bindings/{binding_id}/scheduler-runs
 POST /api/v1/source-bindings/{binding_id}/actions/pause
 POST /api/v1/source-bindings/{binding_id}/actions/resume
 POST /api/v1/source-bindings/{binding_id}/actions/run-now
-
-GET  /api/v1/scheduler-runs
-GET  /api/v1/scheduler-runs/{run_id}
 ```
 
 这样做的原因：
 
 - `SourceBinding` 是配置、归属和运行控制的主对象，天然适合作为动作宿主。
-- `SchedulerRun` 是 append-only 运行历史，天然适合作为只读资源，不应在 V1 直接承担控制动作。
+- `SchedulerRun` 是 append-only 运行历史，天然适合作为只读资源，但全局公开资源所有权已经归属 Runtime Inspect；本 change 只允许 binding-scoped 关联读取或显式复用既有 `/api/v1/scheduler-runs*`。
 - `docs/design/08-api-and-websocket-design.md` 已经要求副作用能力放在 `actions` 路径下，而不是混入 `PATCH` 或 ad hoc `/operate` 接口。
 
 替代方案是做一个 `/scheduler` 或 `/source-bindings/operate` 大接口。该方案会把查询、动作和诊断混成单体协议，也会让 Plugin Detail 与 Runtime Inspect 难以复用稳定字段，因此不采用。
@@ -175,13 +172,14 @@ V1 的查询入口：
 
 - `GET /api/v1/source-bindings?owner_type=&owner_id=&source_plugin_id=&status=&cursor=&limit=`
 - `GET /api/v1/source-bindings/{binding_id}/scheduler-runs?status=&trigger_mode=&cursor=&limit=`
-- `GET /api/v1/scheduler-runs?binding_id=&status=&trigger_mode=&started_after=&started_before=&cursor=&limit=`
+- 如需全局 run 查询：复用 Runtime Inspect 已合并的 `GET /api/v1/scheduler-runs?plugin_id=&status=&trigger_type=&time_from=&time_to=&page=&page_size=`
 
 决策：
 
-- run 列表与 binding 关联 run 历史使用 cursor 分页，符合 `docs/design/08-api-and-websocket-design.md` 对事件/运行时类资源的建议。
+- binding 关联 run 历史使用 cursor 分页，符合 `docs/design/08-api-and-websocket-design.md` 对事件/运行时类资源的建议。
 - `source-bindings` 列表允许统一 cursor + limit，不引入 page/page_size 双轨。
 - filter 字段只允许公开稳定维度：`status`、`owner_type`、`source_plugin_id`、`trigger_mode`、时间窗口，不公开内部调度索引字段。
+- 全局 run 资源的 filter / page 语义以 Runtime Inspect 已合并 contract 为准，本 change 不再定义第二套全局分页协议。
 
 替代方案是让每个查询自由选择 page/page_size 或 ad hoc filter blob。该方案会让前后端和后续 contracts 难以收敛，因此不采用。
 

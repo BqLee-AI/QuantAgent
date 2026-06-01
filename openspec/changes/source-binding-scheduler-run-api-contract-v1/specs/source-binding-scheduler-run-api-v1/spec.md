@@ -20,24 +20,23 @@ The system SHALL expose `SourceBinding` as a REST resource with list and detail 
 - **AND** `effective_config_summary` only contains masked or non-sensitive fields, `secret_fields_masked`, `last_validated_at`, and config source references
 - **AND** the endpoint does not expose secret plaintext, raw authentication headers, local filesystem paths, or runtime-injected scheduler objects
 
-### Requirement: SchedulerRun V1 SHALL expose read-only run history resources
+### Requirement: SourceBinding V1 SHALL expose binding-scoped run history without redefining the global SchedulerRun contract
 
-The system SHALL expose `SchedulerRun` as read-only REST resources under `/api/v1/scheduler-runs` and through binding-scoped run history endpoints.
+The system SHALL expose binding-scoped `SchedulerRun` history through `/api/v1/source-bindings/{binding_id}/scheduler-runs` and SHALL reuse the existing Runtime Inspect `/api/v1/scheduler-runs*` contract as the only global public SchedulerRun truth source.
 
-#### Scenario: List scheduler runs globally or by binding
+#### Scenario: List scheduler runs by binding without forking the global run model
 
-- **WHEN** a caller requests `GET /api/v1/scheduler-runs` or `GET /api/v1/source-bindings/{binding_id}/scheduler-runs`
-- **THEN** the API returns `ApiResponse` with a cursor-paginated collection of `SchedulerRunSummary`
-- **AND** each summary includes `id`, `binding_id`, `source_plugin_id`, `trigger_mode`, `status`, `started_at`, `finished_at`, `duration_ms`, `attempt_index`, `captured_count`, and `failure_summary`
-- **AND** the endpoints support explicit filters for `status`, `trigger_mode`, and time windows
+- **WHEN** a caller requests `GET /api/v1/source-bindings/{binding_id}/scheduler-runs`
+- **THEN** the API returns `ApiResponse` with a collection whose item field naming remains aligned with the existing Runtime Inspect `SchedulerRun` public model
+- **AND** the endpoint supports explicit filters for `status`, `trigger_mode`, and time windows
 - **AND** binding-scoped run history only returns runs associated with the requested `binding_id`
+- **AND** the change does not publish a second incompatible global `/api/v1/scheduler-runs` list contract
 
-#### Scenario: Read scheduler run detail without exposing internal execution payloads
+#### Scenario: Global scheduler run detail remains owned by Runtime Inspect
 
-- **WHEN** a caller requests `GET /api/v1/scheduler-runs/{run_id}`
-- **THEN** the API returns `ApiResponse` with `SchedulerRunDetail`
-- **AND** the detail includes summary fields plus `request_id`, `actor`, `correlation_id`, `binding_snapshot_ref`, `output_summary`, `error_code`, `error_stage`, `error_retryable`, and `audit_ref`
-- **AND** the endpoint does not expose plugin-private raw payloads, stack traces, secret values, or internal scheduler engine objects
+- **WHEN** a caller needs global scheduler run list or detail under `/api/v1/scheduler-runs*`
+- **THEN** the implementation reuses the Runtime Inspect contract truth source
+- **AND** this change does not redefine detail field naming, pagination shape, or a second detail DTO for the same public resource
 
 ### Requirement: SourceBinding V1 SHALL expose `pause`, `resume`, and `run-now` as resource actions
 
@@ -92,5 +91,5 @@ The system SHALL keep REST resources as the source of truth for `SourceBinding` 
 #### Scenario: Realtime notifications do not replace REST state reads
 
 - **WHEN** binding status or run status changes are later emitted through a realtime channel
-- **THEN** clients still use `GET /api/v1/source-bindings*` and `GET /api/v1/scheduler-runs*` to recover authoritative state
+- **THEN** clients still use `GET /api/v1/source-bindings*` and the existing Runtime Inspect `GET /api/v1/scheduler-runs*` to recover authoritative state
 - **AND** the realtime channel is not required to reconstruct binding detail, run detail, or action acceptance semantics
