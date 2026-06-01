@@ -9,7 +9,8 @@ from quantagent.api.http.errors import BadRequestError, NotFoundError, ServiceUn
 from quantagent.api.services import plugin_registry as plugin_registry_service
 from quantagent.core.registry import PluginRecord, PluginRegistry, PluginStatus
 from quantagent.core.runtime import PluginRuntimeService
-from quantagent.plugin_sdk import NotificationReceiveResult
+from quantagent.plugin_sdk import NotificationReceiveResult, PluginRuntimeError
+from quantagent.plugin_sdk.io import to_json_value
 
 
 class DiscordReceiveResult(Protocol):
@@ -55,9 +56,13 @@ class DiscordInteractionIngressService:
         )
         if invocation.error is not None or invocation.result is None:
             raise ServiceUnavailableError("Configured Discord plugin could not be invoked")
-        result = _validate_receive_result(
-            NotificationReceiveResult.from_mapping(invocation.result.output)
-        )
+        try:
+            result = _validate_receive_result(
+                NotificationReceiveResult.from_mapping(invocation.result.output)
+            )
+        except PluginRuntimeError as exc:
+            # 插件 DTO 校验失败属于运行时适配边界问题，对外统一收敛为服务不可用，避免异常穿透 HTTP 层。
+            raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload") from exc
         if not result.accepted:
             return _map_plugin_failure(result)
 
@@ -140,4 +145,4 @@ def _validated_response_content(result: DiscordReceiveResult) -> Mapping[str, An
     response = result.response
     if response is None:
         raise ServiceUnavailableError("Configured Discord plugin returned an invalid result payload")
-    return response
+    return to_json_value(response)

@@ -6,6 +6,7 @@ import importlib.util
 import inspect
 import logging
 import re
+import sys
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
@@ -218,7 +219,13 @@ class PluginRuntimeService:
             )
 
         module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
+        # dataclasses/typing 会按 __module__ 回查 sys.modules；先注册再执行，避免隔离加载的插件在 Python 3.14 下失效。
+        sys.modules[synthetic_name] = module
+        try:
+            spec.loader.exec_module(module)
+        except Exception:
+            sys.modules.pop(synthetic_name, None)
+            raise
         return module
 
 

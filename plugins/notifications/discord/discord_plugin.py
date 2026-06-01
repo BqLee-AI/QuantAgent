@@ -518,7 +518,7 @@ def _excerpt(value: str, limit: int = 120) -> str | None:
     return f"{trimmed[:limit]}..."
 
 
-plugin = DiscordPlugin()
+plugin = DiscordPlugin
 
 
 def _merge_effective_config(context_config: Mapping[str, Any], override: Any) -> dict[str, Any]:

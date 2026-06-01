@@ -260,7 +260,7 @@ class DiscordPluginReceiveTestCase(unittest.TestCase):
             {
                 "type": 2,
                 "command_name": "notify",
-                "option_names": ["text"],
+                "option_names": ("text",),
             },
         )
 
