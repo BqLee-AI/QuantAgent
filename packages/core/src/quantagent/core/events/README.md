@@ -96,7 +96,9 @@ industry.analysis.requested
 industry.analysis.completed
 analysis.scored
 decision.created
+action.requested
 approval.requested
+approval.input_received
 approval.completed
 notification.requested
 notification.completed
@@ -106,6 +108,8 @@ runtime.failed
 ```
 
 调用方不应自行拼接未知 topic。新增 topic 需要先更新 spec / design / issue 真源，再进实现。
+`action.requested` 与 `approval.input_received` 属于 HITL approval 编排入口 topic；handler 只能做 envelope
+适配并调用 core approval service，不能直接创建 approved 状态或绕过 Policy Gate。
 
 ### `EventBusSettings`
 
