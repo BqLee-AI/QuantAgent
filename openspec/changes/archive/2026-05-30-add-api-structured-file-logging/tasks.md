@@ -50,17 +50,17 @@
 
 ## 7. 阶段 2：Maintenance 与磁盘保护
 
-- [ ] 7.1 实现只处理关闭文件的 `.jsonl.gz` 压缩，禁止压缩或清理活跃文件，且不在请求路径执行压缩；无法确认关闭状态的文件必须跳过。
-- [ ] 7.2 实现按 stream retention 清理，允许 access 短保留，error/security/audit 长保留。
-- [ ] 7.3 实现启动时补偿清理，处理上次退出后遗留的未压缩关闭文件和已过期文件。
-- [ ] 7.4 实现磁盘水位保护，支持 `LOG_MAX_TOTAL_BYTES`、`LOG_MIN_FREE_BYTES`、`LOG_ACCESS_DROP_WHEN_FULL`、`LOG_MAINTENANCE_MIN_AGE_SECONDS` 或等价配置。
-- [ ] 7.5 实现磁盘压力下降级策略：优先停止或降采样 access 写入，保留 error/security/audit 写入能力，并至少输出一次脱敏 stderr warning。
+- [x] 7.1 实现只处理关闭文件的 `.jsonl.gz` 压缩，禁止压缩或清理活跃文件，且不在请求路径执行压缩；无法确认关闭状态的文件必须跳过。
+- [x] 7.2 实现按 stream retention 清理，允许 access 短保留，error/security/audit 长保留。
+- [x] 7.3 实现启动时补偿清理，处理上次退出后遗留的未压缩关闭文件和已过期文件。
+- [x] 7.4 实现磁盘水位保护，支持 `LOG_MAX_TOTAL_BYTES`、`LOG_MIN_FREE_BYTES`、`LOG_ACCESS_DROP_WHEN_FULL`、`LOG_MAINTENANCE_MIN_AGE_SECONDS` 或等价配置。
+- [x] 7.5 实现磁盘压力下降级策略：优先停止或降采样 access 写入，保留 error/security/audit 写入能力，并至少输出一次脱敏 stderr warning。
 
 ## 8. 阶段 2：测试、文档与最终收口
 
-- [ ] 8.1 补充关闭文件压缩测试，验证活跃文件不会被压缩、删除或重写，无法确认关闭状态的文件会被跳过。
-- [ ] 8.2 补充按 stream retention 清理测试和启动补偿清理测试。
-- [ ] 8.3 补充磁盘水位保护和 access 降级测试，验证关键 stream 尽量保留。
-- [ ] 8.4 更新 README、根 `.env.example`、`apps/api/.env.example` 和 `apps/api/.env.*.example` 多环境模板，补充压缩、retention、补偿清理、磁盘保护和阶段 2 运维说明。
-- [ ] 8.5 运行 `cd apps/api && uv run python -m unittest discover -s src`。
-- [ ] 8.6 最终 PR 描述更新为完整交付范围、两阶段提交边界、验证结果、未验证风险和非目标。
+- [x] 8.1 补充关闭文件压缩测试，验证活跃文件不会被压缩、删除或重写，无法确认关闭状态的文件会被跳过。
+- [x] 8.2 补充按 stream retention 清理测试和启动补偿清理测试。
+- [x] 8.3 补充磁盘水位保护和 access 降级测试，验证关键 stream 尽量保留。
+- [x] 8.4 更新 README、根 `.env.example`、`apps/api/.env.example` 和 `apps/api/.env.*.example` 多环境模板，补充压缩、retention、补偿清理、磁盘保护和阶段 2 运维说明。
+- [x] 8.5 运行 `cd apps/api && uv run python -m unittest discover -s src`。
+- [x] 8.6 最终 PR 描述更新为完整交付范围、两阶段提交边界、验证结果、未验证风险和非目标。

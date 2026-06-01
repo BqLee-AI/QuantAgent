@@ -14,6 +14,8 @@ dependencies = [
 
 [project.scripts]
 api = "quantagent.api.main:run"
+api-stop = "quantagent.api.main:stop"
+api-reset = "quantagent.api.main:reset"
 
 [tool.uv.sources]
 quantagent-core = { workspace = true }

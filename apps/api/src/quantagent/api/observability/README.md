@@ -8,7 +8,8 @@
 - `events.py`：稳定 event 名称常量。
 - `formatters.py`：JSON Lines 格式化。
 - `filters.py`：上下文字段注入与敏感字段脱敏。
-- `files.py`：stream 文件布局、命名与轮转。
+- `files.py`：stream 文件布局、按日命名与大小轮转。
+- `maintenance.py`：按当前 UTC 日期保护可能活跃文件，并处理关闭文件压缩、retention 清理、启动补偿和磁盘水位保护。
 - `queue.py`：队列化写入、降级与 shutdown drain。
 - `logging.py`：日志 bootstrap、logger helper、FastAPI 接入点。
 

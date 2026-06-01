@@ -933,6 +933,17 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(settings.LOG_LEVEL, "ERROR")
         self.assertEqual(settings.APP_ENV, "Production")
 
+    def test_blank_runtime_dir_uses_default_before_log_dir_resolution(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            APP_ENV="test",
+            RUNTIME_DIR="",
+            LOG_DIR="",
+            AUTH_ENABLED=False,
+        )
+
+        self.assertEqual(settings.LOG_DIR, (settings.RUNTIME_DIR / "logs" / "api").resolve())
+
     def test_env_file_paths_do_not_assume_repo_root_when_source_layout_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
@@ -1594,9 +1605,13 @@ class ApiAppTestCase(unittest.TestCase):
                 f"/api/v1/models/invocations?provider_id={provider_id}&preset_key=global_default"
             )
 
-            encrypted_value = client.app.state.db_session_factory().execute(
-                Base.metadata.tables["model_providers"].select()
-            ).mappings().one()["encrypted_api_key"]
+            session = client.app.state.db_session_factory()
+            try:
+                encrypted_value = session.execute(
+                    Base.metadata.tables["model_providers"].select()
+                ).mappings().one()["encrypted_api_key"]
+            finally:
+                session.close()
 
         save_body = save_response.json()
         self.assertEqual(save_response.status_code, 200)
