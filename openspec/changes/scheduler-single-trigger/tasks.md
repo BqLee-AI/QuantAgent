@@ -13,7 +13,7 @@
 
 ## 3. 配置调整
 
-- [ ] 3.1 确认 `Settings.EVENT_BUS_BACKEND` 默认值为 `"kafka"`（当前为 `"memory"`，需要改为 `"kafka"` 使 scheduler 默认走 Kafka；注意只改 scheduler app 的 settings 子集，不影响 core 全局默认）
+- [ ] 3.1 在 `create_scheduler_runtime()` 中通过 `os.environ.get("EVENT_BUS_BACKEND", "kafka")` 覆盖默认后端为 Kafka，**不修改 `Settings.EVENT_BUS_BACKEND` 全局默认值**（保持 `"memory"`，避免影响 API app）
 - [ ] 3.2 在 `apps/scheduler` 的环境配置中新增 `SCHEDULE_PLUGIN_ID` 默认值说明
 
 ## 3.5 Docker Compose 配置

@@ -62,7 +62,7 @@ Scheduler app SHALL 默认使用 Kafka 作为事件总线后端。`EVENT_BUS_BAC
 
 ### Requirement: Kafka 后端组装与事件发布的单元测试
 
-当 `EVENT_BUS_BACKEND=kafka` 时，MUST 有单元测试验证 `SchedulerRuntime` 正确组装了 `KafkaEventBusPublisher`，且调度结果能通过 publisher 发出事件。测试 SHALL 通过 mock Kafka 连接（mock `KafkaEventBusPublisher.publish`）验证事件发布的正确性，不依赖真实 Kafka 实例。
+当 `EVENT_BUS_BACKEND=kafka` 时，MUST 有单元测试验证 `SchedulerRuntime` 正确组装了 `KafkaEventBusPublisher`，且调度结果能通过 publisher 发出事件。测试 SHALL 通过 mock 验证事件发布的正确性，不依赖真实 Kafka 实例。Mock 策略：mock `KafkaEventBusPublisher._get_producer` 返回 mock producer（避免 `AIOKafkaProducer.start()` 触发真实网络连接），或整体 mock `KafkaEventBusPublisher` 实例。
 
 #### Scenario: Kafka 后端组装验证
 - **WHEN** `create_scheduler_runtime()` 在 `EVENT_BUS_BACKEND=kafka` 且 `EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092` 条件下执行

@@ -58,12 +58,19 @@ run()
 
 ### D1: 事件总线后端策略——Kafka 为默认，memory 仅用于测试
 
-**决策**: scheduler app 的 `EVENT_BUS_BACKEND` 默认为 `kafka`。`memory` 后端**仅用于单元测试**，不作为运行时配置选项暴露给用户。
+**决策**: scheduler app 的 `EVENT_BUS_BACKEND` 默认为 `kafka`，**通过 scheduler 内部覆盖实现，不修改 `Settings` 全局默认值**（`Settings.EVENT_BUS_BACKEND` 保持 `"memory"` 不变，避免影响 API app 等其他消费者）。
+
+**实现方式**: `create_scheduler_runtime()` 中直接读取环境变量，默认 `"kafka"`：
+```python
+import os
+backend = os.environ.get("EVENT_BUS_BACKEND", "kafka")
+```
 
 **理由**:
 - `InMemoryEventBus` 不支持跨进程通信，scheduler 和 worker 必须通过 Kafka 解耦
 - Docker Compose 已包含 Kafka 服务，生产环境天然可用
 - memory 后端的存在价值是让单元测试能在无 Kafka 的 CI 环境中验证组装正确性
+- **不能改 `Settings` 全局默认**: `Settings` 是 `packages/core` 的共享配置，改为 `"kafka"` 会导致 API app 在没有 Kafka 的本地环境启动失败（`EventBusSettings.validate()` 抛 `EVENT_BUS_KAFKA_CONFIG_MISSING`）
 
 **测试策略**:
 - **Kafka 路径单元测试**: mock `KafkaEventBusPublisher.publish`，验证在 `EVENT_BUS_BACKEND=kafka` 下 `create_scheduler_runtime()` 正确组装 `KafkaEventBusPublisher`/`KafkaEventBusConsumer`，且触发成功后 `publish` 被调用并传入正确的 `EventEnvelope`（topic=`source.event.captured`，payload 含 plugin_id 和 items）。不依赖真实 Kafka 实例。
@@ -96,12 +103,13 @@ class SchedulerRuntime:
 
 ### D3: 环境变量 SCHEDULE_PLUGIN_ID 使用完整插件 ID
 
-**决策**: `SCHEDULE_PLUGIN_ID` 直接使用 registry 中的完整插件 ID（如 `quantagent.official.source.placeholder`），不做名称映射。
+**决策**: `SCHEDULE_PLUGIN_ID` 直接使用 registry 中的完整插件 ID（如 `quantagent.official.source.placeholder`），不做名称映射。通过 `os.environ.get("SCHEDULE_PLUGIN_ID", "quantagent.official.source.placeholder")` 在 `run()` 中读取，**不加入 `Settings` 类**。
 
 **理由**:
 - 与 `registry.get_plugin()` 直接对齐，零映射逻辑
 - 避免引入维护一个名称→ID 映射表的额外负担
 - 环境变量值可从 `plugin.yaml` 的 `id` 字段直接复制
+- scheduler 专用配置不应下沉到 `packages/core` 的 `Settings` 类；`Settings` 只放跨 app 共享的配置
 
 **默认值**: `quantagent.official.source.placeholder`（placeholder-source 插件）。
 
@@ -187,7 +195,7 @@ scheduler:
 - `depends_on: kafka` 改为 `required: true`（默认值），确保 Kafka 就绪后才启动
 - 显式设置 `EVENT_BUS_BACKEND=kafka` 和 `EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=kafka:9092`
 - 通过 `SCHEDULE_PLUGIN_ID` 环境变量支持自定义插件触发
-- Kafka profile 需要配合使用：`docker compose --profile kafka up scheduler`
+- **Kafka 服务在 `profiles: [kafka]` 下**，必须用 `docker compose --profile kafka up scheduler` 启动，不能用 `docker compose up scheduler`（后者不会启动 Kafka）
 
 **理由**:
 - 当前 docker-compose.yml 的 scheduler 服务缺少事件总线环境变量，依赖隐式默认值不可靠
