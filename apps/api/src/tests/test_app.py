@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import tempfile
 import time
@@ -32,8 +33,9 @@ from quantagent.api.auth.session import SESSION_V2, _deserialize_session, _issue
 from quantagent.api.config.settings import Settings, _build_env_file_paths
 from quantagent.api.db import get_db_session
 from quantagent.api.http.errors import ServiceUnavailableError
-from quantagent.api.main import create_app
 from quantagent.api.http.responses import ApiResponse
+from quantagent.api.main import create_app
+from quantagent.api.observability.logging import InMemoryStructuredHandler, shutdown_api_logging
 from quantagent.api.routers.v1.register import (
     API_V1_PUBLIC_ROUTE_ALLOWLIST,
     STANDARD_API_V1_ROUTER_REGISTRATIONS,
@@ -198,6 +200,7 @@ class ApiAppTestCase(unittest.TestCase):
         response = self.client.get("/api/v1/health", headers={"X-Request-ID": "req-123"})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["X-Request-ID"], "req-123")
+        self.assertRegex(response.headers["X-Trace-ID"], r"^[0-9a-f]{32}$")
         self.assertEqual(response.json(), {"code": 0, "data": {"status": "ok"}, "msg": "ok", "error": None})
 
     def test_version_uses_explicit_envelope_contract(self) -> None:
@@ -581,10 +584,41 @@ class ApiAppTestCase(unittest.TestCase):
         body = response.json()
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.headers["X-Request-ID"], body["error"]["request_id"])
+        self.assertEqual(response.headers["X-Trace-ID"], body["error"]["trace_id"])
         self.assertEqual(body["code"], 40000)
         self.assertEqual(body["error"]["code"], "BAD_REQUEST")
-        self.assertIsNone(body["error"]["trace_id"])
+        self.assertRegex(body["error"]["trace_id"], r"^[0-9a-f]{32}$")
         self.assertEqual(body["msg"], "参数错误")
+
+    def test_traceparent_sets_trace_id_for_error_envelope_and_response_header(self) -> None:
+        self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+        response = self.client.get(
+            "/api/v1/debug/error",
+            headers={"traceparent": "00-1234567890abcdef1234567890abcdef-1234567890abcdef-01"},
+        )
+        body = response.json()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.headers["X-Trace-ID"], "1234567890abcdef1234567890abcdef")
+        self.assertEqual(body["error"]["trace_id"], "1234567890abcdef1234567890abcdef")
+
+    def test_unhandled_error_response_includes_trace_headers(self) -> None:
+        router = APIRouter(prefix="/api/v1/test-unhandled")
+
+        @router.get("/error")
+        def unhandled_error() -> None:
+            raise RuntimeError("boom")
+
+        app = create_app(self._settings(AUTH_ENABLED=False))
+        app.include_router(router)
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.get("/api/v1/test-unhandled/error", headers={"X-Request-ID": "req-unhandled"})
+
+        body = response.json()
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(response.headers["X-Request-ID"], "req-unhandled")
+        self.assertEqual(response.headers["X-Request-ID"], body["error"]["request_id"])
+        self.assertEqual(response.headers["X-Trace-ID"], body["error"]["trace_id"])
 
     def test_validation_error_sanitizes_fields(self) -> None:
         self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
@@ -831,6 +865,23 @@ class ApiAppTestCase(unittest.TestCase):
 
         self.assertEqual(settings.LOG_LEVEL, "ERROR")
 
+    def test_discord_allowlist_dotenv_accepts_empty_and_comma_separated_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            api_dir = workspace / "apps/api"
+            api_dir.mkdir(parents=True)
+            (api_dir / ".env").write_text(
+                "DISCORD_INTERACTIONS_GUILD_ALLOWLIST=guild-1,guild-2\n"
+                "DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST=\n",
+                encoding="utf-8",
+            )
+            env_files = _build_env_file_paths(cwd=workspace, source_repo_root=workspace, source_api_app_dir=api_dir)
+
+            settings = Settings(_env_file=tuple(str(path) for path in env_files))
+
+        self.assertEqual(settings.DISCORD_INTERACTIONS_GUILD_ALLOWLIST, ("guild-1", "guild-2"))
+        self.assertEqual(settings.DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST, ())
+
     def test_app_env_selects_only_matching_api_environment_dotenv(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
@@ -898,6 +949,17 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertNotIn(api_dir / ".env.Production", env_files)
         self.assertEqual(settings.LOG_LEVEL, "ERROR")
         self.assertEqual(settings.APP_ENV, "Production")
+
+    def test_blank_runtime_dir_uses_default_before_log_dir_resolution(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            APP_ENV="test",
+            RUNTIME_DIR="",
+            LOG_DIR="",
+            AUTH_ENABLED=False,
+        )
+
+        self.assertEqual(settings.LOG_DIR, (settings.RUNTIME_DIR / "logs" / "api").resolve())
 
     def test_env_file_paths_do_not_assume_repo_root_when_source_layout_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1433,7 +1495,11 @@ class ApiAppTestCase(unittest.TestCase):
         from quantagent.api.services import plugin_registry as plugin_registry_service
 
         repo_root = next(
-            parent for parent in Path(__file__).resolve().parents if (parent / "pyproject.toml").is_file()
+            parent
+            for parent in Path(__file__).resolve().parents
+            if (parent / "pyproject.toml").is_file()
+            and (parent / "apps" / "api").is_dir()
+            and (parent / "plugins").is_dir()
         )
         api_runtime_dir = repo_root / "apps" / "api" / "runtime"
         api_runtime_dir.mkdir(parents=True, exist_ok=True)
@@ -1577,9 +1643,13 @@ class ApiAppTestCase(unittest.TestCase):
                 f"/api/v1/models/invocations?provider_id={provider_id}&preset_key=global_default"
             )
 
-            encrypted_value = client.app.state.db_session_factory().execute(
-                Base.metadata.tables["model_providers"].select()
-            ).mappings().one()["encrypted_api_key"]
+            session = client.app.state.db_session_factory()
+            try:
+                encrypted_value = session.execute(
+                    Base.metadata.tables["model_providers"].select()
+                ).mappings().one()["encrypted_api_key"]
+            finally:
+                session.close()
 
         save_body = save_response.json()
         self.assertEqual(save_response.status_code, 200)
@@ -2365,6 +2435,17 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertNotIn("/api/v1/debug/error", schema["paths"])
         self.assertNotIn("/api/v1/debug/success", schema["paths"])
         self.assertNotIn("/api/v1/auth/test-actions/runtime-inspect", schema["paths"])
+
+    def test_create_app_does_not_configure_logging_before_lifespan(self) -> None:
+        shutdown_api_logging()
+        logger = logging.getLogger("quantagent.api")
+        before_handlers = list(logger.handlers)
+        self.addCleanup(shutdown_api_logging)
+        self.addCleanup(lambda: setattr(logger, "handlers", before_handlers))
+
+        create_app(self._settings(AUTH_ENABLED=False))
+
+        self.assertFalse(any(isinstance(handler, InMemoryStructuredHandler) for handler in logger.handlers))
 
     def test_db_session_dependency_closes_session_without_auto_commit(self) -> None:
         session = FakeSession()

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from quantagent.core.db.base import Base
@@ -73,6 +73,9 @@ class ModelPresetBindingORM(Base):
 
 class ModelInvocationORM(Base):
     __tablename__ = "model_invocations"
+    __table_args__ = (
+        Index("ix_model_invocations_created_at", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     provider_id: Mapped[int | None] = mapped_column(ForeignKey("model_providers.id"), nullable=True)

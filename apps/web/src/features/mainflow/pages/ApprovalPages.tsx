@@ -1,12 +1,17 @@
 import { Button } from '@heroui/react'
 import { useState } from 'react'
 
-import { approvalsQueue, featuredEvents } from '../mock-data'
-import { ApprovalCard } from '../components/ApprovalCard'
-import { LinkButton } from '../components/LinkButton'
+import { runtimeAgentRuns } from '../mock-data'
 import { PageSectionCard } from '../components/PageSectionCard'
 import { SectionHeader } from '../components/SectionHeader'
 import { maskToken } from '../utils/format'
+import { ApprovalScoreCard } from '@/features/event-scoring/components/ApprovalScoreCard'
+import {
+  scoredApprovals,
+  scoredEvents,
+} from '@/features/event-scoring/mocks/event-scoring.mock'
+import { formatRecommendationPriority } from '@/features/event-scoring/utils/event-scoring-labels'
+import { LinkButton } from '@/shared/ui'
 import { DetailFacts, InfoTag, PageHeader } from './shared'
 
 export function ApprovalsIndexPageContent() {
@@ -22,11 +27,11 @@ export function ApprovalsIndexPageContent() {
         <PageSectionCard>
           <SectionHeader
             eyebrow="队列概览"
-            title="高风险、即将过期、强确认请求优先"
-            description="本轮先把队列结构、风险标签和详情入口落地。"
+            title="待处理、即将过期、高风险与强确认优先"
+            description="列表页需要让用户在首屏就理解风险方向、确认等级、到期策略和建议内容。"
           />
           <div className="flex flex-wrap gap-2">
-            {['pending', 'approved', 'rejected', 'expired', 'increase_risk'].map((item) => (
+            {['pending', 'approved', 'rejected', 'expired', 'increase_risk', 'strong_confirm', 'manual_only'].map((item) => (
               <InfoTag key={item}>{item}</InfoTag>
             ))}
           </div>
@@ -35,8 +40,8 @@ export function ApprovalsIndexPageContent() {
         <PageSectionCard>
           <SectionHeader
             eyebrow="批量处理边界"
-            title="默认更保守"
-            description="manual_only、即将自动过期和确认等级不一致的请求不进入首版批量处理。"
+            title="批量操作必须比逐条处理更保守"
+            description="manual_only、确认等级不一致和即将进入自动过期处理的请求不进入首版批量处理。"
           />
           <div className="grid min-h-[180px] place-items-center gap-2 rounded-lg border border-dashed border-hairline-strong bg-surface p-5 text-center">
             <h2 className="m-0 text-title-md font-bold text-ink">受限批量操作</h2>
@@ -49,11 +54,11 @@ export function ApprovalsIndexPageContent() {
         <SectionHeader
           eyebrow="审批列表"
           title="每条审批都要能看懂风险和到期策略"
-          description="详情页负责完整上下文，列表页负责优先级、风险方向和入口。"
+          description="详情页负责完整上下文，列表页负责优先级、风险方向、确认等级和入口。"
         />
         <div className="grid gap-3">
-          {approvalsQueue.map((approval) => (
-            <ApprovalCard key={approval.id} approval={approval} />
+          {scoredApprovals.map((approval) => (
+            <ApprovalScoreCard key={approval.id} approval={approval} />
           ))}
         </div>
       </PageSectionCard>
@@ -62,8 +67,34 @@ export function ApprovalsIndexPageContent() {
 }
 
 export function ApprovalDetailPageContent({ approvalId }: { approvalId: string }) {
-  const approval = approvalsQueue.find((item) => item.id === approvalId) ?? approvalsQueue[0]!
-  const relatedEvent = featuredEvents.find((item) => item.title === approval.eventTitle) ?? null
+  const approval = scoredApprovals.find((item) => item.id === approvalId)
+
+  if (!approval) {
+    return (
+      <div className="grid gap-5">
+        <PageHeader
+          kicker="审批详情"
+          title="审批不存在"
+          description="当前审批 ID 没有匹配到 mock 数据，请返回审批工作台重新选择。"
+        />
+        <PageSectionCard>
+          <SectionHeader
+            eyebrow="未找到"
+            title="当前审批已移除或 ID 无效"
+            description="首版 mock 页面不做静默兜底到其他审批，避免误导操盘者查看了错误上下文。"
+          />
+          <div className="flex flex-wrap gap-2">
+            <LinkButton to="/approvals" variant="outline">
+              返回审批工作台
+            </LinkButton>
+          </div>
+        </PageSectionCard>
+      </div>
+    )
+  }
+
+  const relatedEvent = scoredEvents.find((item) => item.id === approval.eventId) ?? null
+  const relatedRun = runtimeAgentRuns.find((item) => item.eventId === approval.eventId) ?? null
 
   return (
     <div className="grid gap-5">
@@ -77,17 +108,25 @@ export function ApprovalDetailPageContent({ approvalId }: { approvalId: string }
         <PageSectionCard>
           <SectionHeader
             eyebrow="审批上下文"
-            title="事件、建议与风险方向"
-            description="首版先落结构化摘要和动作入口，不接真实 mutation。"
+            title="事件、建议、风险方向和证据摘要"
+            description="审批详情要回答 ActionRequest 为什么产生，以及 Policy Gate 要求怎样的人类确认。"
           />
           <DetailFacts
             rows={[
+              `Approval ID：${approval.id}`,
               `关联事件：${approval.eventTitle}`,
-              `推荐度：${approval.recommendation}`,
-              `风险方向：${approval.riskDirection}`,
-              `风险等级：${approval.riskLevel}`,
-              `确认等级：${approval.confirmationLevel}`,
-              `剩余时间：${approval.expiresIn}`,
+              `推荐优先级：${formatRecommendationPriority(approval.scoreContext.recommendationPriority)}`,
+              `建议推荐度：${approval.scoreContext.recommendationScore} / 100`,
+              `事件可信度摘要：${approval.scoreContext.eventReliabilitySummary} / 100`,
+              `分析置信度摘要：${approval.scoreContext.analysisConfidenceSummary} / 100`,
+              `风险方向：${approval.scoreContext.riskDirection}`,
+              `风险等级：${approval.scoreContext.riskLevel}`,
+              `确认等级：${approval.scoreContext.confirmationLevel}`,
+              `剩余时间：${approval.scoreContext.expiresIn}`,
+              `到期策略：${approval.scoreContext.expirationAction}`,
+              `事件来源：${relatedEvent?.source ?? '待补充'}`,
+              `阻断 / 降级：${approval.degradationNotices.map((item) => item.title).join(' / ') || '当前无阻断或降级提示'}`,
+              `触发摘要：${approval.triggerSummary}`,
             ]}
           />
         </PageSectionCard>
@@ -104,7 +143,7 @@ export function ApprovalDetailPageContent({ approvalId }: { approvalId: string }
             ))}
           </div>
           <p className="m-0 text-body-sm text-muted">
-            若动作失败，后续真实实现必须展示 request_id / trace_id。本轮仅保留展示位，不发明后端响应。
+            increase_risk 默认二次确认；manual_only 不能通过弱确认入口处理。真实动作失败时必须展示 request_id / trace_id。
           </p>
           <div className="flex flex-wrap gap-2">
             {relatedEvent ? (
@@ -114,12 +153,37 @@ export function ApprovalDetailPageContent({ approvalId }: { approvalId: string }
             ) : (
               <InfoTag>当前审批暂无关联事件</InfoTag>
             )}
+            {relatedRun ? (
+              <LinkButton to="/runtime/agents/$runId" params={{ runId: relatedRun.id }} variant="outline">
+                查看运行详情
+              </LinkButton>
+            ) : null}
             <LinkButton to="/approval-link/$token" params={{ token: 'preview-token' }} variant="outline">
               预览授权页
             </LinkButton>
           </div>
         </PageSectionCard>
       </section>
+
+      <PageSectionCard>
+        <SectionHeader
+          eyebrow="处理历史"
+          title="保留人工动作和修改前后摘要"
+          description="处理历史和审计记录是审批详情的一部分，但不在这里发明真正的后端审计 shape。"
+        />
+        <div className="grid gap-3">
+          {[
+            ['审批创建', '系统根据高风险建议生成 ApprovalRequest，并写入到期策略。'],
+            ['等待确认', '当前请求处于待处理状态，等待 strong_confirm / manual_only 入口。'],
+            ['后续动作', 'approve、reject、request_reanalysis、amend 的真实审计以后端真源为准。'],
+          ].map(([title, copy]) => (
+            <article key={title} className="grid gap-1.5 border-l-2 border-hairline-strong pl-3.5">
+              <p className="m-0 text-[12px] font-bold text-muted">{title}</p>
+              <p className="m-0 text-body-sm text-muted">{copy}</p>
+            </article>
+          ))}
+        </div>
+      </PageSectionCard>
     </div>
   )
 }
@@ -150,6 +214,7 @@ export function ApprovalLinkPageContent({ token }: { token: string }) {
             `token 占位：${showFullToken ? token : maskToken(token)}`,
             '确认等级：link_confirm',
             '状态：等待后端校验并换取短期上下文',
+            '风险边界：不允许在一次性链接页绕过高风险强确认规则',
           ]}
         />
         <div className="flex flex-wrap gap-2">

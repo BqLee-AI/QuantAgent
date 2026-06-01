@@ -13,17 +13,17 @@ import { Route as publicLoginRouteImport } from './routes/(public)/login'
 import { Route as AppworkspaceRouteRouteImport } from './routes/_app/(workspace)/route'
 import { Route as AppworkspaceIndexRouteImport } from './routes/_app/(workspace)/index'
 import { Route as publicApprovalLinkTokenRouteImport } from './routes/(public)/approval-link/$token'
-import { Route as AppworkspaceToolsIndexRouteImport } from './routes/_app/(workspace)/tools/index'
-import { Route as AppworkspaceSkillsIndexRouteImport } from './routes/_app/(workspace)/skills/index'
 import { Route as AppworkspaceSettingsIndexRouteImport } from './routes/_app/(workspace)/settings/index'
 import { Route as AppworkspaceRuntimeIndexRouteImport } from './routes/_app/(workspace)/runtime/index'
 import { Route as AppworkspacePluginsIndexRouteImport } from './routes/_app/(workspace)/plugins/index'
 import { Route as AppworkspaceModelsIndexRouteImport } from './routes/_app/(workspace)/models/index'
-import { Route as AppworkspaceIndustriesIndexRouteImport } from './routes/_app/(workspace)/industries/index'
 import { Route as AppworkspaceEventsIndexRouteImport } from './routes/_app/(workspace)/events/index'
 import { Route as AppworkspaceApprovalsIndexRouteImport } from './routes/_app/(workspace)/approvals/index'
+import { Route as AppworkspacePluginsPluginIdRouteImport } from './routes/_app/(workspace)/plugins/$pluginId'
 import { Route as AppworkspaceEventsEventIdRouteImport } from './routes/_app/(workspace)/events/$eventId'
 import { Route as AppworkspaceApprovalsApprovalIdRouteImport } from './routes/_app/(workspace)/approvals/$approvalId'
+import { Route as AppworkspaceRuntimeToolsInvocationIdRouteImport } from './routes/_app/(workspace)/runtime/tools/$invocationId'
+import { Route as AppworkspaceRuntimeAgentsRunIdRouteImport } from './routes/_app/(workspace)/runtime/agents/$runId'
 import { Route as AppworkspaceEventsEventIdAuditRouteImport } from './routes/_app/(workspace)/events/$eventId/audit'
 
 const publicLoginRoute = publicLoginRouteImport.update({
@@ -45,16 +45,6 @@ const publicApprovalLinkTokenRoute = publicApprovalLinkTokenRouteImport.update({
   id: '/(public)/approval-link/$token',
   path: '/approval-link/$token',
   getParentRoute: () => rootRouteImport,
-} as any)
-const AppworkspaceToolsIndexRoute = AppworkspaceToolsIndexRouteImport.update({
-  id: '/tools/',
-  path: '/tools/',
-  getParentRoute: () => AppworkspaceRouteRoute,
-} as any)
-const AppworkspaceSkillsIndexRoute = AppworkspaceSkillsIndexRouteImport.update({
-  id: '/skills/',
-  path: '/skills/',
-  getParentRoute: () => AppworkspaceRouteRoute,
 } as any)
 const AppworkspaceSettingsIndexRoute =
   AppworkspaceSettingsIndexRouteImport.update({
@@ -79,12 +69,6 @@ const AppworkspaceModelsIndexRoute = AppworkspaceModelsIndexRouteImport.update({
   path: '/models/',
   getParentRoute: () => AppworkspaceRouteRoute,
 } as any)
-const AppworkspaceIndustriesIndexRoute =
-  AppworkspaceIndustriesIndexRouteImport.update({
-    id: '/industries/',
-    path: '/industries/',
-    getParentRoute: () => AppworkspaceRouteRoute,
-  } as any)
 const AppworkspaceEventsIndexRoute = AppworkspaceEventsIndexRouteImport.update({
   id: '/events/',
   path: '/events/',
@@ -94,6 +78,12 @@ const AppworkspaceApprovalsIndexRoute =
   AppworkspaceApprovalsIndexRouteImport.update({
     id: '/approvals/',
     path: '/approvals/',
+    getParentRoute: () => AppworkspaceRouteRoute,
+  } as any)
+const AppworkspacePluginsPluginIdRoute =
+  AppworkspacePluginsPluginIdRouteImport.update({
+    id: '/plugins/$pluginId',
+    path: '/plugins/$pluginId',
     getParentRoute: () => AppworkspaceRouteRoute,
   } as any)
 const AppworkspaceEventsEventIdRoute =
@@ -106,6 +96,18 @@ const AppworkspaceApprovalsApprovalIdRoute =
   AppworkspaceApprovalsApprovalIdRouteImport.update({
     id: '/approvals/$approvalId',
     path: '/approvals/$approvalId',
+    getParentRoute: () => AppworkspaceRouteRoute,
+  } as any)
+const AppworkspaceRuntimeToolsInvocationIdRoute =
+  AppworkspaceRuntimeToolsInvocationIdRouteImport.update({
+    id: '/runtime/tools/$invocationId',
+    path: '/runtime/tools/$invocationId',
+    getParentRoute: () => AppworkspaceRouteRoute,
+  } as any)
+const AppworkspaceRuntimeAgentsRunIdRoute =
+  AppworkspaceRuntimeAgentsRunIdRouteImport.update({
+    id: '/runtime/agents/$runId',
+    path: '/runtime/agents/$runId',
     getParentRoute: () => AppworkspaceRouteRoute,
   } as any)
 const AppworkspaceEventsEventIdAuditRoute =
@@ -121,16 +123,16 @@ export interface FileRoutesByFullPath {
   '/': typeof AppworkspaceIndexRoute
   '/approvals/$approvalId': typeof AppworkspaceApprovalsApprovalIdRoute
   '/events/$eventId': typeof AppworkspaceEventsEventIdRouteWithChildren
+  '/plugins/$pluginId': typeof AppworkspacePluginsPluginIdRoute
   '/approvals/': typeof AppworkspaceApprovalsIndexRoute
   '/events/': typeof AppworkspaceEventsIndexRoute
-  '/industries/': typeof AppworkspaceIndustriesIndexRoute
   '/models/': typeof AppworkspaceModelsIndexRoute
   '/plugins/': typeof AppworkspacePluginsIndexRoute
   '/runtime/': typeof AppworkspaceRuntimeIndexRoute
   '/settings/': typeof AppworkspaceSettingsIndexRoute
-  '/skills/': typeof AppworkspaceSkillsIndexRoute
-  '/tools/': typeof AppworkspaceToolsIndexRoute
   '/events/$eventId/audit': typeof AppworkspaceEventsEventIdAuditRoute
+  '/runtime/agents/$runId': typeof AppworkspaceRuntimeAgentsRunIdRoute
+  '/runtime/tools/$invocationId': typeof AppworkspaceRuntimeToolsInvocationIdRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof publicLoginRoute
@@ -138,16 +140,16 @@ export interface FileRoutesByTo {
   '/': typeof AppworkspaceIndexRoute
   '/approvals/$approvalId': typeof AppworkspaceApprovalsApprovalIdRoute
   '/events/$eventId': typeof AppworkspaceEventsEventIdRouteWithChildren
+  '/plugins/$pluginId': typeof AppworkspacePluginsPluginIdRoute
   '/approvals': typeof AppworkspaceApprovalsIndexRoute
   '/events': typeof AppworkspaceEventsIndexRoute
-  '/industries': typeof AppworkspaceIndustriesIndexRoute
   '/models': typeof AppworkspaceModelsIndexRoute
   '/plugins': typeof AppworkspacePluginsIndexRoute
   '/runtime': typeof AppworkspaceRuntimeIndexRoute
   '/settings': typeof AppworkspaceSettingsIndexRoute
-  '/skills': typeof AppworkspaceSkillsIndexRoute
-  '/tools': typeof AppworkspaceToolsIndexRoute
   '/events/$eventId/audit': typeof AppworkspaceEventsEventIdAuditRoute
+  '/runtime/agents/$runId': typeof AppworkspaceRuntimeAgentsRunIdRoute
+  '/runtime/tools/$invocationId': typeof AppworkspaceRuntimeToolsInvocationIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -157,16 +159,16 @@ export interface FileRoutesById {
   '/_app/(workspace)/': typeof AppworkspaceIndexRoute
   '/_app/(workspace)/approvals/$approvalId': typeof AppworkspaceApprovalsApprovalIdRoute
   '/_app/(workspace)/events/$eventId': typeof AppworkspaceEventsEventIdRouteWithChildren
+  '/_app/(workspace)/plugins/$pluginId': typeof AppworkspacePluginsPluginIdRoute
   '/_app/(workspace)/approvals/': typeof AppworkspaceApprovalsIndexRoute
   '/_app/(workspace)/events/': typeof AppworkspaceEventsIndexRoute
-  '/_app/(workspace)/industries/': typeof AppworkspaceIndustriesIndexRoute
   '/_app/(workspace)/models/': typeof AppworkspaceModelsIndexRoute
   '/_app/(workspace)/plugins/': typeof AppworkspacePluginsIndexRoute
   '/_app/(workspace)/runtime/': typeof AppworkspaceRuntimeIndexRoute
   '/_app/(workspace)/settings/': typeof AppworkspaceSettingsIndexRoute
-  '/_app/(workspace)/skills/': typeof AppworkspaceSkillsIndexRoute
-  '/_app/(workspace)/tools/': typeof AppworkspaceToolsIndexRoute
   '/_app/(workspace)/events/$eventId/audit': typeof AppworkspaceEventsEventIdAuditRoute
+  '/_app/(workspace)/runtime/agents/$runId': typeof AppworkspaceRuntimeAgentsRunIdRoute
+  '/_app/(workspace)/runtime/tools/$invocationId': typeof AppworkspaceRuntimeToolsInvocationIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -176,16 +178,16 @@ export interface FileRouteTypes {
     | '/'
     | '/approvals/$approvalId'
     | '/events/$eventId'
+    | '/plugins/$pluginId'
     | '/approvals/'
     | '/events/'
-    | '/industries/'
     | '/models/'
     | '/plugins/'
     | '/runtime/'
     | '/settings/'
-    | '/skills/'
-    | '/tools/'
     | '/events/$eventId/audit'
+    | '/runtime/agents/$runId'
+    | '/runtime/tools/$invocationId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -193,16 +195,16 @@ export interface FileRouteTypes {
     | '/'
     | '/approvals/$approvalId'
     | '/events/$eventId'
+    | '/plugins/$pluginId'
     | '/approvals'
     | '/events'
-    | '/industries'
     | '/models'
     | '/plugins'
     | '/runtime'
     | '/settings'
-    | '/skills'
-    | '/tools'
     | '/events/$eventId/audit'
+    | '/runtime/agents/$runId'
+    | '/runtime/tools/$invocationId'
   id:
     | '__root__'
     | '/_app/(workspace)'
@@ -211,16 +213,16 @@ export interface FileRouteTypes {
     | '/_app/(workspace)/'
     | '/_app/(workspace)/approvals/$approvalId'
     | '/_app/(workspace)/events/$eventId'
+    | '/_app/(workspace)/plugins/$pluginId'
     | '/_app/(workspace)/approvals/'
     | '/_app/(workspace)/events/'
-    | '/_app/(workspace)/industries/'
     | '/_app/(workspace)/models/'
     | '/_app/(workspace)/plugins/'
     | '/_app/(workspace)/runtime/'
     | '/_app/(workspace)/settings/'
-    | '/_app/(workspace)/skills/'
-    | '/_app/(workspace)/tools/'
     | '/_app/(workspace)/events/$eventId/audit'
+    | '/_app/(workspace)/runtime/agents/$runId'
+    | '/_app/(workspace)/runtime/tools/$invocationId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -259,20 +261,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof publicApprovalLinkTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_app/(workspace)/tools/': {
-      id: '/_app/(workspace)/tools/'
-      path: '/tools'
-      fullPath: '/tools/'
-      preLoaderRoute: typeof AppworkspaceToolsIndexRouteImport
-      parentRoute: typeof AppworkspaceRouteRoute
-    }
-    '/_app/(workspace)/skills/': {
-      id: '/_app/(workspace)/skills/'
-      path: '/skills'
-      fullPath: '/skills/'
-      preLoaderRoute: typeof AppworkspaceSkillsIndexRouteImport
-      parentRoute: typeof AppworkspaceRouteRoute
-    }
     '/_app/(workspace)/settings/': {
       id: '/_app/(workspace)/settings/'
       path: '/settings'
@@ -301,13 +289,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppworkspaceModelsIndexRouteImport
       parentRoute: typeof AppworkspaceRouteRoute
     }
-    '/_app/(workspace)/industries/': {
-      id: '/_app/(workspace)/industries/'
-      path: '/industries'
-      fullPath: '/industries/'
-      preLoaderRoute: typeof AppworkspaceIndustriesIndexRouteImport
-      parentRoute: typeof AppworkspaceRouteRoute
-    }
     '/_app/(workspace)/events/': {
       id: '/_app/(workspace)/events/'
       path: '/events'
@@ -322,6 +303,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppworkspaceApprovalsIndexRouteImport
       parentRoute: typeof AppworkspaceRouteRoute
     }
+    '/_app/(workspace)/plugins/$pluginId': {
+      id: '/_app/(workspace)/plugins/$pluginId'
+      path: '/plugins/$pluginId'
+      fullPath: '/plugins/$pluginId'
+      preLoaderRoute: typeof AppworkspacePluginsPluginIdRouteImport
+      parentRoute: typeof AppworkspaceRouteRoute
+    }
     '/_app/(workspace)/events/$eventId': {
       id: '/_app/(workspace)/events/$eventId'
       path: '/events/$eventId'
@@ -334,6 +322,20 @@ declare module '@tanstack/react-router' {
       path: '/approvals/$approvalId'
       fullPath: '/approvals/$approvalId'
       preLoaderRoute: typeof AppworkspaceApprovalsApprovalIdRouteImport
+      parentRoute: typeof AppworkspaceRouteRoute
+    }
+    '/_app/(workspace)/runtime/tools/$invocationId': {
+      id: '/_app/(workspace)/runtime/tools/$invocationId'
+      path: '/runtime/tools/$invocationId'
+      fullPath: '/runtime/tools/$invocationId'
+      preLoaderRoute: typeof AppworkspaceRuntimeToolsInvocationIdRouteImport
+      parentRoute: typeof AppworkspaceRouteRoute
+    }
+    '/_app/(workspace)/runtime/agents/$runId': {
+      id: '/_app/(workspace)/runtime/agents/$runId'
+      path: '/runtime/agents/$runId'
+      fullPath: '/runtime/agents/$runId'
+      preLoaderRoute: typeof AppworkspaceRuntimeAgentsRunIdRouteImport
       parentRoute: typeof AppworkspaceRouteRoute
     }
     '/_app/(workspace)/events/$eventId/audit': {
@@ -364,30 +366,31 @@ interface AppworkspaceRouteRouteChildren {
   AppworkspaceIndexRoute: typeof AppworkspaceIndexRoute
   AppworkspaceApprovalsApprovalIdRoute: typeof AppworkspaceApprovalsApprovalIdRoute
   AppworkspaceEventsEventIdRoute: typeof AppworkspaceEventsEventIdRouteWithChildren
+  AppworkspacePluginsPluginIdRoute: typeof AppworkspacePluginsPluginIdRoute
   AppworkspaceApprovalsIndexRoute: typeof AppworkspaceApprovalsIndexRoute
   AppworkspaceEventsIndexRoute: typeof AppworkspaceEventsIndexRoute
-  AppworkspaceIndustriesIndexRoute: typeof AppworkspaceIndustriesIndexRoute
   AppworkspaceModelsIndexRoute: typeof AppworkspaceModelsIndexRoute
   AppworkspacePluginsIndexRoute: typeof AppworkspacePluginsIndexRoute
   AppworkspaceRuntimeIndexRoute: typeof AppworkspaceRuntimeIndexRoute
   AppworkspaceSettingsIndexRoute: typeof AppworkspaceSettingsIndexRoute
-  AppworkspaceSkillsIndexRoute: typeof AppworkspaceSkillsIndexRoute
-  AppworkspaceToolsIndexRoute: typeof AppworkspaceToolsIndexRoute
+  AppworkspaceRuntimeAgentsRunIdRoute: typeof AppworkspaceRuntimeAgentsRunIdRoute
+  AppworkspaceRuntimeToolsInvocationIdRoute: typeof AppworkspaceRuntimeToolsInvocationIdRoute
 }
 
 const AppworkspaceRouteRouteChildren: AppworkspaceRouteRouteChildren = {
   AppworkspaceIndexRoute: AppworkspaceIndexRoute,
   AppworkspaceApprovalsApprovalIdRoute: AppworkspaceApprovalsApprovalIdRoute,
   AppworkspaceEventsEventIdRoute: AppworkspaceEventsEventIdRouteWithChildren,
+  AppworkspacePluginsPluginIdRoute: AppworkspacePluginsPluginIdRoute,
   AppworkspaceApprovalsIndexRoute: AppworkspaceApprovalsIndexRoute,
   AppworkspaceEventsIndexRoute: AppworkspaceEventsIndexRoute,
-  AppworkspaceIndustriesIndexRoute: AppworkspaceIndustriesIndexRoute,
   AppworkspaceModelsIndexRoute: AppworkspaceModelsIndexRoute,
   AppworkspacePluginsIndexRoute: AppworkspacePluginsIndexRoute,
   AppworkspaceRuntimeIndexRoute: AppworkspaceRuntimeIndexRoute,
   AppworkspaceSettingsIndexRoute: AppworkspaceSettingsIndexRoute,
-  AppworkspaceSkillsIndexRoute: AppworkspaceSkillsIndexRoute,
-  AppworkspaceToolsIndexRoute: AppworkspaceToolsIndexRoute,
+  AppworkspaceRuntimeAgentsRunIdRoute: AppworkspaceRuntimeAgentsRunIdRoute,
+  AppworkspaceRuntimeToolsInvocationIdRoute:
+    AppworkspaceRuntimeToolsInvocationIdRoute,
 }
 
 const AppworkspaceRouteRouteWithChildren =

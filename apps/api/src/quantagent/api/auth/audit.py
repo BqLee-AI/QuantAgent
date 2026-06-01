@@ -6,6 +6,8 @@ from fastapi import Request
 
 from quantagent.api.auth.actor import CurrentActor
 from quantagent.api.http.middleware import get_request_id
+from quantagent.api.observability import events
+from quantagent.api.observability.logging import log_audit_event
 
 
 @dataclass(frozen=True)
@@ -22,7 +24,7 @@ class ActorAuditContext:
 
 def build_actor_audit_context(request: Request, actor: CurrentActor) -> ActorAuditContext:
     """构造脱敏审计上下文，供后续 Policy Gate 或审计持久化复用。"""
-    return ActorAuditContext(
+    context = ActorAuditContext(
         actor_id=actor.actor_id,
         actor_type=actor.actor_type,
         capabilities=tuple(sorted(actor.capabilities)),
@@ -30,4 +32,14 @@ def build_actor_audit_context(request: Request, actor: CurrentActor) -> ActorAud
         request_method=request.method,
         request_path=request.url.path,
     )
-
+    # 这里只记录审计上下文建立，不把业务载荷或敏感写请求内容写进日志。
+    log_audit_event(
+        event=events.AUDIT_CONTEXT_BOUND,
+        action="request.audit_context",
+        actor_id=context.actor_id,
+        actor_type=context.actor_type,
+        request_id=context.request_id,
+        path=context.request_path,
+        method=context.request_method,
+    )
+    return context

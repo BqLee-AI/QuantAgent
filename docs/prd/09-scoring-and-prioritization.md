@@ -287,6 +287,53 @@ V1 约束：
 - 不做自动执行放行分。
 - 不把所有内部评分细节暴露给用户。
 
+## 接入顺序与阶段约束
+
+### 首页基础 UI 先于评分体系接入
+
+Dashboard / 首页第一版先以普通事件展示和 mock UI 跑通结构，不把评分体系作为当前首页基础骨架的前置依赖。
+
+这意味着：
+
+- 首页第一版可以先没有正式评分字段。
+- 首页第一版不要求高价值事件排序已经接入。
+- 当前首页 mock 中出现的类似评分标签，只服务于基础展示，不代表正式 contract。
+
+### 首个正式接入页面：Events
+
+评分体系第一次正式进入页面能力时，应优先落在 `/events` 高价值事件中心，而不是先改 Dashboard 或事件详情页。
+
+原因：
+
+- `/events` 同时承接重点事件区、事件列表、筛选与排序，更适合作为评分字段第一次正式消费的位置。
+- Dashboard 更适合在后续阶段只消费少量重点事件摘要，而不是先承担完整评分接入。
+- 事件详情页更适合解释单条事件为什么得到这些分，而不是先承担列表级排序能力。
+
+### 页面接入顺序建议
+
+建议的后续接入顺序：
+
+1. `/events`：先接入事件综合优先级、事件可信度、行业影响强度、时效性和入选原因。
+2. Dashboard：后续只补重点事件摘要展示，不回退为评分首次落地点。
+3. `/events/:eventId`：补评分解释、不确定性摘要和建议推荐度语义。
+4. `/approvals` / `/approvals/:approvalId`：补推荐度、风险方向、确认等级和可信度 / 分析置信度摘要。
+
+### Mock 与正式字段的过渡约束
+
+首页基础骨架阶段可能仍使用临时字段或标签，例如优先级、参考强度、影响方向之类的 mock 表达。这些字段不能长期保留为正式命名。
+
+后续进入 API contract、`packages/contracts`、mock data 和前端字段命名时，应逐步收口到本 PRD 所定义的正式语义，例如：
+
+- `source_authority`
+- `event_reliability`
+- `impact_strength`
+- `freshness`
+- `event_priority`
+- `analysis_confidence`
+- `recommendation_score`
+- `verification_status`
+- `uncertainty_summary`
+
 ## 后续契约建议
 
 评分相关字段后续应进入 OpenSpec 和 `packages/contracts`，至少包含：

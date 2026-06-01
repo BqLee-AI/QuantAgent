@@ -19,7 +19,7 @@ export function SectionHeader({
         <p className="m-0 text-[12px] font-extrabold uppercase tracking-[0.04em] text-muted">
           {eyebrow}
         </p>
-        <h2 className="m-0 overflow-wrap-anywhere text-title-md font-bold text-ink">
+        <h2 className="m-0 wrap-anywhere text-title-md font-bold text-ink">
           {title}
         </h2>
         <p className="m-0 max-w-[62ch] text-body-sm text-muted">

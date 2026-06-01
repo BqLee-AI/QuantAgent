@@ -15,6 +15,15 @@ uv sync
 APP_ENV=development uv run api
 ```
 
+本地开发如果 `reload` 残留导致端口被占、服务半死不活或只杀掉了 reloader / worker 其中一个，不要继续手工猜 pid；优先执行：
+
+```bash
+cd apps/api
+uv run api-stop
+```
+
+`api-stop` 会优先读取 `RUNTIME_DIR/data/api/dev-server/` 下记录的 reloader / worker pid，并在缺失 pid 文件时回退到当前 API 监听端口的进程做兜底清理。`uv run api-reset` 当前与 `api-stop` 等价，只保留给本地开发的习惯性口令。
+
 API dotenv 文件按从低到高读取：仓库根目录 `.env`、当前工作目录 `.env`、`apps/api/.env`、`apps/api/.env.local`、`apps/api/.env.<APP_ENV>`、`apps/api/.env.<APP_ENV>.local`。重复变量允许存在，API 目录下的文件会覆盖根 `.env`；真实进程环境变量仍是最高优先级，适合 CI/CD secret、部署 secret 和临时强制覆盖。
 
 `APP_ENV` 先从真实环境变量读取；如果没有，再由根 `.env`、`apps/api/.env`、`apps/api/.env.local` 这几个基础层决定，用于选择对应的 `apps/api/.env.<APP_ENV>` 和 `.local` 文件。无论是从仓库根目录启动，还是在 `apps/api` 目录内直接执行 `uv run api`，都会优先读取仓库根 `.env` 再叠加 API 专属层。协作模板使用 `.example` 后缀，真实 `.env*` 文件不要提交。
@@ -41,6 +50,60 @@ POST /api/v1/integrations/discord/interactions
 
 这个 endpoint 直接返回 Discord 原生 interaction response，不走项目统一 `code/data/msg/error` envelope。
 其中 `DISCORD_INTERACTIONS_*ALLOWLIST` 是 API ingress 当前可用的最小运行时边界；插件 `config.schema.json` 里的对应字段主要用于 standalone 场景和后续平台配置接入，不会由当前 API 自动读取。
+
+### 结构化文件日志
+
+API 会在 `create_app()` 显式初始化 API 私有结构化日志能力。未显式配置 `LOG_DIR` 且 `RUNTIME_DIR` 缺失或为空时，默认写入仓库根 `runtime/logs/api`；如果显式设置了非空 `RUNTIME_DIR`，则默认写入 `RUNTIME_DIR/logs/api`。如果显式设置 `LOG_DIR`，启动时会先解析为绝对路径，再按 stream 写入：
+
+```text
+LOG_DIR/{stream}/YYYY/MM/DD/{service}.{env}.{instance_id}.pid-{pid}.{stream}.{YYYYMMDD}[.part-NNN].jsonl
+```
+
+当前固定 stream：
+
+- `access`：每个 HTTP 请求一条访问日志。
+- `app`：应用启动、关闭和普通运行事件。
+- `error`：未处理异常、DB readiness / session 失败等错误。
+- `security`：未授权、CSRF 失败、能力拒绝等安全事件。
+- `audit`：受保护写操作上下文等文件审计事件。
+
+当前日志格式固定为 JSON Lines，不提供多格式切换。请求与错误响应会同时返回 `X-Request-ID` 和 `X-Trace-ID`；错误 envelope 中的 `error.trace_id` 会与响应头一致。access 日志默认只记录 path，不记录 query string。
+
+当前已支持：
+
+- `LOG_DIR`
+- `LOG_INSTANCE_ID`
+- `LOG_ROTATE_MAX_BYTES`
+- `LOG_QUEUE_MAX_SIZE`
+- `LOG_ACCESS_DROP_WHEN_FULL`
+- `LOG_ACCESS_RETENTION_DAYS`
+- `LOG_APP_RETENTION_DAYS`
+- `LOG_ERROR_RETENTION_DAYS`
+- `LOG_SECURITY_RETENTION_DAYS`
+- `LOG_AUDIT_RETENTION_DAYS`
+- `LOG_MAINTENANCE_MIN_AGE_SECONDS`
+- `LOG_MAX_TOTAL_BYTES`
+- `LOG_MIN_FREE_BYTES`
+
+阶段 2 maintenance 与磁盘保护：
+
+- startup 会先做一次补偿清理：只处理可确认已关闭的 `.jsonl` 文件。
+- 已关闭文件会压缩为 `.jsonl.gz`；无法确认关闭状态的文件会跳过，不会强行压缩或删除。
+- retention 按 stream 独立配置，默认 `access=3`、`app=14`、`error=30`、`security=30`、`audit=90`。
+- disk guard 命中 `LOG_MAX_TOTAL_BYTES` 或 `LOG_MIN_FREE_BYTES` 时，优先丢弃 access，尽量保留 error/security/audit。
+- shutdown 会在 queue drain 完成后做一次 maintenance 收口，避免当前进程刚关闭的活跃文件长期留在未压缩状态。
+
+默认路径与覆盖语义：
+
+- `RUNTIME_DIR` 缺失或为空时，shared settings 会探测源码仓库根，并将默认 runtime 固定到仓库根 `runtime`。
+- `RUNTIME_DIR=runtime`、`RUNTIME_DIR=./runtime`、`RUNTIME_DIR=../runtime` 这类非空相对路径仍按当前进程 cwd 解析，不会被强行改写成仓库根相对路径。
+- 生产、容器和 systemd 部署应显式设置 `RUNTIME_DIR` 或 `LOG_DIR` 指向持久卷路径，例如 `/app/runtime` 或 `/var/lib/quantagent/runtime`。
+
+当前非目标：
+
+- 不写数据库，不替代未来 append-only `audit_logs`。
+- 不接入 OpenTelemetry、APM SDK 或外部日志平台。
+- 不记录 request/response body、完整 headers、cookie、token、password、secret、session 或数据库连接串。
 
 ### 测试
 
@@ -100,7 +163,7 @@ Compose 不注入 `HOST` 或 `PORT`，避免宿主机 shell 变量覆盖 API 配
 
 为了保留 dotenv 优先级，Compose 不为 API 服务提供 `APP_ENV`、`DATABASE_URL`、`RUNTIME_DIR`、`LOG_LEVEL` 回退注入。首次启动前应创建 `apps/api/.env`，并把容器侧 `DATABASE_URL` 配成 `db:5432`、`RUNTIME_DIR` 配成 `/app/runtime`。
 
-`./apps/api:/app/apps/api` 挂载主要用于让容器内可见 API dotenv 覆盖文件；`./runtime:/app/runtime` 挂载前请确认宿主机 `runtime/` 目录已存在，避免 Docker 创建 root-owned 空目录影响后续写入。
+`api` service 会通过 `PYTHONPATH=/app/apps/api/src:/app/packages/core/src:/app/packages/plugin-sdk/src` 优先加载挂载源码，避免本地 Compose 仍使用镜像内旧 wheel；`./apps/api:/app/apps/api`、`./packages/core:/app/packages/core` 和 `./packages/plugin-sdk:/app/packages/plugin-sdk` 因此用于本地开发源码覆盖。`./runtime:/app/runtime` 挂载前请确认宿主机 `runtime/` 目录已存在，避免 Docker 创建 root-owned 空目录影响后续写入。
 
 如果修改了 `POSTGRES_DB`、`POSTGRES_USER` 或 `POSTGRES_PASSWORD`，需要同步调整 `apps/api/.env*` 中给 API 容器使用的 `DATABASE_URL` 和根 `.env` 中给迁移服务使用的 `MIGRATION_DATABASE_URL`。
 
@@ -151,7 +214,7 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 ### 基本约定
 
 - 默认会返回统一的 `code/data/msg/error` 响应信封。
-- 请求与错误响应都会携带 `X-Request-ID`。
+- 请求与错误响应都会携带 `X-Request-ID` 和 `X-Trace-ID`。
 - `APP_ENV=production` 时不会加载 `/api/v1/debug/*` 路由。
 - HTTP 传输层基础能力放在 `src/quantagent/api/http/`。
 - API 私有 Cookie Session 鉴权放在 `src/quantagent/api/auth/`。
@@ -199,8 +262,21 @@ curl -i http://127.0.0.1:8000/api/v1/ready
 
 - `APP_ENV`：选择 API 运行环境，并决定是否追加读取 `apps/api/.env.<APP_ENV>` 和 `apps/api/.env.<APP_ENV>.local`。
 - `DATABASE_URL`：API 数据库连接串；容器内应指向 `db:5432`，宿主机直跑通常指向 `localhost:15432`。
-- `RUNTIME_DIR`：API 运行时目录，容器内通常为 `/app/runtime`，宿主机直跑通常为 `./runtime`。
+- `RUNTIME_DIR`：API 运行时目录；缺失或为空时默认探测到仓库根 `runtime`，显式非空相对路径仍按 cwd 解析，容器内通常显式设为 `/app/runtime`。
 - `LOG_LEVEL`：应用日志级别，例如 `DEBUG`、`INFO`、`WARNING`、`ERROR`。
+- `LOG_DIR`：结构化文件日志根目录；未设置时默认解析为 `RUNTIME_DIR/logs/api`，并在启动时固定为绝对路径。
+- `LOG_INSTANCE_ID`：文件命名中的实例标识；未设置时回退到主机名。
+- `LOG_ROTATE_MAX_BYTES`：单个活跃日志文件的大小轮转阈值，默认 `20971520`。
+- `LOG_QUEUE_MAX_SIZE`：结构化日志内存队列大小，默认 `10000`。
+- `LOG_ACCESS_DROP_WHEN_FULL`：队列满时是否优先丢弃 access 记录，默认 `true`。
+- `LOG_ACCESS_RETENTION_DAYS`：access stream 保留天数，默认 `3`。
+- `LOG_APP_RETENTION_DAYS`：app stream 保留天数，默认 `14`。
+- `LOG_ERROR_RETENTION_DAYS`：error stream 保留天数，默认 `30`。
+- `LOG_SECURITY_RETENTION_DAYS`：security stream 保留天数，默认 `30`。
+- `LOG_AUDIT_RETENTION_DAYS`：audit stream 保留天数，默认 `90`。
+- `LOG_MAINTENANCE_MIN_AGE_SECONDS`：maintenance 认定“关闭文件”的最小安全窗口，默认 `300`。
+- `LOG_MAX_TOTAL_BYTES`：日志目录总大小阈值；达到后优先降级 access。
+- `LOG_MIN_FREE_BYTES`：磁盘剩余空间阈值；低于后优先降级 access。
 - `API_HOST`：直跑 API 时的监听地址，默认 `127.0.0.1`；兼容读取历史变量名 `HOST`。Compose 中不注入该变量，容器内由启动命令监听 `0.0.0.0`。
 - `API_PORT`：直跑 API 时的监听端口，默认 `8000`；兼容读取历史变量名 `PORT`。在根目录 Compose 中，该变量只表示宿主机发布端口，容器内监听端口固定为 `8000`。
 - `API_V1_PREFIX`：API v1 路由前缀，默认 `/api/v1`。

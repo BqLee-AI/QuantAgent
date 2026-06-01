@@ -4,7 +4,6 @@
 - [x] 1.2 在 PR 说明中明确：本 PR 只定义行业包 `source_bindings` 的 manifest/template 目录与样例约定，不实现插件代码、runtime、持久化或调度逻辑。
 - [ ] 1.3 等维护者在 OpenSpec-only PR #229 下明确评论“没问题”或批准后，再进入任何行业包样例或实现代码 PR。
   - 当前状态：截至 2026-06-01，PR #229 仍未获得维护者明确评论“没问题”或批准；当前实现 PR #234 必须标记为 `blocked-on-#229` / `do-not-merge-until-approved`，不能把该 gate 视为已完成。
-
 ## 2. Manifest 与模板目录约定
 
 - [x] 2.1 固定行业包 `plugin.yaml` 中 `source_bindings` 条目的最小字段：`source_plugin_id`、`required`、`config_template`。

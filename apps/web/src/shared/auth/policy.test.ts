@@ -41,11 +41,9 @@ describe('capability policy', () => {
     expect(listVisibleNavItems(capabilities).map((item) => item.to)).toEqual([
       '/',
       '/events',
-      '/runtime',
       '/approvals',
-      '/skills',
-      '/tools',
-      '/industries',
+      '/runtime',
+      '/settings',
     ])
   })
 

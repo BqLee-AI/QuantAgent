@@ -20,6 +20,9 @@ from quantagent.api.auth.actor import (
 )
 from quantagent.api.config.settings import Settings
 from quantagent.api.http.errors import UnauthorizedError
+from quantagent.api.observability import events
+from quantagent.api.observability.context import set_actor_context
+from quantagent.api.observability.logging import log_security_event
 
 
 SESSION_V1 = 1
@@ -447,17 +450,27 @@ def resolve_auth_state(request: Request) -> AuthState:
     app_settings: Settings = request.app.state.settings
 
     if not app_settings.AUTH_ENABLED:
-        return AuthState(actor=development_bypass_actor(), session=None)
+        actor = development_bypass_actor()
+        set_actor_context(actor_type=actor.actor_type, actor_id=actor.actor_id)
+        return AuthState(actor=actor, session=None)
 
     raw_session = request.cookies.get(app_settings.AUTH_COOKIE_NAME)
     if not raw_session:
+        log_security_event(request, event=events.AUTH_UNAUTHORIZED, failure_type="missing_session")
         raise UnauthorizedError()
 
-    session = _parse_session(
-        _deserialize_session(raw_session, app_settings.AUTH_SESSION_SECRET or ""),
-        app_settings.AUTH_SESSION_SECRET or "",
-    )
-    return AuthState(actor=_current_actor_from_session(session), session=session)
+    try:
+        session = _parse_session(
+            _deserialize_session(raw_session, app_settings.AUTH_SESSION_SECRET or ""),
+            app_settings.AUTH_SESSION_SECRET or "",
+        )
+        actor = _current_actor_from_session(session)
+    except UnauthorizedError:
+        log_security_event(request, event=events.AUTH_UNAUTHORIZED, failure_type="invalid_session")
+        raise
+
+    set_actor_context(actor_type=actor.actor_type, actor_id=actor.actor_id)
+    return AuthState(actor=actor, session=session)
 
 
 def resolve_current_actor(request: Request) -> CurrentActor:

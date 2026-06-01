@@ -3,23 +3,22 @@ import type { PropsWithChildren } from 'react'
 import { listVisibleNavItems, useAuth } from '../../shared/auth'
 
 const routeLabels = new Map<string, string>([
-  ['events', '事件'],
-  ['audit', '审计时间线'],
-  ['runtime', '运行态'],
-  ['models', '模型'],
+  ['agents', 'Agent Runs'],
   ['approvals', '审批'],
-  ['approval-link', '一次性授权'],
+  ['audit', '审计时间线'],
+  ['events', '事件'],
+  ['models', '模型'],
+  ['plugin-config-form', '插件配置表单'],
   ['plugins', '插件'],
-  ['skills', '技能'],
-  ['tools', '工具'],
-  ['industries', '行业包'],
+  ['runtime', '运行态'],
   ['settings', '设置'],
   ['debug', '调试工作台'],
   ['page-states', '页面状态'],
   ['runtime-config', '运行时配置'],
   ['error-fallback', '错误兜底'],
   ['route-playground', '路由实验场'],
-  ['plugin-config-form', '插件配置表单'],
+  ['tools', 'Tool Invocations'],
+  ['approval-link', '一次性授权'],
   ['throw', '触发错误'],
 ])
 
@@ -125,6 +124,30 @@ function getBreadcrumbs(pathname: string) {
       { label: '仪表盘', path: '/' },
       { label: '审批', path: '/approvals' },
       { label: '审批详情', path: pathname },
+    ]
+  }
+
+  if (pathname.startsWith('/runtime/agents/')) {
+    return [
+      { label: '仪表盘', path: '/' },
+      { label: '运行态', path: '/runtime' },
+      { label: 'Agent Run 详情', path: pathname },
+    ]
+  }
+
+  if (pathname.startsWith('/runtime/tools/')) {
+    return [
+      { label: '仪表盘', path: '/' },
+      { label: '运行态', path: '/runtime' },
+      { label: 'Tool Invocation 详情', path: pathname },
+    ]
+  }
+
+  if (pathname.startsWith('/plugins/')) {
+    return [
+      { label: '仪表盘', path: '/' },
+      { label: '插件', path: '/plugins' },
+      { label: '插件详情', path: pathname },
     ]
   }
 

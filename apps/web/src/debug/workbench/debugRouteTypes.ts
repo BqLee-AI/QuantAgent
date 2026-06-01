@@ -6,9 +6,7 @@ export type DebugPageRouteKey =
   | 'runtime'
   | 'approvals'
   | 'plugins'
-  | 'skills'
-  | 'tools'
-  | 'industries'
+  | 'models'
   | 'settings'
 
 export type DebugPageStatesSearch = {

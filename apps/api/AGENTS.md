@@ -92,6 +92,7 @@ apps/api/
 
 - 所有请求都应保留或生成 `X-Request-ID`，响应头和错误体中的 request id 必须一致。
 - 不要在 middleware、异常处理器或日志中记录完整敏感载荷。
+- 结构化文件日志的 shutdown drain、listener stop 和维护清理必须保守处理：只压缩、删除或 retention 清理已确认关闭的日志文件；关闭超时或 writer 状态不确定时跳过关闭补偿清理，并记录降级事件。
 
 ### 配置
 
@@ -116,6 +117,7 @@ apps/api/
 - 按 `apps/api/README.md` 中的本地验证命令执行最小验证：`cd apps/api && uv run python -m unittest discover -s src`。
 - 当前未定义额外 lint/type/format 命令；后续引入 ruff、mypy、pytest 或其他验证入口时，同步更新本节和 `apps/api/README.md`。
 - 改动 Docker、迁移或数据库连接路径时，从仓库根目录验证对应 compose/migration 流程。
+- 改动 API Docker 构建链路时，需要从仓库根目录验证 `docker compose build api` 或等价构建命令，并确认 build context 覆盖 API 运行所需的 workspace 依赖。
 - 完成后说明改了哪些文件，以及实际跑过哪些验证；如果因为环境缺失无法验证，要明确说明缺口。
 
 ## 文档维护

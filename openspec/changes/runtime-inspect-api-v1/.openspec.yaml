@@ -1,0 +1,5 @@
+schema: spec-driven
+change_id: runtime-inspect-api-v1
+title: 定义 Runtime Inspect V1 只读 API 契约
+status: draft
+created: 2026-06-01

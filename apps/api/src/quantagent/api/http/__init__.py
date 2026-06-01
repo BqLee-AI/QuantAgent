@@ -12,8 +12,11 @@ from quantagent.api.http.middleware import (
     REQUEST_ID_HEADER,
     REQUEST_ID_MAX_LENGTH,
     REQUEST_ID_PATTERN,
+    TRACE_ID_HEADER,
     RequestIdMiddleware,
+    RequestContextMiddleware,
     generate_request_id,
+    get_trace_id,
     get_request_id,
     normalize_request_id,
 )
@@ -30,12 +33,14 @@ __all__ = [
     "REQUEST_ID_HEADER",
     "REQUEST_ID_MAX_LENGTH",
     "REQUEST_ID_PATTERN",
+    "TRACE_ID_HEADER",
+    "RequestContextMiddleware",
     "RequestIdMiddleware",
     "ServiceUnavailableError",
     "UnauthorizedError",
     "generate_request_id",
+    "get_trace_id",
     "get_request_id",
     "normalize_request_id",
     "register_exception_handlers",
 ]
-

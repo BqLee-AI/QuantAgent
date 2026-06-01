@@ -4,7 +4,7 @@ import {
 } from '@heroui/react'
 
 import type { HealthAlert } from '../mock-data'
-import { LinkButton } from './LinkButton'
+import { LinkButton } from '@/shared/ui'
 
 export function HealthCard({ alert }: { alert: HealthAlert }) {
   return (
@@ -17,7 +17,12 @@ export function HealthCard({ alert }: { alert: HealthAlert }) {
         <p className="m-0 text-body-sm text-muted">{alert.summary}</p>
         <p className="m-0 text-body-sm text-muted">{alert.traceHint}</p>
       </div>
-      <div className="p-4 pt-0">
+      <div className="flex flex-wrap gap-2 p-4 pt-0">
+        {alert.relatedRunId ? (
+          <LinkButton to="/runtime/agents/$runId" params={{ runId: alert.relatedRunId }}>
+            查看关联运行
+          </LinkButton>
+        ) : null}
         <LinkButton to="/runtime" variant="outline">
           进入运行态
         </LinkButton>
