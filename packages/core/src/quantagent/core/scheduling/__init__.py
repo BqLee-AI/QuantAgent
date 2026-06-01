@@ -18,6 +18,11 @@ from quantagent.core.scheduling.api_models import (
 from quantagent.core.scheduling.binding_models import CreateSourceBindingInput, SourceBindingRecord, SourceBindingStatus
 from quantagent.core.scheduling.binding_service import SourceBindingService
 from quantagent.core.scheduling.clock import FrozenSchedulingClock, SchedulingClock, SystemSchedulingClock
+from quantagent.core.scheduling.loop_service import (
+    SchedulerLoopTickResult,
+    SourceBindingLoopRunResult,
+    SourceBindingSchedulerLoopService,
+)
 from quantagent.core.scheduling.models import (
     IntervalSchedulePolicy,
     PluginRunRecord,
@@ -44,6 +49,7 @@ __all__ = [
     "PluginSchedulingService",
     "PluginTriggerRequest",
     "PluginTriggerType",
+    "SchedulerLoopTickResult",
     "SchedulingActionNotFoundError",
     "SchedulingActionStateError",
     "SchedulingQueryNotFoundError",
@@ -63,5 +69,7 @@ __all__ = [
     "SourceBindingStateActionAccepted",
     "SourceBindingSummaryView",
     "SourceBindingStatus",
+    "SourceBindingLoopRunResult",
+    "SourceBindingSchedulerLoopService",
     "SystemSchedulingClock",
 ]

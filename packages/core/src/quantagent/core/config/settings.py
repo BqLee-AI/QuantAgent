@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     EVENT_BUS_KAFKA_CLIENT_ID: str = "quantagent-local"
     EVENT_BUS_KAFKA_DEFAULT_GROUP_ID: str = "quantagent-worker"
     EVENT_BUS_TOPIC_PREFIX: str = ""
+    SCHEDULER_POLL_INTERVAL_SECONDS: float = 5.0
+    SCHEDULER_DUE_LIMIT: int = 100
+    SCHEDULER_RUN_TIMEOUT_MS: int | None = 30000
 
     @field_validator("RUNTIME_DIR", mode="before")
     @classmethod
