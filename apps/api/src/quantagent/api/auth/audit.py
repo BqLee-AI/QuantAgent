@@ -7,7 +7,6 @@ from fastapi import Request
 from quantagent.api.auth.actor import CurrentActor
 from quantagent.api.http.middleware import get_request_id
 from quantagent.api.observability import events
-from quantagent.api.observability.context import get_trace_id_from_context
 from quantagent.api.observability.logging import log_audit_event
 
 
@@ -43,5 +42,4 @@ def build_actor_audit_context(request: Request, actor: CurrentActor) -> ActorAud
         path=context.request_path,
         method=context.request_method,
     )
-    _ = get_trace_id_from_context()
     return context

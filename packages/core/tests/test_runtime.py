@@ -300,6 +300,21 @@ class PluginRuntimeServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first.result.output["origin"], "first")
         self.assertEqual(second.result.output["origin"], "second")
         self.assertNotIn("plugin", sys.modules)
+        self.assertFalse(any(module_name.startswith("_quantagent_plugin_") for module_name in sys.modules))
+
+    async def test_plugin_path_entrypoint_does_not_leak_synthetic_modules(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plugin_dir = Path(tmpdir) / "plugin"
+            self._write_plugin_module(plugin_dir, origin="leak-check")
+
+            invocation = await PluginRuntimeService().invoke(
+                self._record(entrypoint="plugin:plugin", path=plugin_dir),
+                capability="source.fetch",
+                request_id="req-leak",
+            )
+
+        self.assertTrue(invocation.ok)
+        self.assertFalse(any(module_name.startswith("_quantagent_plugin_") for module_name in sys.modules))
 
     async def test_plugin_path_entrypoint_does_not_depend_on_current_working_directory(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

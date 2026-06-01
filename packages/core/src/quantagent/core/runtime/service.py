@@ -219,13 +219,12 @@ class PluginRuntimeService:
             )
 
         module = importlib.util.module_from_spec(spec)
-        # dataclasses/typing 会按 __module__ 回查 sys.modules；先注册再执行，避免隔离加载的插件在 Python 3.14 下失效。
+        # dataclasses/typing 会按 __module__ 回查 sys.modules；执行期间注册，完成后清理，避免频繁 invoke 泄漏 synthetic module。
         sys.modules[synthetic_name] = module
         try:
             spec.loader.exec_module(module)
-        except Exception:
+        finally:
             sys.modules.pop(synthetic_name, None)
-            raise
         return module
 
 

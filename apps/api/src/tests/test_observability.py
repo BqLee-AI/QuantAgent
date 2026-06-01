@@ -104,6 +104,23 @@ class ObservabilityTestCase(unittest.TestCase):
         self.assertEqual(record.msg, "db=%s")
         self.assertEqual(record.args, ("postgresql://user:pass@db/app",))
 
+    def test_jsonl_formatter_serializes_non_json_structured_values_safely(self) -> None:
+        formatter = JsonLinesFormatter(service="api", env="test", instance_id="api-test", pid=123)
+        record = logging.LogRecord("quantagent.api", logging.ERROR, __file__, 10, "failed", (), None)
+        record.structured_data = {
+            "details": {
+                "path": Path("/tmp/runtime/object"),
+                "items": {1, 2},
+                "database_url": "postgresql://user:pass@db/app",
+            }
+        }
+
+        payload = json.loads(formatter.format(record))
+
+        self.assertEqual(payload["details"]["path"], "/tmp/runtime/object")
+        self.assertEqual(sorted(payload["details"]["items"]), [1, 2])
+        self.assertEqual(payload["details"]["database_url"], "[REDACTED]")
+
     def test_jsonl_formatter_supports_uvicorn_ipv6_percent_style_message(self) -> None:
         formatter = JsonLinesFormatter(service="api", env="test", instance_id="api-test", pid=123)
         record = logging.LogRecord(
