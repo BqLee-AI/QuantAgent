@@ -867,22 +867,21 @@ class ApiAppTestCase(unittest.TestCase):
 
         self.assertEqual(settings.LOG_LEVEL, "ERROR")
 
-    def test_discord_allowlist_dotenv_accepts_empty_and_comma_separated_values(self) -> None:
+    def test_notification_ingress_plugin_config_accepts_json_object_string(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)
             api_dir = workspace / "apps/api"
             api_dir.mkdir(parents=True)
             (api_dir / ".env").write_text(
-                "DISCORD_INTERACTIONS_GUILD_ALLOWLIST=guild-1,guild-2\n"
-                "DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST=\n",
+                'NOTIFICATION_INGRESS_PLUGIN_CONFIG={"public_key":"abc","guild_allowlist":["guild-1","guild-2"]}\n',
                 encoding="utf-8",
             )
             env_files = _build_env_file_paths(cwd=workspace, source_repo_root=workspace, source_api_app_dir=api_dir)
 
             settings = Settings(_env_file=tuple(str(path) for path in env_files))
 
-        self.assertEqual(settings.DISCORD_INTERACTIONS_GUILD_ALLOWLIST, ("guild-1", "guild-2"))
-        self.assertEqual(settings.DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST, ())
+        self.assertEqual(settings.NOTIFICATION_INGRESS_PLUGIN_CONFIG["public_key"], "abc")
+        self.assertEqual(settings.NOTIFICATION_INGRESS_PLUGIN_CONFIG["guild_allowlist"], ["guild-1", "guild-2"])
 
     def test_app_env_selects_only_matching_api_environment_dotenv(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1038,7 +1037,7 @@ class ApiAppTestCase(unittest.TestCase):
                     ("GET", "/health"),
                     ("GET", "/ready"),
                     ("GET", "/version"),
-                    ("POST", "/integrations/discord/interactions"),
+                    ("POST", "/integrations/notifications/ingress"),
                     ("POST", "/auth/login"),
                 }
             ),
@@ -1061,7 +1060,7 @@ class ApiAppTestCase(unittest.TestCase):
                     ("GET", "/health"),
                     ("GET", "/ready"),
                     ("GET", "/version"),
-                    ("POST", "/integrations/discord/interactions"),
+                    ("POST", "/integrations/notifications/ingress"),
                     ("POST", "/auth/login"),
                 }
             ),
@@ -1076,7 +1075,7 @@ class ApiAppTestCase(unittest.TestCase):
                     ("GET", f"{custom_prefix}/health"),
                     ("GET", f"{custom_prefix}/ready"),
                     ("GET", f"{custom_prefix}/version"),
-                    ("POST", f"{custom_prefix}/integrations/discord/interactions"),
+                    ("POST", f"{custom_prefix}/integrations/notifications/ingress"),
                     ("POST", f"{custom_prefix}/auth/login"),
                 }
             ),
@@ -2073,23 +2072,24 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(by_key["economy_text"]["primary_model"]["id"], text_model_id)
         self.assertEqual(by_key["economy_text"]["fallback_model"]["id"], vision_model_id)
 
-    def test_discord_interactions_endpoint_returns_not_found_when_disabled(self) -> None:
-        response = self.client.post("/api/v1/integrations/discord/interactions", content=b"{}")
+    def test_notification_ingress_endpoint_returns_not_found_when_disabled(self) -> None:
+        response = self.client.post("/api/v1/integrations/notifications/ingress", content=b"{}")
         body = response.json()
 
         self.assertEqual(response.status_code, 404)
         self.assertEqual(body["error"]["code"], "NOT_FOUND")
 
-    def test_discord_interactions_endpoint_rejects_invalid_signature(self) -> None:
+    def test_notification_ingress_endpoint_rejects_invalid_signature(self) -> None:
         app = create_app(
             self._settings(
-                DISCORD_INTERACTIONS_ENABLED=True,
-                DISCORD_INTERACTIONS_PUBLIC_KEY="a" * 64,
+                NOTIFICATION_INGRESS_ENABLED=True,
+                NOTIFICATION_INGRESS_PLUGIN_ID="quantagent.official.notification.discord",
+                NOTIFICATION_INGRESS_PLUGIN_CONFIG={"public_key": "a" * 64},
             )
         )
         with TestClient(app) as client:
             response = client.post(
-                "/api/v1/integrations/discord/interactions",
+                "/api/v1/integrations/notifications/ingress",
                 content=b'{"type":1}',
                 headers={
                     "X-Signature-Timestamp": str(int(time.time())),
@@ -2099,15 +2099,16 @@ class ApiAppTestCase(unittest.TestCase):
 
         body = response.json()
         self.assertEqual(response.status_code, 401)
-        self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+        self.assertEqual(body["error"], "SIGNATURE_INVALID")
 
-    def test_discord_interactions_endpoint_returns_pong_for_valid_ping(self) -> None:
+    def test_notification_ingress_endpoint_returns_pong_for_valid_ping(self) -> None:
         signing_key = SigningKey.generate()
         public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
         app = create_app(
             self._settings(
-                DISCORD_INTERACTIONS_ENABLED=True,
-                DISCORD_INTERACTIONS_PUBLIC_KEY=public_key,
+                NOTIFICATION_INGRESS_ENABLED=True,
+                NOTIFICATION_INGRESS_PLUGIN_ID="quantagent.official.notification.discord",
+                NOTIFICATION_INGRESS_PLUGIN_CONFIG={"public_key": public_key},
             )
         )
         body = b'{"type":1}'
@@ -2116,7 +2117,7 @@ class ApiAppTestCase(unittest.TestCase):
 
         with TestClient(app) as client:
             response = client.post(
-                "/api/v1/integrations/discord/interactions",
+                "/api/v1/integrations/notifications/ingress",
                 content=body,
                 headers={
                     "X-Signature-Timestamp": timestamp,
@@ -2129,14 +2130,17 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.headers["X-Request-ID"], "req-discord-ping")
         self.assertEqual(response.json(), {"type": 1})
 
-    def test_discord_interactions_endpoint_returns_response_for_valid_command(self) -> None:
+    def test_notification_ingress_endpoint_returns_response_for_valid_command(self) -> None:
         signing_key = SigningKey.generate()
         public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
         app = create_app(
             self._settings(
-                DISCORD_INTERACTIONS_ENABLED=True,
-                DISCORD_INTERACTIONS_PUBLIC_KEY=public_key,
-                DISCORD_INTERACTIONS_RESPONSE_TEXT="API route received interaction.",
+                NOTIFICATION_INGRESS_ENABLED=True,
+                NOTIFICATION_INGRESS_PLUGIN_ID="quantagent.official.notification.discord",
+                NOTIFICATION_INGRESS_PLUGIN_CONFIG={
+                    "public_key": public_key,
+                    "response_text": "API route received interaction.",
+                },
             )
         )
         body = json.dumps(
@@ -2158,7 +2162,7 @@ class ApiAppTestCase(unittest.TestCase):
 
         with TestClient(app) as client:
             response = client.post(
-                "/api/v1/integrations/discord/interactions",
+                "/api/v1/integrations/notifications/ingress",
                 content=body,
                 headers={
                     "X-Signature-Timestamp": timestamp,
@@ -2178,14 +2182,17 @@ class ApiAppTestCase(unittest.TestCase):
             },
         )
 
-    def test_discord_interactions_endpoint_enforces_api_allowlists(self) -> None:
+    def test_notification_ingress_endpoint_enforces_plugin_allowlists(self) -> None:
         signing_key = SigningKey.generate()
         public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
         app = create_app(
             self._settings(
-                DISCORD_INTERACTIONS_ENABLED=True,
-                DISCORD_INTERACTIONS_PUBLIC_KEY=public_key,
-                DISCORD_INTERACTIONS_GUILD_ALLOWLIST=("guild-allowed",),
+                NOTIFICATION_INGRESS_ENABLED=True,
+                NOTIFICATION_INGRESS_PLUGIN_ID="quantagent.official.notification.discord",
+                NOTIFICATION_INGRESS_PLUGIN_CONFIG={
+                    "public_key": public_key,
+                    "guild_allowlist": ["guild-allowed"],
+                },
             )
         )
         body = json.dumps(
@@ -2207,7 +2214,7 @@ class ApiAppTestCase(unittest.TestCase):
 
         with TestClient(app) as client:
             response = client.post(
-                "/api/v1/integrations/discord/interactions",
+                "/api/v1/integrations/notifications/ingress",
                 content=body,
                 headers={
                     "X-Signature-Timestamp": timestamp,
@@ -2216,16 +2223,16 @@ class ApiAppTestCase(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()["error"]["code"], "BAD_REQUEST")
-        self.assertEqual(response.json()["error"]["details"]["code"], "GUILD_NOT_ALLOWED")
+        self.assertEqual(response.json()["error"], "GUILD_NOT_ALLOWED")
 
-    def test_discord_interactions_endpoint_returns_bad_request_for_unsupported_type(self) -> None:
+    def test_notification_ingress_endpoint_returns_bad_request_for_unsupported_type(self) -> None:
         signing_key = SigningKey.generate()
         public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
         app = create_app(
             self._settings(
-                DISCORD_INTERACTIONS_ENABLED=True,
-                DISCORD_INTERACTIONS_PUBLIC_KEY=public_key,
+                NOTIFICATION_INGRESS_ENABLED=True,
+                NOTIFICATION_INGRESS_PLUGIN_ID="quantagent.official.notification.discord",
+                NOTIFICATION_INGRESS_PLUGIN_CONFIG={"public_key": public_key},
             )
         )
         body = b'{"type":3}'
@@ -2234,7 +2241,7 @@ class ApiAppTestCase(unittest.TestCase):
 
         with TestClient(app) as client:
             response = client.post(
-                "/api/v1/integrations/discord/interactions",
+                "/api/v1/integrations/notifications/ingress",
                 content=body,
                 headers={
                     "X-Signature-Timestamp": timestamp,
@@ -2245,13 +2252,14 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["error"], "UNSUPPORTED_EVENT_TYPE")
 
-    def test_discord_interactions_endpoint_rejects_stale_timestamp(self) -> None:
+    def test_notification_ingress_endpoint_rejects_stale_timestamp(self) -> None:
         signing_key = SigningKey.generate()
         public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
         app = create_app(
             self._settings(
-                DISCORD_INTERACTIONS_ENABLED=True,
-                DISCORD_INTERACTIONS_PUBLIC_KEY=public_key,
+                NOTIFICATION_INGRESS_ENABLED=True,
+                NOTIFICATION_INGRESS_PLUGIN_ID="quantagent.official.notification.discord",
+                NOTIFICATION_INGRESS_PLUGIN_CONFIG={"public_key": public_key},
             )
         )
         body = b'{"type":1}'
@@ -2260,7 +2268,7 @@ class ApiAppTestCase(unittest.TestCase):
 
         with TestClient(app) as client:
             response = client.post(
-                "/api/v1/integrations/discord/interactions",
+                "/api/v1/integrations/notifications/ingress",
                 content=body,
                 headers={
                     "X-Signature-Timestamp": timestamp,
@@ -2269,13 +2277,14 @@ class ApiAppTestCase(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 401)
-        self.assertEqual(response.json()["error"]["code"], "UNAUTHORIZED")
+        self.assertEqual(response.json()["error"], "TIMESTAMP_INVALID")
 
-    def test_discord_interactions_endpoint_rejects_plugin_without_receive_handler(self) -> None:
+    def test_notification_ingress_endpoint_rejects_plugin_without_receive_handler(self) -> None:
         app = create_app(
             self._settings(
-                DISCORD_INTERACTIONS_ENABLED=True,
-                DISCORD_INTERACTIONS_PUBLIC_KEY="a" * 64,
+                NOTIFICATION_INGRESS_ENABLED=True,
+                NOTIFICATION_INGRESS_PLUGIN_ID="quantagent.official.notification.discord",
+                NOTIFICATION_INGRESS_PLUGIN_CONFIG={"public_key": "a" * 64},
             )
         )
 
@@ -2286,11 +2295,11 @@ class ApiAppTestCase(unittest.TestCase):
                     manifest=SimpleNamespace(capabilities=("notification.receive",)),
                 )
             )
-            with patch("quantagent.api.services.discord_interactions.PluginRuntimeService.invoke") as invoke:
+            with patch("quantagent.api.services.notification_ingress.PluginRuntimeService.invoke") as invoke:
                 invoke.return_value = SimpleNamespace(error=SimpleNamespace(code="boom"), result=None)
                 with TestClient(app) as client:
                     response = client.post(
-                        "/api/v1/integrations/discord/interactions",
+                        "/api/v1/integrations/notifications/ingress",
                         content=b'{"type":1}',
                         headers={
                             "X-Signature-Timestamp": str(int(time.time())),
@@ -2301,11 +2310,12 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["error"]["code"], "SERVICE_UNAVAILABLE")
 
-    def test_discord_interactions_endpoint_rejects_plugin_without_receive_capability(self) -> None:
+    def test_notification_ingress_endpoint_rejects_plugin_without_receive_capability(self) -> None:
         app = create_app(
             self._settings(
-                DISCORD_INTERACTIONS_ENABLED=True,
-                DISCORD_INTERACTIONS_PUBLIC_KEY="a" * 64,
+                NOTIFICATION_INGRESS_ENABLED=True,
+                NOTIFICATION_INGRESS_PLUGIN_ID="quantagent.official.notification.discord",
+                NOTIFICATION_INGRESS_PLUGIN_CONFIG={"public_key": "a" * 64},
             )
         )
         invalid_record = PluginRecord(
@@ -2318,7 +2328,7 @@ class ApiAppTestCase(unittest.TestCase):
                 name="Discord Notification",
                 type=PluginType.NOTIFICATION,
                 version="0.1.0",
-                entrypoint="discord_plugin:plugin",
+                entrypoint="src.discord_plugin:plugin",
                 capabilities=("notification.send",),
                 config_schema="config.schema.json",
             ),
@@ -2328,7 +2338,7 @@ class ApiAppTestCase(unittest.TestCase):
             get_registry.return_value = SimpleNamespace(get_plugin=lambda _plugin_id: invalid_record)
             with TestClient(app) as client:
                 response = client.post(
-                    "/api/v1/integrations/discord/interactions",
+                    "/api/v1/integrations/notifications/ingress",
                     content=b'{"type":1}',
                     headers={
                         "X-Signature-Timestamp": str(int(time.time())),
@@ -2339,13 +2349,14 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["error"]["code"], "SERVICE_UNAVAILABLE")
 
-    def test_discord_interactions_endpoint_rejects_plugin_with_invalid_result_shape(self) -> None:
+    def test_notification_ingress_endpoint_rejects_plugin_with_invalid_result_shape(self) -> None:
         signing_key = SigningKey.generate()
         public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
         app = create_app(
             self._settings(
-                DISCORD_INTERACTIONS_ENABLED=True,
-                DISCORD_INTERACTIONS_PUBLIC_KEY=public_key,
+                NOTIFICATION_INGRESS_ENABLED=True,
+                NOTIFICATION_INGRESS_PLUGIN_ID="quantagent.official.notification.discord",
+                NOTIFICATION_INGRESS_PLUGIN_CONFIG={"public_key": public_key},
             )
         )
 
@@ -2360,14 +2371,14 @@ class ApiAppTestCase(unittest.TestCase):
                     manifest=SimpleNamespace(capabilities=("notification.receive",)),
                 )
             )
-            with patch("quantagent.api.services.discord_interactions.PluginRuntimeService.invoke") as invoke:
+            with patch("quantagent.api.services.notification_ingress.PluginRuntimeService.invoke") as invoke:
                 invoke.return_value = SimpleNamespace(
                     error=None,
                     result=SimpleNamespace(output={"accepted": True, "code": "RECEIVED", "message": "ok", "response": "not-a-mapping", "item": {"interaction_id": "1", "source_id": "s", "text": "t"}, "retryable": False}),
                 )
                 with TestClient(app) as client:
                     response = client.post(
-                        "/api/v1/integrations/discord/interactions",
+                        "/api/v1/integrations/notifications/ingress",
                         content=body,
                         headers={
                             "X-Signature-Timestamp": timestamp,
@@ -2378,13 +2389,14 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["error"]["code"], "SERVICE_UNAVAILABLE")
 
-    def test_discord_interactions_endpoint_rejects_success_result_without_response_payload(self) -> None:
+    def test_notification_ingress_endpoint_rejects_success_result_without_response_payload(self) -> None:
         signing_key = SigningKey.generate()
         public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
         app = create_app(
             self._settings(
-                DISCORD_INTERACTIONS_ENABLED=True,
-                DISCORD_INTERACTIONS_PUBLIC_KEY=public_key,
+                NOTIFICATION_INGRESS_ENABLED=True,
+                NOTIFICATION_INGRESS_PLUGIN_ID="quantagent.official.notification.discord",
+                NOTIFICATION_INGRESS_PLUGIN_CONFIG={"public_key": public_key},
             )
         )
 
@@ -2399,14 +2411,14 @@ class ApiAppTestCase(unittest.TestCase):
                     manifest=SimpleNamespace(capabilities=("notification.receive",)),
                 )
             )
-            with patch("quantagent.api.services.discord_interactions.PluginRuntimeService.invoke") as invoke:
+            with patch("quantagent.api.services.notification_ingress.PluginRuntimeService.invoke") as invoke:
                 invoke.return_value = SimpleNamespace(
                     error=None,
                     result=SimpleNamespace(output={"accepted": True, "code": "RECEIVED", "message": "ok", "response": None, "item": {"interaction_id": "1", "source_id": "s", "text": "t"}, "retryable": False}),
                 )
                 with TestClient(app) as client:
                     response = client.post(
-                        "/api/v1/integrations/discord/interactions",
+                        "/api/v1/integrations/notifications/ingress",
                         content=body,
                         headers={
                             "X-Signature-Timestamp": timestamp,
@@ -2417,13 +2429,14 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.json()["error"]["code"], "SERVICE_UNAVAILABLE")
 
-    def test_discord_interactions_endpoint_rejects_command_result_without_item(self) -> None:
+    def test_notification_ingress_endpoint_allows_response_only_success_without_item(self) -> None:
         signing_key = SigningKey.generate()
         public_key = signing_key.verify_key.encode(encoder=HexEncoder).decode("utf-8")
         app = create_app(
             self._settings(
-                DISCORD_INTERACTIONS_ENABLED=True,
-                DISCORD_INTERACTIONS_PUBLIC_KEY=public_key,
+                NOTIFICATION_INGRESS_ENABLED=True,
+                NOTIFICATION_INGRESS_PLUGIN_ID="quantagent.official.notification.discord",
+                NOTIFICATION_INGRESS_PLUGIN_CONFIG={"public_key": public_key},
             )
         )
 
@@ -2451,14 +2464,15 @@ class ApiAppTestCase(unittest.TestCase):
                     manifest=SimpleNamespace(capabilities=("notification.receive",)),
                 )
             )
-            with patch("quantagent.api.services.discord_interactions.PluginRuntimeService.invoke") as invoke:
+            with patch("quantagent.api.services.notification_ingress.PluginRuntimeService.invoke") as invoke:
                 invoke.return_value = SimpleNamespace(
                     error=None,
                     result=SimpleNamespace(
                         output={
                             "accepted": True,
-                            "code": "RECEIVED",
+                            "code": "CHALLENGE",
                             "message": "ok",
+                            "response_status_code": 200,
                             "response": {"type": 4, "data": {"content": "ok", "flags": 64}},
                             "item": None,
                             "retryable": False,
@@ -2467,7 +2481,7 @@ class ApiAppTestCase(unittest.TestCase):
                 )
                 with TestClient(app) as client:
                     response = client.post(
-                        "/api/v1/integrations/discord/interactions",
+                        "/api/v1/integrations/notifications/ingress",
                         content=body,
                         headers={
                             "X-Signature-Timestamp": timestamp,
@@ -2475,8 +2489,8 @@ class ApiAppTestCase(unittest.TestCase):
                         },
                     )
 
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(response.json()["error"]["code"], "SERVICE_UNAVAILABLE")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"type": 4, "data": {"content": "ok", "flags": 64}})
 
     def test_missing_capability_is_forbidden(self) -> None:
         reduced_capabilities = frozenset({"plugin.configure"})
@@ -2525,7 +2539,7 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertTrue({"code", "data", "msg", "error"}.issubset(ready_schema["properties"].keys()))
 
         self.assertIn("auth", schema["paths"]["/api/v1/auth/login"]["post"]["tags"])
-        self.assertIn("integrations", schema["paths"]["/api/v1/integrations/discord/interactions"]["post"]["tags"])
+        self.assertIn("integrations", schema["paths"]["/api/v1/integrations/notifications/ingress"]["post"]["tags"])
         self.assertIn("auth", schema["paths"]["/api/v1/auth/logout"]["post"]["tags"])
         self.assertIn("auth", schema["paths"]["/api/v1/auth/refresh"]["post"]["tags"])
         self.assertIn("auth", schema["paths"]["/api/v1/me"]["get"]["tags"])
@@ -2796,13 +2810,9 @@ class ApiAppTestCase(unittest.TestCase):
             "AUTH_ENABLED": True,
             "AUTH_ADMIN_PASSWORD": "test-admin-password",
             "AUTH_SESSION_SECRET": "test-session-secret-0123456789abcdef",
-            "DISCORD_INTERACTIONS_ENABLED": False,
-            "DISCORD_INTERACTIONS_PLUGIN_ID": "quantagent.official.notification.discord",
-            "DISCORD_INTERACTIONS_PUBLIC_KEY": None,
-            "DISCORD_INTERACTIONS_RESPONSE_TEXT": "QuantAgent received your Discord interaction.",
-            "DISCORD_INTERACTIONS_TIMESTAMP_TOLERANCE_SECONDS": 300,
-            "DISCORD_INTERACTIONS_GUILD_ALLOWLIST": (),
-            "DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST": (),
+            "NOTIFICATION_INGRESS_ENABLED": False,
+            "NOTIFICATION_INGRESS_PLUGIN_ID": "",
+            "NOTIFICATION_INGRESS_PLUGIN_CONFIG": {},
         }
         baseline.update(overrides)
         return Settings(**baseline)

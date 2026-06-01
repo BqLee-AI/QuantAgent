@@ -13,6 +13,7 @@ from nacl.exceptions import BadSignatureError
 from nacl.signing import VerifyKey
 from quantagent.plugin_sdk import (
     BasePlugin,
+    NotificationReceiveInput,
     NotificationReceiveItem,
     NotificationReceiveResult,
     NotificationSendInput,
@@ -96,15 +97,16 @@ class DiscordPlugin(BasePlugin):
         return PluginInvokeResult(output=output.to_mapping())
 
     def _invoke_receive(self, request: PluginInvokeRequest) -> PluginInvokeResult:
-        config = _merge_effective_config(self.context.config, request.input.get("config_override"))
-        headers = _mapping(request.input.get("headers"))
-        body_text = request.input.get("body")
-        if not isinstance(body_text, str):
+        payload = NotificationReceiveInput.from_mapping(request.input)
+        config = _merge_effective_config(self.context.config, payload.config_override)
+        headers = _mapping(payload.headers)
+        body_text = payload.body_text
+        if body_text is None:
             raise PluginRuntimeError(
                 code="PLUGIN_INVALID_INPUT",
-                message="notification.receive body must be a utf-8 string.",
+                message="notification.receive body_text must be a utf-8 string.",
                 stage="invoke",
-                details={"field": "body"},
+                details={"field": "body_text"},
             )
         result = self.receive_request(
             config,
@@ -116,6 +118,7 @@ class DiscordPlugin(BasePlugin):
             accepted=result.accepted,
             code=result.code,
             message=result.message,
+            response_status_code=result.response_status_code,
             response=result.response,
             item=result.item,
             retryable=result.retryable,
@@ -235,6 +238,8 @@ class DiscordPlugin(BasePlugin):
                 accepted=False,
                 code="MISSING_CONFIG",
                 message="Missing Discord interactions public key configuration.",
+                response_status_code=503,
+                response={"error": "MISSING_CONFIG", "message": "Missing Discord interactions public key configuration."},
             )
 
         signature = _get_header(headers, SIGNATURE_HEADER)
@@ -244,6 +249,8 @@ class DiscordPlugin(BasePlugin):
                 accepted=False,
                 code="SIGNATURE_MISSING",
                 message="Missing required Discord signature headers.",
+                response_status_code=401,
+                response={"error": "SIGNATURE_MISSING", "message": "Missing required Discord signature headers."},
             )
 
         timestamp_seconds = _parse_timestamp(timestamp)
@@ -252,6 +259,8 @@ class DiscordPlugin(BasePlugin):
                 accepted=False,
                 code="TIMESTAMP_INVALID",
                 message="Discord signature timestamp is invalid.",
+                response_status_code=401,
+                response={"error": "TIMESTAMP_INVALID", "message": "Discord signature timestamp is invalid."},
             )
 
         if not is_timestamp_fresh(
@@ -262,6 +271,11 @@ class DiscordPlugin(BasePlugin):
                 accepted=False,
                 code="TIMESTAMP_INVALID",
                 message="Discord signature timestamp is outside the accepted tolerance window.",
+                response_status_code=401,
+                response={
+                    "error": "TIMESTAMP_INVALID",
+                    "message": "Discord signature timestamp is outside the accepted tolerance window.",
+                },
             )
 
         if not verify_discord_request(body, timestamp, signature, public_key):
@@ -269,6 +283,8 @@ class DiscordPlugin(BasePlugin):
                 accepted=False,
                 code="SIGNATURE_INVALID",
                 message="Discord request signature validation failed.",
+                response_status_code=401,
+                response={"error": "SIGNATURE_INVALID", "message": "Discord request signature validation failed."},
             )
 
         try:
@@ -278,6 +294,8 @@ class DiscordPlugin(BasePlugin):
                 accepted=False,
                 code="PAYLOAD_INVALID",
                 message="Request body is not valid JSON.",
+                response_status_code=400,
+                response={"error": "PAYLOAD_INVALID", "message": "Request body is not valid JSON."},
             )
 
         if not isinstance(payload, dict):
@@ -285,6 +303,8 @@ class DiscordPlugin(BasePlugin):
                 accepted=False,
                 code="PAYLOAD_INVALID",
                 message="Request payload must be a JSON object.",
+                response_status_code=400,
+                response={"error": "PAYLOAD_INVALID", "message": "Request payload must be a JSON object."},
             )
 
         payload_type = payload.get("type")
@@ -293,6 +313,7 @@ class DiscordPlugin(BasePlugin):
                 accepted=True,
                 code="PING",
                 message="Discord interaction ping acknowledged.",
+                response_status_code=200,
                 response=PONG_RESPONSE,
             )
 
@@ -301,6 +322,8 @@ class DiscordPlugin(BasePlugin):
                 accepted=False,
                 code="UNSUPPORTED_EVENT_TYPE",
                 message="Only application command interactions are supported in v1.",
+                response_status_code=400,
+                response={"error": "UNSUPPORTED_EVENT_TYPE", "message": "Only application command interactions are supported in v1."},
             )
 
         guild_id = _optional_str(payload.get("guild_id"))
@@ -310,6 +333,8 @@ class DiscordPlugin(BasePlugin):
                 accepted=False,
                 code="GUILD_NOT_ALLOWED",
                 message="Interaction guild is not allowed by this plugin config.",
+                response_status_code=400,
+                response={"error": "GUILD_NOT_ALLOWED", "message": "Interaction guild is not allowed by this plugin config."},
             )
 
         channel_id = _optional_str(payload.get("channel_id"))
@@ -319,6 +344,8 @@ class DiscordPlugin(BasePlugin):
                 accepted=False,
                 code="CHANNEL_NOT_ALLOWED",
                 message="Interaction channel is not allowed by this plugin config.",
+                response_status_code=400,
+                response={"error": "CHANNEL_NOT_ALLOWED", "message": "Interaction channel is not allowed by this plugin config."},
             )
 
         text = _extract_text(payload)
@@ -327,6 +354,11 @@ class DiscordPlugin(BasePlugin):
                 accepted=False,
                 code="PAYLOAD_UNSUPPORTED",
                 message="Interaction payload does not include a supported text option.",
+                response_status_code=400,
+                response={
+                    "error": "PAYLOAD_UNSUPPORTED",
+                    "message": "Interaction payload does not include a supported text option.",
+                },
             )
 
         item = NotificationReceiveItem(
@@ -356,6 +388,7 @@ class DiscordPlugin(BasePlugin):
             accepted=True,
             code="RECEIVED",
             message="Discord interaction webhook payload received.",
+            response_status_code=200,
             response=response,
             item=item,
         )
@@ -504,7 +537,7 @@ def _required_identifier(value: Any, *, fallback: str) -> str:
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:
-    if isinstance(value, dict):
+    if isinstance(value, Mapping):
         return value
     return {}
 

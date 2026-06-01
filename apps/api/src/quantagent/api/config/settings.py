@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
+import json
 from pathlib import Path
 import socket
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from dotenv import dotenv_values
 from pydantic import AliasChoices, Field, field_validator, model_validator
@@ -188,42 +189,37 @@ class Settings(CoreSettings):
     AUTH_SESSION_ABSOLUTE_LIFETIME_SECONDS: int = Field(default=86400, ge=300)
     AUTH_SESSION_REFRESH_THRESHOLD_SECONDS: int = Field(default=1800, ge=0)
     AUTH_CSRF_HEADER_NAME: str = "X-CSRF-Token"
-    DISCORD_INTERACTIONS_ENABLED: bool = False
-    DISCORD_INTERACTIONS_PLUGIN_ID: str = "quantagent.official.notification.discord"
-    DISCORD_INTERACTIONS_PUBLIC_KEY: str | None = None
-    DISCORD_INTERACTIONS_RESPONSE_TEXT: str = "QuantAgent received your Discord interaction."
-    DISCORD_INTERACTIONS_TIMESTAMP_TOLERANCE_SECONDS: int = Field(default=300, ge=0)
-    DISCORD_INTERACTIONS_GUILD_ALLOWLIST: Annotated[tuple[str, ...], NoDecode] = ()
-    DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST: Annotated[tuple[str, ...], NoDecode] = ()
+    NOTIFICATION_INGRESS_ENABLED: bool = False
+    NOTIFICATION_INGRESS_PLUGIN_ID: str = ""
+    NOTIFICATION_INGRESS_PLUGIN_CONFIG: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("AUTH_COOKIE_SAME_SITE", mode="before")
     @classmethod
     def normalize_same_site(cls, value: str | None) -> str:
         return str(value or "lax").lower()
 
-    @field_validator("DISCORD_INTERACTIONS_GUILD_ALLOWLIST", "DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST", mode="before")
+    @field_validator("NOTIFICATION_INGRESS_PLUGIN_CONFIG", mode="before")
     @classmethod
-    def normalize_discord_allowlist(
+    def normalize_notification_ingress_plugin_config(
         cls,
         value: object,
-    ) -> tuple[str, ...]:
+    ) -> dict[str, Any]:
         if value is None:
-            return ()
+            return {}
         if isinstance(value, str):
-            items = value.split(",")
-        elif isinstance(value, (list, tuple, set, frozenset)):
-            items = list(value)
-        else:
-            raise ValueError("Discord allowlist settings must be a comma-separated string or list of strings")
-
-        normalized: list[str] = []
-        for item in items:
-            if not isinstance(item, str):
-                raise ValueError("Discord allowlist settings must contain only strings")
-            stripped = item.strip()
-            if stripped:
-                normalized.append(stripped)
-        return tuple(normalized)
+            stripped = value.strip()
+            if not stripped:
+                return {}
+            try:
+                parsed = json.loads(stripped)
+            except json.JSONDecodeError as exc:
+                raise ValueError("NOTIFICATION_INGRESS_PLUGIN_CONFIG must be valid JSON object text") from exc
+            if not isinstance(parsed, dict):
+                raise ValueError("NOTIFICATION_INGRESS_PLUGIN_CONFIG must decode to a JSON object")
+            return parsed
+        if isinstance(value, dict):
+            return dict(value)
+        raise ValueError("NOTIFICATION_INGRESS_PLUGIN_CONFIG must be a JSON object or JSON object string")
 
     @field_validator("LOG_DIR", mode="before")
     @classmethod
@@ -247,10 +243,7 @@ class Settings(CoreSettings):
             self.AUTH_ADMIN_PASSWORD = self.AUTH_ADMIN_PASSWORD.strip()
         if self.AUTH_SESSION_SECRET is not None:
             self.AUTH_SESSION_SECRET = self.AUTH_SESSION_SECRET.strip()
-        if self.DISCORD_INTERACTIONS_PUBLIC_KEY is not None:
-            self.DISCORD_INTERACTIONS_PUBLIC_KEY = self.DISCORD_INTERACTIONS_PUBLIC_KEY.strip() or None
-        self.DISCORD_INTERACTIONS_PLUGIN_ID = self.DISCORD_INTERACTIONS_PLUGIN_ID.strip()
-        self.DISCORD_INTERACTIONS_RESPONSE_TEXT = self.DISCORD_INTERACTIONS_RESPONSE_TEXT.strip()
+        self.NOTIFICATION_INGRESS_PLUGIN_ID = self.NOTIFICATION_INGRESS_PLUGIN_ID.strip()
 
         if self.AUTH_COOKIE_SECURE is None:
             self.AUTH_COOKIE_SECURE = self.is_production
@@ -302,11 +295,8 @@ class Settings(CoreSettings):
                 or self.AUTH_SESSION_SECRET.lower() in _WEAK_SESSION_SECRET_VALUES
             ):
                 raise ValueError("AUTH_SESSION_SECRET must be at least 32 characters and not look like a development placeholder outside development/test/local")
-        if self.DISCORD_INTERACTIONS_ENABLED:
-            if not self.DISCORD_INTERACTIONS_PLUGIN_ID:
-                raise ValueError("DISCORD_INTERACTIONS_PLUGIN_ID is required when Discord interactions are enabled")
-            if not self.DISCORD_INTERACTIONS_PUBLIC_KEY:
-                raise ValueError("DISCORD_INTERACTIONS_PUBLIC_KEY is required when Discord interactions are enabled")
+        if self.NOTIFICATION_INGRESS_ENABLED and not self.NOTIFICATION_INGRESS_PLUGIN_ID:
+            raise ValueError("NOTIFICATION_INGRESS_PLUGIN_ID is required when notification ingress is enabled")
 
         resolved_log_dir = self.LOG_DIR or (self.RUNTIME_DIR / "logs" / "api")
         # 在启动期固定绝对日志目录，避免后续 cwd 变化导致日志漂移到不同位置。

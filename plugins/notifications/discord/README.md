@@ -58,28 +58,31 @@ uv run python -m unittest discover -s plugins/notifications/discord/tests -p 'te
 
 ## 真实 Discord 接入方式
 
-当前版本需要通过 `apps/api` 提供的 HTTP ingress 才能接收真实 Discord 回调：
+当前版本需要通过 `apps/api` 提供的通用 notification ingress HTTP host 才能接收真实 Discord 回调：
 
-- `POST /api/v1/integrations/discord/interactions`
+- `POST /api/v1/integrations/notifications/ingress`
 - API 层负责读取原始 body、请求头和运行时配置。
 - API 层通过 Registry + manifest `entrypoint` 加载本插件对象。
 - 本插件负责 webhook 发送、官方 `Ed25519` 验签、`PING`/command 解析和 interaction response 生成。
+- API host 不理解 Discord 私有结果码；HTTP 状态码与响应体都由插件返回。
 
 本地最小配置示例：
 
 ```bash
-DISCORD_INTERACTIONS_ENABLED=true
-DISCORD_INTERACTIONS_PLUGIN_ID=quantagent.official.notification.discord
-DISCORD_INTERACTIONS_PUBLIC_KEY=<discord-application-public-key>
-DISCORD_INTERACTIONS_RESPONSE_TEXT=QuantAgent received your Discord interaction.
-DISCORD_INTERACTIONS_GUILD_ALLOWLIST=guild-1,guild-2
-DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST=channel-1,channel-2
+NOTIFICATION_INGRESS_ENABLED=true
+NOTIFICATION_INGRESS_PLUGIN_ID=quantagent.official.notification.discord
+NOTIFICATION_INGRESS_PLUGIN_CONFIG='{
+  "public_key": "<discord-application-public-key>",
+  "response_text": "QuantAgent received your Discord interaction.",
+  "guild_allowlist": ["guild-1", "guild-2"],
+  "channel_allowlist": ["channel-1", "channel-2"]
+}'
 ```
 
 然后在 Discord Developer Portal 中把 Interactions Endpoint URL 指向：
 
 ```text
-https://<your-public-host>/api/v1/integrations/discord/interactions
+https://<your-public-host>/api/v1/integrations/notifications/ingress
 ```
 
 ## 真实 Smoke Test
@@ -93,7 +96,7 @@ uv run python plugins/notifications/discord/smoke_send.py
 接收补充验证：
 
 ```bash
-DISCORD_INTERACTIONS_TEST_PRIVATE_KEY=<hex-private-key> \
+NOTIFICATION_INGRESS_TEST_PRIVATE_KEY=<hex-private-key> \
 uv run python plugins/notifications/discord/smoke_receive.py
 ```
 
@@ -102,6 +105,7 @@ uv run python plugins/notifications/discord/smoke_receive.py
 - 这两条都属于补充验证，不是默认阻塞验收项。
 - 不要把真实 webhook URL、公钥私钥、bot token 或私有 guild/channel 信息提交到仓库。
 - 发送 smoke 会产生真实 Discord 消息；接收 smoke 会向配置的 ingress endpoint 发送真实 HTTP 请求。
+- Notification Plugin Ingress V1 的模型需要兼容 webhook、websocket、polling；当前 Discord 样板只实现 webhook 所需的基础 HTTP host 接入。
 
 ## 非目标
 

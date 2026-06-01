@@ -10,7 +10,7 @@ from quantagent.api.auth import get_current_actor
 from quantagent.api.config.settings import Settings
 from quantagent.api.routers.v1.auth import protected_router as auth_protected_router
 from quantagent.api.routers.v1.auth import public_router as auth_public_router
-from quantagent.api.routers.v1.discord_interactions import router as discord_interactions_router
+from quantagent.api.routers.v1.notification_ingress import router as notification_ingress_router
 from quantagent.api.routers.v1.health import router as health_router
 from quantagent.api.routers.v1.models import router as models_router
 from quantagent.api.routers.v1.plugins import router as plugins_router
@@ -37,7 +37,7 @@ STANDARD_API_V1_ROUTER_REGISTRATIONS = (
     ApiV1RouterRegistration(router=health_router, access="public"),
     ApiV1RouterRegistration(router=version_router, access="public"),
     ApiV1RouterRegistration(router=auth_public_router, access="public"),
-    ApiV1RouterRegistration(router=discord_interactions_router, access="public"),
+    ApiV1RouterRegistration(router=notification_ingress_router, access="public"),
     ApiV1RouterRegistration(router=auth_protected_router, access="protected"),
     ApiV1RouterRegistration(router=plugins_router, access="protected"),
     ApiV1RouterRegistration(router=wallet_router, access="protected"),

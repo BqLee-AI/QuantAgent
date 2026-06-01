@@ -10,7 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def _load_module():
-    module_path = Path(__file__).resolve().parent / "discord_plugin.py"
+    module_path = Path(__file__).resolve().parent / "src/discord_plugin.py"
     module_name = "discord_plugin_smoke_send"
     spec = importlib.util.spec_from_file_location(module_name, module_path)
     module = importlib.util.module_from_spec(spec)
