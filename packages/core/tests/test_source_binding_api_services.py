@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import json
 from datetime import UTC, datetime
 import unittest
 
@@ -125,6 +127,44 @@ class SourceBindingApiServicesTestCase(unittest.TestCase):
 
         self.assertEqual(len(page.items), 1)
         self.assertEqual(page.items[0].binding_id, "binding-api-001")
+
+    def test_query_service_rejects_invalid_cursor_encoding(self) -> None:
+        with self.assertRaisesRegex(ValueError, "invalid cursor"):
+            self.query_service.list_bindings(SourceBindingQuery(cursor="not-base64", limit=10))
+
+    def test_scheduler_run_repository_rejects_incomplete_cursor(self) -> None:
+        with self.assertRaisesRegex(ValueError, "scheduler run cursor missing created_at"):
+            self.run_repository.list_for_api(cursor={"run_id": "run-api-1"}, limit=10)
+
+    def test_scheduler_run_repository_rejects_invalid_cursor_timestamp(self) -> None:
+        with self.assertRaisesRegex(ValueError, "scheduler run cursor has invalid created_at"):
+            self.run_repository.list_for_api(cursor={"created_at": "bad-time", "run_id": "run-api-1"}, limit=10)
+
+    def test_source_binding_repository_rejects_incomplete_cursor(self) -> None:
+        with self.assertRaisesRegex(ValueError, "source binding cursor missing updated_at"):
+            self.binding_repository.list_for_api(cursor={"binding_id": "binding-api-001"}, limit=10)
+
+    def test_source_binding_repository_rejects_invalid_cursor_timestamp(self) -> None:
+        with self.assertRaisesRegex(ValueError, "source binding cursor has invalid updated_at"):
+            self.binding_repository.list_for_api(
+                cursor={"updated_at": "bad-time", "binding_id": "binding-api-001"},
+                limit=10,
+            )
+
+    def test_query_service_accepts_valid_cursor_payload(self) -> None:
+        encoded_cursor = base64.urlsafe_b64encode(
+            json.dumps(
+                {
+                    "updated_at": datetime(2026, 6, 1, 9, 0, tzinfo=UTC).isoformat(),
+                    "binding_id": "binding-api-001",
+                },
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode("utf-8")
+        ).decode("ascii")
+
+        page = self.query_service.list_bindings(SourceBindingQuery(cursor=encoded_cursor, limit=10))
+        self.assertEqual(page.items, ())
 
     def test_disabled_binding_rejects_actions(self) -> None:
         binding = self.binding_repository.get("binding-api-001")

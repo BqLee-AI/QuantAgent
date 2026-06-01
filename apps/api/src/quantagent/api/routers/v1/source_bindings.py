@@ -137,7 +137,13 @@ def list_source_binding_runs(
             items=[_run_summary_response(item) for item in page.items if isinstance(item, SchedulerRunSummaryView)],
             meta=RuntimeListMeta(
                 state="empty" if not page.items else "ready",
-                page=RuntimeInspectPageInfo(page=1, page_size=limit, returned=len(page.items)),
+                page=RuntimeInspectPageInfo(
+                    page=1,
+                    page_size=limit,
+                    returned=len(page.items),
+                    cursor=cursor,
+                    next_cursor=page.next_cursor,
+                ),
                 unavailable=None,
             ),
         )
@@ -389,6 +395,9 @@ def _log_binding_action(context, audit_ref: str, *, action: str, target_id: str,
         request_id=context.request_id,
         path=context.request_path,
         method=context.request_method,
+        audit_ref=audit_ref,
+        target_id=target_id,
+        result=result,
     )
 
 

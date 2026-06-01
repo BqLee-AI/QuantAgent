@@ -2144,6 +2144,8 @@ class ApiAppTestCase(unittest.TestCase):
         binding_runs_body = binding_runs_response.json()
         self.assertEqual(binding_runs_response.status_code, 200)
         self.assertEqual(binding_runs_body["data"]["meta"]["state"], "ready")
+        self.assertIsNone(binding_runs_body["data"]["meta"]["page"]["cursor"])
+        self.assertIsNone(binding_runs_body["data"]["meta"]["page"]["next_cursor"])
         self.assertEqual(binding_runs_body["data"]["items"][0]["binding_id"], "binding-api-001")
         self.assertEqual(binding_runs_body["data"]["items"][0]["run_id"], "run-api-001")
         self.assertEqual(binding_runs_body["data"]["items"][0]["plugin_id"], "quantagent.official.source.rss")
@@ -2152,11 +2154,139 @@ class ApiAppTestCase(unittest.TestCase):
             "PLUGIN_FAILED",
         )
 
-    def test_source_binding_actions_are_idempotent_and_run_now_is_accepted(self) -> None:
+    def test_source_binding_runs_meta_preserves_cursor_pagination(self) -> None:
         database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         database_file.close()
         self.addCleanup(lambda: os.unlink(database_file.name))
         settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            session = client.app.state.db_session_factory()
+            try:
+                session.add(
+                    SourceBindingORM(
+                        binding_id="binding-page-001",
+                        owner_type="industry",
+                        owner_id="semiconductor",
+                        source_plugin_id="quantagent.official.source.rss",
+                        effective_config_snapshot={"feed": "https://example.com/rss"},
+                        schedule_policy={"interval_seconds": 300},
+                        retry_policy={"max_attempts": 3},
+                        rate_limit_policy={"requests_per_minute": 10},
+                        status="active",
+                        created_by="issue-226",
+                        updated_by="issue-226",
+                    )
+                )
+                session.add(
+                    SchedulerRunORM(
+                        run_id="run-page-002",
+                        binding_id="binding-page-001",
+                        source_plugin_id="quantagent.official.source.rss",
+                        source_plugin_version=None,
+                        trigger_mode="manual",
+                        request_id="req-page-002",
+                        status="failed",
+                        created_at=datetime(2026, 6, 1, 9, 1, tzinfo=UTC),
+                        failure_code="PLUGIN_FAILED",
+                        failure_message="latest",
+                        failure_stage="invoke",
+                        retryable=False,
+                    )
+                )
+                session.add(
+                    SchedulerRunORM(
+                        run_id="run-page-001",
+                        binding_id="binding-page-001",
+                        source_plugin_id="quantagent.official.source.rss",
+                        source_plugin_version=None,
+                        trigger_mode="manual",
+                        request_id="req-page-001",
+                        status="failed",
+                        created_at=datetime(2026, 6, 1, 9, 0, tzinfo=UTC),
+                        failure_code="PLUGIN_FAILED",
+                        failure_message="older",
+                        failure_stage="invoke",
+                        retryable=False,
+                    )
+                )
+                session.commit()
+            finally:
+                session.close()
+
+            self._login_with_client(client, settings)
+            first_response = client.get(
+                "/api/v1/source-bindings/binding-page-001/scheduler-runs",
+                params={"limit": 1},
+            )
+            first_body = first_response.json()
+            next_cursor = first_body["data"]["meta"]["page"]["next_cursor"]
+            second_response = client.get(
+                "/api/v1/source-bindings/binding-page-001/scheduler-runs",
+                params={"limit": 1, "cursor": next_cursor},
+            )
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(first_body["data"]["meta"]["page"]["returned"], 1)
+        self.assertIsNotNone(next_cursor)
+        self.assertEqual(first_body["data"]["items"][0]["run_id"], "run-page-002")
+
+        second_body = second_response.json()
+        self.assertEqual(second_response.status_code, 200)
+        self.assertEqual(second_body["data"]["meta"]["page"]["cursor"], next_cursor)
+        self.assertIsNone(second_body["data"]["meta"]["page"]["next_cursor"])
+        self.assertEqual(second_body["data"]["meta"]["page"]["returned"], len(second_body["data"]["items"]))
+
+    def test_source_binding_runs_invalid_cursor_uses_bad_request_envelope(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            session = client.app.state.db_session_factory()
+            try:
+                session.add(
+                    SourceBindingORM(
+                        binding_id="binding-bad-cursor-001",
+                        owner_type="industry",
+                        owner_id="semiconductor",
+                        source_plugin_id="quantagent.official.source.rss",
+                        effective_config_snapshot={"feed": "https://example.com/rss"},
+                        schedule_policy={"interval_seconds": 300},
+                        retry_policy={"max_attempts": 3},
+                        rate_limit_policy={"requests_per_minute": 10},
+                        status="active",
+                        created_by="issue-226",
+                        updated_by="issue-226",
+                    )
+                )
+                session.commit()
+            finally:
+                session.close()
+            self._login_with_client(client, settings)
+            response = client.get(
+                "/api/v1/source-bindings/binding-bad-cursor-001/scheduler-runs",
+                params={"cursor": "not-base64"},
+            )
+
+        body = response.json()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(body["error"]["code"], "BAD_REQUEST")
+        self.assertEqual(body["error"]["details"]["reason"], "invalid cursor")
+
+    def test_source_binding_actions_are_idempotent_and_run_now_is_accepted(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(
+            DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}",
+            LOG_USE_MEMORY_SINK=True,
+        )
         app = create_app(settings)
 
         with TestClient(app) as client:
@@ -2200,6 +2330,11 @@ class ApiAppTestCase(unittest.TestCase):
                 headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
             )
 
+            audit_handler = next(
+                handler
+                for handler in logging.getLogger("quantagent.api").handlers
+                if isinstance(handler, InMemoryStructuredHandler)
+            )
             session = client.app.state.db_session_factory()
             try:
                 created_runs = session.query(SchedulerRunORM).filter(SchedulerRunORM.request_id == "req-run-now-api").all()
@@ -2224,6 +2359,22 @@ class ApiAppTestCase(unittest.TestCase):
         invalid_body = invalid_binding_response.json()
         self.assertEqual(invalid_binding_response.status_code, 404)
         self.assertEqual(invalid_body["error"]["code"], "NOT_FOUND")
+
+        audit_records = [json.loads(record) for record in audit_handler.records]
+        action_records = [
+            record
+            for record in audit_records
+            if record.get("event") == "audit.context.bound" and record.get("action", "").startswith("source-binding.")
+        ]
+        self.assertTrue(action_records)
+        self.assertTrue(
+            any(
+                record.get("audit_ref") == run_now_body["data"]["audit_ref"]
+                and record.get("target_id") == "binding-action-001"
+                and record.get("result") == "accepted"
+                for record in action_records
+            )
+        )
 
     def test_discord_interactions_endpoint_returns_not_found_when_disabled(self) -> None:
         response = self.client.post("/api/v1/integrations/discord/interactions", content=b"{}")
@@ -2786,6 +2937,11 @@ class ApiAppTestCase(unittest.TestCase):
 
         binding_runs_schema = self._resolve_response_schema(schema, "/api/v1/source-bindings/{binding_id}/scheduler-runs")
         self.assertTrue({"code", "data", "msg", "error"}.issubset(binding_runs_schema["properties"].keys()))
+        binding_runs_data_schema = self._resolve_schema_ref(schema, binding_runs_schema["properties"]["data"])
+        binding_runs_meta_schema = self._resolve_schema_ref(schema, binding_runs_data_schema["properties"]["meta"])
+        binding_runs_page_schema = self._resolve_schema_ref(schema, binding_runs_meta_schema["properties"]["page"])
+        self.assertIn("cursor", binding_runs_page_schema["properties"])
+        self.assertIn("next_cursor", binding_runs_page_schema["properties"])
 
         scheduler_run_schema = self._resolve_response_schema(schema, "/api/v1/scheduler-runs/{run_id}")
         self.assertTrue({"code", "data", "msg", "error"}.issubset(scheduler_run_schema["properties"].keys()))

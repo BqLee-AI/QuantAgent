@@ -107,8 +107,7 @@ class SchedulerRunRepository:
         if started_before is not None:
             statement = statement.where(SchedulerRunORM.started_at.is_not(None)).where(SchedulerRunORM.started_at <= started_before)
         if cursor is not None:
-            cursor_created_at = datetime.fromisoformat(cursor["created_at"])
-            cursor_run_id = cursor["run_id"]
+            cursor_created_at, cursor_run_id = _parse_scheduler_run_cursor(cursor)
             statement = statement.where(
                 or_(
                     SchedulerRunORM.created_at < cursor_created_at,
@@ -137,6 +136,24 @@ def _bounded_limit(limit: int) -> int:
     if limit <= 0:
         raise ValueError("limit must be greater than zero.")
     return min(limit, MAX_LIST_LIMIT)
+
+
+def _parse_scheduler_run_cursor(cursor: dict[str, str]) -> tuple[datetime, str]:
+    if not isinstance(cursor, dict):
+        raise ValueError("scheduler run cursor must be an object")
+    if "created_at" not in cursor:
+        raise ValueError("scheduler run cursor missing created_at")
+    if "run_id" not in cursor:
+        raise ValueError("scheduler run cursor missing run_id")
+    created_at_raw = cursor["created_at"]
+    run_id = cursor["run_id"]
+    try:
+        created_at = datetime.fromisoformat(created_at_raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("scheduler run cursor has invalid created_at") from exc
+    if not run_id:
+        raise ValueError("scheduler run cursor has invalid run_id")
+    return created_at, run_id
 
 
 def _bounded_offset(offset: int) -> int:

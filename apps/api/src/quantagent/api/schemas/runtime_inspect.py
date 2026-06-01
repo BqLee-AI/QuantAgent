@@ -22,6 +22,8 @@ class RuntimeInspectPageInfo(BaseModel):
     page: int = Field(ge=1)
     page_size: int = Field(ge=1, le=100)
     returned: int = Field(ge=0)
+    cursor: str | None = None
+    next_cursor: str | None = None
 
 
 class RuntimeInspectUnavailable(BaseModel):

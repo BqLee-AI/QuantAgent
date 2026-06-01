@@ -322,17 +322,38 @@ def log_security_event(
     log_structured(logging.WARNING, event=event, stream="security", **payload)
 
 
-def log_audit_event(*, event: str, action: str, actor_id: str, actor_type: str, request_id: str, path: str, method: str) -> None:
+def log_audit_event(
+    *,
+    event: str,
+    action: str,
+    actor_id: str,
+    actor_type: str,
+    request_id: str,
+    path: str,
+    method: str,
+    audit_ref: str | None = None,
+    target_id: str | None = None,
+    result: str | None = None,
+) -> None:
+    payload: dict[str, Any] = {
+        "action": action,
+        "actor_id": actor_id,
+        "actor_type": actor_type,
+        "request_id": request_id,
+        "path": path,
+        "method": method,
+    }
+    if audit_ref is not None:
+        payload["audit_ref"] = audit_ref
+    if target_id is not None:
+        payload["target_id"] = target_id
+    if result is not None:
+        payload["result"] = result
     log_structured(
         logging.INFO,
         event=event,
         stream="audit",
-        action=action,
-        actor_id=actor_id,
-        actor_type=actor_type,
-        request_id=request_id,
-        path=path,
-        method=method,
+        **payload,
     )
 
 

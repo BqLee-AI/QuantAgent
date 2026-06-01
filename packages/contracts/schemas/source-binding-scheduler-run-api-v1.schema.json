@@ -4,8 +4,8 @@
   "title": "SourceBinding API V1 With Runtime Inspect SchedulerRun Relation",
   "type": "object",
   "additionalProperties": false,
-  "properties": {
-    "sourceBindingSummary": {
+  "$defs": {
+    "SourceBindingSummary": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -35,7 +35,7 @@
         }
       }
     },
-    "bindingActionAccepted": {
+    "BindingActionAccepted": {
       "type": "object",
       "additionalProperties": false,
       "required": ["binding_id", "accepted_at", "audit_ref"],
@@ -49,5 +49,9 @@
         "audit_ref": { "type": "string", "minLength": 1 }
       }
     }
+  },
+  "properties": {
+    "sourceBindingSummary": { "$ref": "#/$defs/SourceBindingSummary" },
+    "bindingActionAccepted": { "$ref": "#/$defs/BindingActionAccepted" }
   }
 }

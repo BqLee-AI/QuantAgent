@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import binascii
 import base64
 import json
 from datetime import UTC, datetime
@@ -344,8 +345,11 @@ def _encode_cursor(payload: dict[str, str] | None) -> str | None:
 def _decode_cursor(cursor: str | None) -> dict[str, str] | None:
     if cursor is None:
         return None
-    raw = base64.urlsafe_b64decode(cursor.encode("ascii"))
-    payload = json.loads(raw.decode("utf-8"))
+    try:
+        raw = base64.urlsafe_b64decode(cursor.encode("ascii"))
+        payload = json.loads(raw.decode("utf-8"))
+    except (binascii.Error, UnicodeEncodeError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+        raise ValueError("invalid cursor") from exc
     if not isinstance(payload, dict):
         raise ValueError("cursor must decode to an object")
     return {str(key): str(value) for key, value in payload.items()}

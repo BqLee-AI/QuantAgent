@@ -90,8 +90,7 @@ class SourceBindingRepository:
         if status is not None:
             statement = statement.where(SourceBindingORM.status == status)
         if cursor is not None:
-            cursor_updated_at = datetime.fromisoformat(cursor["updated_at"])
-            cursor_binding_id = cursor["binding_id"]
+            cursor_updated_at, cursor_binding_id = _parse_source_binding_cursor(cursor)
             statement = statement.where(
                 or_(
                     SourceBindingORM.updated_at < cursor_updated_at,
@@ -120,3 +119,21 @@ def _bounded_limit(limit: int) -> int:
     if limit <= 0:
         raise ValueError("limit must be greater than zero.")
     return min(limit, MAX_LIST_LIMIT)
+
+
+def _parse_source_binding_cursor(cursor: dict[str, str]) -> tuple[datetime, str]:
+    if not isinstance(cursor, dict):
+        raise ValueError("source binding cursor must be an object")
+    if "updated_at" not in cursor:
+        raise ValueError("source binding cursor missing updated_at")
+    if "binding_id" not in cursor:
+        raise ValueError("source binding cursor missing binding_id")
+    updated_at_raw = cursor["updated_at"]
+    binding_id = cursor["binding_id"]
+    try:
+        updated_at = datetime.fromisoformat(updated_at_raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("source binding cursor has invalid updated_at") from exc
+    if not binding_id:
+        raise ValueError("source binding cursor has invalid binding_id")
+    return updated_at, binding_id
