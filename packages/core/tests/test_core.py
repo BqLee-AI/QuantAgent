@@ -10,6 +10,7 @@ from quantagent.core.config.settings import Settings, _SOURCE_REPO_ROOT
 from quantagent.core.db.base import Base
 from quantagent.core.db import wallet_models
 from quantagent.core.db.session import create_session_factory, create_sync_engine, require_database_url, settings as db_settings
+from quantagent.core.model_config import orm as model_config_orm
 
 
 class CorePackageTestCase(unittest.TestCase):
@@ -59,6 +60,7 @@ class CorePackageTestCase(unittest.TestCase):
         self.assertIn("wallet_ledger_entries", Base.metadata.tables)
         self.assertIn("model_providers", Base.metadata.tables)
         self.assertIn("model_invocations", Base.metadata.tables)
+        self.assertIn("ix_model_invocations_created_at", {index.name for index in Base.metadata.tables["model_invocations"].indexes})
 
     def test_database_url_is_required_for_default_engine(self) -> None:
         with patch.object(db_settings, "DATABASE_URL", None):
