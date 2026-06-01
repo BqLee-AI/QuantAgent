@@ -60,6 +60,8 @@ def create_scheduler_runtime() -> SchedulerRuntime:
     event_bus_settings.validate()
     event_bus = build_event_bus_runtime(event_bus_settings)
 
+    # 默认路径 plugins/ + runtime/plugins/，依赖 Dockerfile COPY plugins ./plugins
+    # 和 docker-compose.yml 的 runtime volume 挂载
     registry = build_plugin_registry()
     runtime_service = PluginRuntimeService()
     repository = InMemoryPluginRunRepository()

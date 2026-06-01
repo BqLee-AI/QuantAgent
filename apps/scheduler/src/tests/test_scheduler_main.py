@@ -7,7 +7,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from quantagent.core.events import EventBusError, InMemoryEventBus
 from quantagent.core.events.kafka import KafkaEventBusConsumer, KafkaEventBusPublisher
-from quantagent.core.scheduling import PluginRunStatus
+from quantagent.core.scheduling import (
+    PluginRunStatus,
+    PluginTriggerRequest,
+    PluginTriggerType,
+)
 from quantagent.scheduler.main import SchedulerRuntime, _run, create_scheduler_runtime
 
 
@@ -41,7 +45,8 @@ class TestMemoryBackend(unittest.TestCase):
         self.assertIsInstance(runtime, SchedulerRuntime)
         self.assertEqual(runtime.event_bus.backend, "memory")
         self.assertIsInstance(runtime.event_bus.publisher, InMemoryEventBus)
-        # scheduling 实例持有 publisher
+        # composition root 组装验证：确认 publisher 被注入到 scheduling 内部
+        # 访问 _source_publisher 是刻意的——验证依赖注入正确，不是测试实现细节
         self.assertIs(runtime.scheduling._source_publisher.publisher, runtime.event_bus.publisher)
 
     def test_memory_backend_scheduling_holds_publisher(self) -> None:
@@ -65,11 +70,11 @@ class TestMemoryBackend(unittest.TestCase):
             bus = runtime.event_bus.publisher
             await bus.subscribe(topics=["source.event.captured"], group_id="test", handler=MagicMock(handle=AsyncMock(side_effect=_handler)))
 
-            request = __import__("quantagent.core.scheduling", fromlist=["PluginTriggerRequest"]).PluginTriggerRequest(
+            request = PluginTriggerRequest(
                 plugin_id="quantagent.official.source.placeholder",
                 capability="source.fetch",
                 request_id="req_test",
-                trigger_type=__import__("quantagent.core.scheduling", fromlist=["PluginTriggerType"]).PluginTriggerType.MANUAL,
+                trigger_type=PluginTriggerType.MANUAL,
             )
             record = await runtime.scheduling.trigger(request)
             self.assertEqual(record.status, PluginRunStatus.SUCCEEDED)
@@ -114,11 +119,11 @@ class TestKafkaBackend(unittest.TestCase):
             runtime = create_scheduler_runtime()
 
         async def _test():
-            request = __import__("quantagent.core.scheduling", fromlist=["PluginTriggerRequest"]).PluginTriggerRequest(
+            request = PluginTriggerRequest(
                 plugin_id="quantagent.official.source.placeholder",
                 capability="source.fetch",
                 request_id="req_kafka_test",
-                trigger_type=__import__("quantagent.core.scheduling", fromlist=["PluginTriggerType"]).PluginTriggerType.MANUAL,
+                trigger_type=PluginTriggerType.MANUAL,
             )
             record = await runtime.scheduling.trigger(request)
             self.assertEqual(record.status, PluginRunStatus.SUCCEEDED)
@@ -152,11 +157,11 @@ class TestEdgeCases(unittest.TestCase):
             runtime = create_scheduler_runtime()
 
         async def _test():
-            request = __import__("quantagent.core.scheduling", fromlist=["PluginTriggerRequest"]).PluginTriggerRequest(
+            request = PluginTriggerRequest(
                 plugin_id="nonexistent.plugin.id",
                 capability="source.fetch",
                 request_id="req_notfound",
-                trigger_type=__import__("quantagent.core.scheduling", fromlist=["PluginTriggerType"]).PluginTriggerType.MANUAL,
+                trigger_type=PluginTriggerType.MANUAL,
             )
             record = await runtime.scheduling.trigger(request)
             self.assertEqual(record.status, PluginRunStatus.FAILED)
@@ -171,11 +176,11 @@ class TestEdgeCases(unittest.TestCase):
 
         async def _test():
             # 用不存在的插件触发失败
-            request = __import__("quantagent.core.scheduling", fromlist=["PluginTriggerRequest"]).PluginTriggerRequest(
+            request = PluginTriggerRequest(
                 plugin_id="nonexistent.plugin.id",
                 capability="source.fetch",
                 request_id="req_close_test",
-                trigger_type=__import__("quantagent.core.scheduling", fromlist=["PluginTriggerType"]).PluginTriggerType.MANUAL,
+                trigger_type=PluginTriggerType.MANUAL,
             )
             record = await runtime.scheduling.trigger(request)
             self.assertEqual(record.status, PluginRunStatus.FAILED)
@@ -220,11 +225,11 @@ class TestKafkaErrorHandling(unittest.TestCase):
             runtime = create_scheduler_runtime()
 
         async def _test():
-            request = __import__("quantagent.core.scheduling", fromlist=["PluginTriggerRequest"]).PluginTriggerRequest(
+            request = PluginTriggerRequest(
                 plugin_id="quantagent.official.source.placeholder",
                 capability="source.fetch",
                 request_id="req_publish_fail",
-                trigger_type=__import__("quantagent.core.scheduling", fromlist=["PluginTriggerType"]).PluginTriggerType.MANUAL,
+                trigger_type=PluginTriggerType.MANUAL,
             )
             record = await runtime.scheduling.trigger(request)
             # 调度成功，发布失败不影响状态
@@ -247,11 +252,11 @@ class TestKafkaErrorHandling(unittest.TestCase):
             runtime = create_scheduler_runtime()
 
         async def _test():
-            request = __import__("quantagent.core.scheduling", fromlist=["PluginTriggerRequest"]).PluginTriggerRequest(
+            request = PluginTriggerRequest(
                 plugin_id="quantagent.official.source.placeholder",
                 capability="source.fetch",
                 request_id="req_warn_log",
-                trigger_type=__import__("quantagent.core.scheduling", fromlist=["PluginTriggerType"]).PluginTriggerType.MANUAL,
+                trigger_type=PluginTriggerType.MANUAL,
             )
             with self.assertLogs("quantagent.core.scheduling.service", level="WARNING") as cm:
                 record = await runtime.scheduling.trigger(request)
@@ -276,11 +281,11 @@ class TestKafkaErrorHandling(unittest.TestCase):
 
         async def _test():
             # 先触发一次让 producer 初始化
-            request = __import__("quantagent.core.scheduling", fromlist=["PluginTriggerRequest"]).PluginTriggerRequest(
+            request = PluginTriggerRequest(
                 plugin_id="quantagent.official.source.placeholder",
                 capability="source.fetch",
                 request_id="req_close",
-                trigger_type=__import__("quantagent.core.scheduling", fromlist=["PluginTriggerType"]).PluginTriggerType.MANUAL,
+                trigger_type=PluginTriggerType.MANUAL,
             )
             await runtime.scheduling.trigger(request)
             # close 不抛异常
