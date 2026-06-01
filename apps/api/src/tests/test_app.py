@@ -1481,13 +1481,63 @@ class ApiAppTestCase(unittest.TestCase):
         )
 
         detail_response = self.client.get("/api/v1/plugins/quantagent.official.source.placeholder")
+        detail_body = detail_response.json()
         self.assertEqual(detail_response.status_code, 200)
-        self.assertEqual(detail_response.json()["data"]["id"], "quantagent.official.source.placeholder")
+        self.assertEqual(detail_body["data"]["overview"]["plugin_id"], "quantagent.official.source.placeholder")
+        self.assertEqual(detail_body["data"]["overview"]["type"], "source")
+        self.assertEqual(detail_body["data"]["config_summary"]["availability"]["state"], "not_configured")
+        self.assertEqual(detail_body["data"]["dependency_summary"]["availability"]["state"], "ready")
+        self.assertEqual(detail_body["data"]["health_summary"]["availability"]["state"], "not_collected")
+        self.assertEqual(
+            {item["action"] for item in detail_body["data"]["allowed_actions"]},
+            {"enable", "disable", "reload", "rescan", "uninstall"},
+        )
+        self.assertNotIn("plugins/sources/placeholder-source", str(detail_body))
+        self.assertNotIn("entrypoint", str(detail_body))
 
         schema_response = self.client.get("/api/v1/plugins/quantagent.official.source.placeholder/config-schema")
         schema_body = schema_response.json()
         self.assertEqual(schema_response.status_code, 200)
         self.assertEqual(schema_body["data"]["title"], "Demo Placeholder Source Plugin Config")
+
+    def test_plugin_detail_config_view_masks_secret_grade_fields(self) -> None:
+        self._login()
+
+        response = self.client.get("/api/v1/plugins/quantagent.official.notification.discord/config")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["data"]["availability"]["state"], "not_configured")
+        entries_by_key = {item["key"]: item for item in body["data"]["entries"]}
+        self.assertEqual(entries_by_key["webhook_secret_ref"]["display_mode"], "unset")
+        self.assertTrue(entries_by_key["webhook_secret_ref"]["is_sensitive"])
+        self.assertEqual(entries_by_key["public_key"]["display_mode"], "unset")
+        self.assertTrue(entries_by_key["public_key"]["is_sensitive"])
+        self.assertNotIn("Discord webhook URL", str(body))
+
+    def test_plugin_detail_section_visibility_uses_forbidden_availability(self) -> None:
+        reduced_capabilities = frozenset({"plugin.configure"})
+        issued_session = issue_session("local_admin", self.settings, capabilities=reduced_capabilities)
+        self.client.cookies.set(self.settings.AUTH_COOKIE_NAME, issued_session.value)
+
+        detail_response = self.client.get("/api/v1/plugins/quantagent.official.source.placeholder")
+        detail_body = detail_response.json()
+        health_response = self.client.get("/api/v1/plugins/quantagent.official.source.placeholder/health")
+        audit_response = self.client.get("/api/v1/plugins/quantagent.official.source.placeholder/audit")
+
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_body["data"]["overview"]["plugin_id"], "quantagent.official.source.placeholder")
+        self.assertEqual(detail_body["data"]["config_summary"]["availability"]["state"], "not_configured")
+        self.assertEqual(detail_body["data"]["health_summary"]["availability"]["state"], "forbidden")
+        self.assertEqual(detail_body["data"]["audit_summary"]["availability"]["state"], "forbidden")
+        self.assertTrue(
+            all(item["disabled_reason"] == "permission_denied" for item in detail_body["data"]["allowed_actions"])
+        )
+
+        self.assertEqual(health_response.status_code, 200)
+        self.assertEqual(health_response.json()["data"]["availability"]["state"], "forbidden")
+        self.assertEqual(audit_response.status_code, 200)
+        self.assertEqual(audit_response.json()["data"]["availability"]["state"], "forbidden")
 
     def test_plugin_list_uses_repo_root_even_when_api_runtime_directory_exists(self) -> None:
         self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
@@ -2333,7 +2383,11 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertIn("auth", schema["paths"]["/api/v1/me"]["get"]["tags"])
         self.assertIn("plugins", schema["paths"]["/api/v1/plugins"]["get"]["tags"])
         self.assertIn("plugins", schema["paths"]["/api/v1/plugins/{plugin_id}"]["get"]["tags"])
+        self.assertIn("plugins", schema["paths"]["/api/v1/plugins/{plugin_id}/config"]["get"]["tags"])
         self.assertIn("plugins", schema["paths"]["/api/v1/plugins/{plugin_id}/config-schema"]["get"]["tags"])
+        self.assertIn("plugins", schema["paths"]["/api/v1/plugins/{plugin_id}/dependencies"]["get"]["tags"])
+        self.assertIn("plugins", schema["paths"]["/api/v1/plugins/{plugin_id}/health"]["get"]["tags"])
+        self.assertIn("plugins", schema["paths"]["/api/v1/plugins/{plugin_id}/audit"]["get"]["tags"])
         self.assertIn("plugins", schema["paths"]["/api/v1/plugins/actions/rescan"]["post"]["tags"])
         self.assertEqual(
             {

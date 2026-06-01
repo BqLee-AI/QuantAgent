@@ -5,9 +5,16 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 
-from quantagent.api.auth import CurrentActor, require_csrf
+from quantagent.api.auth import CurrentActor, get_current_actor, require_csrf
 from quantagent.api.http.errors import BadRequestError, NotFoundError
 from quantagent.api.http.responses import ApiResponse
+from quantagent.api.schemas.plugin_detail import (
+    PluginAuditViewResponse,
+    PluginConfigViewResponse,
+    PluginDependenciesViewResponse,
+    PluginDetailResponse,
+    PluginHealthViewResponse,
+)
 from quantagent.api.schemas.plugins import (
     PluginErrorResponse,
     PluginManifestResponse,
@@ -16,6 +23,7 @@ from quantagent.api.schemas.plugins import (
     PluginScanSummaryResponse,
     SourceBindingManifestResponse,
 )
+from quantagent.api.services.plugin_detail import PluginDetailApiService
 from quantagent.api.services.plugin_registry import find_repo_root, get_plugin_registry
 from quantagent.core.registry import (
     PluginError,
@@ -37,11 +45,69 @@ def list_plugins(request: Request) -> ApiResponse[list[PluginRecordResponse]]:
     return ApiResponse.success([_record_response(record) for record in records])
 
 
-@router.get("/{plugin_id}", response_model=ApiResponse[PluginRecordResponse])
-def get_plugin(plugin_id: str, request: Request) -> ApiResponse[PluginRecordResponse]:
-    """按插件 ID 返回单条插件记录。"""
-    record = _require_plugin(get_plugin_registry(request), plugin_id)
-    return ApiResponse.success(_record_response(record))
+@router.get("/{plugin_id}", response_model=ApiResponse[PluginDetailResponse])
+def get_plugin(
+    plugin_id: str,
+    request: Request,
+    actor: CurrentActor = Depends(get_current_actor),
+) -> ApiResponse[PluginDetailResponse]:
+    """按插件 ID 返回结构化 detail 视图。"""
+    detail = PluginDetailApiService(get_plugin_registry(request)).get_plugin_detail(plugin_id, actor)
+    if detail is None:
+        raise NotFoundError("Plugin not found", details={"plugin_id": plugin_id})
+    return ApiResponse.success(detail)
+
+
+@router.get("/{plugin_id}/config", response_model=ApiResponse[PluginConfigViewResponse])
+def get_plugin_config(
+    plugin_id: str,
+    request: Request,
+    actor: CurrentActor = Depends(get_current_actor),
+) -> ApiResponse[PluginConfigViewResponse]:
+    """返回插件 detail 的只读配置视图。"""
+    config_view = PluginDetailApiService(get_plugin_registry(request)).get_plugin_config(plugin_id, actor)
+    if config_view is None:
+        raise NotFoundError("Plugin not found", details={"plugin_id": plugin_id})
+    return ApiResponse.success(config_view)
+
+
+@router.get("/{plugin_id}/dependencies", response_model=ApiResponse[PluginDependenciesViewResponse])
+def get_plugin_dependencies(
+    plugin_id: str,
+    request: Request,
+    actor: CurrentActor = Depends(get_current_actor),
+) -> ApiResponse[PluginDependenciesViewResponse]:
+    """返回插件 detail 的依赖视图。"""
+    dependencies_view = PluginDetailApiService(get_plugin_registry(request)).get_plugin_dependencies(plugin_id, actor)
+    if dependencies_view is None:
+        raise NotFoundError("Plugin not found", details={"plugin_id": plugin_id})
+    return ApiResponse.success(dependencies_view)
+
+
+@router.get("/{plugin_id}/health", response_model=ApiResponse[PluginHealthViewResponse])
+def get_plugin_health(
+    plugin_id: str,
+    request: Request,
+    actor: CurrentActor = Depends(get_current_actor),
+) -> ApiResponse[PluginHealthViewResponse]:
+    """返回插件中心 health 摘要。"""
+    health_view = PluginDetailApiService(get_plugin_registry(request)).get_plugin_health(plugin_id, actor)
+    if health_view is None:
+        raise NotFoundError("Plugin not found", details={"plugin_id": plugin_id})
+    return ApiResponse.success(health_view)
+
+
+@router.get("/{plugin_id}/audit", response_model=ApiResponse[PluginAuditViewResponse])
+def get_plugin_audit(
+    plugin_id: str,
+    request: Request,
+    actor: CurrentActor = Depends(get_current_actor),
+) -> ApiResponse[PluginAuditViewResponse]:
+    """返回插件中心 audit 摘要。"""
+    audit_view = PluginDetailApiService(get_plugin_registry(request)).get_plugin_audit(plugin_id, actor)
+    if audit_view is None:
+        raise NotFoundError("Plugin not found", details={"plugin_id": plugin_id})
+    return ApiResponse.success(audit_view)
 
 
 @router.get("/{plugin_id}/config-schema", response_model=ApiResponse[dict[str, Any]])
