@@ -60,24 +60,24 @@ def _generate_body() -> bytes:
 def main() -> int:
     _load_dotenv()
     endpoint = os.environ.get(
-        "DISCORD_INTERACTIONS_ENDPOINT_URL",
-        "http://127.0.0.1:8000/api/v1/integrations/discord/interactions",
+        "NOTIFICATION_INGRESS_ENDPOINT_URL",
+        "http://127.0.0.1:8000/api/v1/integrations/notifications/ingress",
     ).strip()
-    private_key = os.environ.get("DISCORD_INTERACTIONS_TEST_PRIVATE_KEY", "").strip()
-    timeout_text = os.environ.get("DISCORD_INTERACTIONS_TIMEOUT_SECONDS", "5").strip()
-    timestamp = os.environ.get("DISCORD_INTERACTIONS_TEST_TIMESTAMP", str(int(time.time()))).strip()
+    private_key = os.environ.get("NOTIFICATION_INGRESS_TEST_PRIVATE_KEY", "").strip()
+    timeout_text = os.environ.get("NOTIFICATION_INGRESS_TIMEOUT_SECONDS", "5").strip()
+    timestamp = os.environ.get("NOTIFICATION_INGRESS_TEST_TIMESTAMP", str(int(time.time()))).strip()
 
     if not endpoint:
-        print("Missing DISCORD_INTERACTIONS_ENDPOINT_URL.")
+        print("Missing NOTIFICATION_INGRESS_ENDPOINT_URL.")
         return 2
     if not private_key:
-        print("Missing DISCORD_INTERACTIONS_TEST_PRIVATE_KEY.")
+        print("Missing NOTIFICATION_INGRESS_TEST_PRIVATE_KEY.")
         return 2
 
     try:
         timeout_seconds = float(timeout_text)
     except ValueError:
-        print("DISCORD_INTERACTIONS_TIMEOUT_SECONDS must be a number.")
+        print("NOTIFICATION_INGRESS_TIMEOUT_SECONDS must be a number.")
         return 2
 
     body = _generate_body()

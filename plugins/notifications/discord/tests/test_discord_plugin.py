@@ -15,7 +15,7 @@ from quantagent.plugin_sdk import NotificationReceiveResult, PluginInvokeRequest
 
 
 def _load_module():
-    module_path = Path(__file__).resolve().parents[1] / "discord_plugin.py"
+    module_path = Path(__file__).resolve().parents[1] / "src/discord_plugin.py"
     module_name = "discord_plugin"
     spec = importlib.util.spec_from_file_location(module_name, module_path)
     module = importlib.util.module_from_spec(spec)
@@ -256,11 +256,11 @@ class DiscordPluginReceiveTestCase(unittest.TestCase):
         self.assertEqual(result.item.channel_id, "channel-1")
         self.assertEqual(result.item.author_id, "user-1")
         self.assertEqual(
-            result.item.payload_summary,
+            result.item.to_mapping()["payload_summary"],
             {
                 "type": 2,
                 "command_name": "notify",
-                "option_names": ("text",),
+                "option_names": ["text"],
             },
         )
 
@@ -451,11 +451,13 @@ class DiscordPluginRuntimeContractTestCase(unittest.TestCase):
                     capability="notification.receive",
                     request_id="req-runtime-receive",
                     input={
+                        "transport": "http.webhook",
                         "headers": {
                             "X-Signature-Timestamp": timestamp,
                             "X-Signature-Ed25519": signature,
                         },
-                        "body": body.decode("utf-8"),
+                        "body_text": body.decode("utf-8"),
+                        "request_metadata": {"request_id": "req-runtime-receive"},
                     },
                 )
             )

@@ -290,6 +290,63 @@ class NotificationSendResult:
 
 
 @dataclass(frozen=True)
+class NotificationReceiveInput:
+    transport: str
+    headers: JsonObject = field(default_factory=dict)
+    body_text: str | None = None
+    body_base64: str | None = None
+    query_params: JsonObject = field(default_factory=dict)
+    path_params: JsonObject = field(default_factory=dict)
+    request_metadata: JsonObject = field(default_factory=dict)
+    config_override: JsonObject | None = None
+
+    def __post_init__(self) -> None:
+        _validate_required_string("transport", self.transport)
+        _validate_optional_string("body_text", self.body_text)
+        _validate_optional_string("body_base64", self.body_base64)
+        object.__setattr__(self, "headers", freeze_json_mapping(self.headers))
+        object.__setattr__(self, "query_params", freeze_json_mapping(self.query_params))
+        object.__setattr__(self, "path_params", freeze_json_mapping(self.path_params))
+        object.__setattr__(self, "request_metadata", freeze_json_mapping(self.request_metadata))
+        if self.config_override is not None:
+            object.__setattr__(self, "config_override", freeze_json_mapping(self.config_override))
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "transport": self.transport,
+            "headers": to_json_value(self.headers),
+            "body_text": self.body_text,
+            "body_base64": self.body_base64,
+            "query_params": to_json_value(self.query_params),
+            "path_params": to_json_value(self.path_params),
+            "request_metadata": to_json_value(self.request_metadata),
+            "config_override": to_json_value(self.config_override) if self.config_override is not None else None,
+        }
+
+    as_plugin_input = to_mapping
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any], *, stage: str = "invoke") -> NotificationReceiveInput:
+        _validate_object(payload, dto_name="NotificationReceiveInput", stage=stage)
+        config_override = payload.get("config_override")
+        return cls(
+            transport=_get_required_string(payload, "transport", stage=stage),
+            headers=freeze_json_mapping(_get_optional_mapping(payload, "headers", stage=stage), stage=stage),
+            body_text=_get_optional_string(payload, "body_text", stage=stage),
+            body_base64=_get_optional_string(payload, "body_base64", stage=stage),
+            query_params=freeze_json_mapping(_get_optional_mapping(payload, "query_params", stage=stage), stage=stage),
+            path_params=freeze_json_mapping(_get_optional_mapping(payload, "path_params", stage=stage), stage=stage),
+            request_metadata=freeze_json_mapping(
+                _get_optional_mapping(payload, "request_metadata", stage=stage),
+                stage=stage,
+            ),
+            config_override=freeze_json_mapping(_require_mapping(config_override, field_name="config_override", stage=stage), stage=stage)
+            if config_override is not None
+            else None,
+        )
+
+
+@dataclass(frozen=True)
 class NotificationReceiveItem:
     interaction_id: str
     source_id: str
@@ -342,6 +399,7 @@ class NotificationReceiveResult:
     accepted: bool
     code: str
     message: str
+    response_status_code: int | None = None
     response: JsonObject | None = None
     item: NotificationReceiveItem | None = None
     retryable: bool = False
@@ -351,6 +409,7 @@ class NotificationReceiveResult:
         _validate_bool("accepted", self.accepted)
         _validate_required_string("code", self.code)
         _validate_required_string("message", self.message)
+        _validate_optional_int("response_status_code", self.response_status_code)
         if self.response is not None:
             object.__setattr__(self, "response", freeze_json_mapping(self.response))
         if self.item is not None and not isinstance(self.item, NotificationReceiveItem):
@@ -366,6 +425,7 @@ class NotificationReceiveResult:
             "accepted": self.accepted,
             "code": self.code,
             "message": self.message,
+            "response_status_code": self.response_status_code,
             "response": to_json_value(self.response) if self.response is not None else None,
             "item": self.item.to_mapping() if self.item is not None else None,
             "retryable": self.retryable,
@@ -383,6 +443,7 @@ class NotificationReceiveResult:
             accepted=_get_required_bool(payload, "accepted", stage=stage),
             code=_get_required_string(payload, "code", stage=stage),
             message=_get_required_string(payload, "message", stage=stage),
+            response_status_code=_get_optional_int(payload, "response_status_code", stage=stage),
             response=freeze_json_mapping(_require_mapping(response, field_name="response", stage=stage), stage=stage)
             if response is not None
             else None,

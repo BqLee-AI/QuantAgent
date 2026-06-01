@@ -12,6 +12,7 @@ from quantagent.plugin_sdk import (
     EvidenceItem,
     EvidenceLike,
     EvidenceSearchResult,
+    NotificationReceiveInput,
     NotificationReceiveItem,
     NotificationReceiveResult,
     NotificationSendInput,
@@ -153,6 +154,7 @@ class PluginSdkIoDtoTestCase(unittest.TestCase):
                 "accepted": True,
                 "code": "RECEIVED",
                 "message": "ok",
+                "response_status_code": 200,
                 "response": {"type": 4, "data": {"content": "ok", "flags": 64}},
                 "item": {
                     "interaction_id": "123456",
@@ -170,10 +172,54 @@ class PluginSdkIoDtoTestCase(unittest.TestCase):
         )
 
         self.assertEqual(result.code, "RECEIVED")
+        self.assertEqual(result.response_status_code, 200)
         self.assertIsInstance(result.item, NotificationReceiveItem)
         assert result.item is not None
         self.assertEqual(result.item.source_id, "discord.interaction:app-1")
         self.assertEqual(result.to_mapping()["response"]["type"], 4)
+
+    def test_notification_receive_input_roundtrip(self) -> None:
+        dto = NotificationReceiveInput.from_mapping(
+            {
+                "transport": "http.webhook",
+                "headers": {
+                    "X-Signature-Timestamp": "123",
+                    "X-Signature-Ed25519": "abcd",
+                },
+                "body_text": '{"type":1}',
+                "query_params": {"source": "discord"},
+                "path_params": {"channel": "discord"},
+                "request_metadata": {"request_id": "req-1"},
+                "config_override": {"response_text": "ok"},
+            }
+        )
+
+        self.assertEqual(dto.transport, "http.webhook")
+        self.assertEqual(
+            dto.to_mapping(),
+            {
+                "transport": "http.webhook",
+                "headers": {
+                    "X-Signature-Timestamp": "123",
+                    "X-Signature-Ed25519": "abcd",
+                },
+                "body_text": '{"type":1}',
+                "body_base64": None,
+                "query_params": {"source": "discord"},
+                "path_params": {"channel": "discord"},
+                "request_metadata": {"request_id": "req-1"},
+                "config_override": {"response_text": "ok"},
+            },
+        )
+        with self.assertRaises(TypeError):
+            dto.headers["new"] = "value"  # type: ignore[index]
+
+    def test_notification_receive_input_requires_transport(self) -> None:
+        with self.assertRaises(PluginRuntimeError) as raised:
+            NotificationReceiveInput.from_mapping({"body_text": "x"})
+
+        self.assertEqual(raised.exception.code, DTO_VALIDATION_ERROR_CODE)
+        self.assertEqual(raised.exception.details["field"], "transport")
 
     def test_notification_receive_result_rejects_missing_code(self) -> None:
         with self.assertRaises(PluginRuntimeError) as raised:
@@ -188,6 +234,22 @@ class PluginSdkIoDtoTestCase(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, DTO_VALIDATION_ERROR_CODE)
         self.assertEqual(raised.exception.details["field"], "code")
+
+    def test_notification_receive_result_allows_response_only_success(self) -> None:
+        result = NotificationReceiveResult.from_mapping(
+            {
+                "accepted": True,
+                "code": "CHALLENGE",
+                "message": "ok",
+                "response_status_code": 200,
+                "response": {"challenge": "token"},
+                "item": None,
+                "retryable": False,
+            }
+        )
+
+        self.assertTrue(result.accepted)
+        self.assertIsNone(result.item)
 
     def test_json_safe_validation_rejects_unserializable_values(self) -> None:
         with self.assertRaises(PluginRuntimeError) as raised:
