@@ -183,6 +183,122 @@ class SourceBindingPersistenceTestCase(unittest.TestCase):
                 duration_ms=1500,
             )
 
+    def test_finish_run_rejects_non_terminal_status(self) -> None:
+        self.binding_service.create_binding(
+            CreateSourceBindingInput(
+                binding_id="binding-non-terminal",
+                owner_type="industry",
+                owner_id="macro",
+                source_plugin_id="quantagent.official.source.rss",
+                effective_config_snapshot={"feed": "https://example.com/rss"},
+                schedule_policy={"interval_seconds": 60},
+                retry_policy={"max_attempts": 2},
+                rate_limit_policy={"requests_per_minute": 10},
+                next_run_at=self.clock.now(),
+                created_by="issue-216",
+            )
+        )
+        run = self.run_service.create_run(
+            run_id="run-non-terminal",
+            binding_id="binding-non-terminal",
+            source_plugin_id="quantagent.official.source.rss",
+            source_plugin_version=None,
+            trigger_mode=PluginTriggerType.MANUAL,
+            request_id="req-non-terminal",
+            status=PluginRunStatus.RUNNING,
+        )
+
+        with self.assertRaisesRegex(ValueError, "terminal scheduler run statuses"):
+            self.run_service.finish_run(
+                run_id=run.run_id,
+                status=PluginRunStatus.RUNNING,
+                finished_at=self.clock.now(),
+            )
+
+    def test_finish_run_sanitizes_failure_message_before_persisting(self) -> None:
+        self.binding_service.create_binding(
+            CreateSourceBindingInput(
+                binding_id="binding-sanitize",
+                owner_type="industry",
+                owner_id="macro",
+                source_plugin_id="quantagent.official.source.rss",
+                effective_config_snapshot={"feed": "https://example.com/rss"},
+                schedule_policy={"interval_seconds": 60},
+                retry_policy={"max_attempts": 2},
+                rate_limit_policy={"requests_per_minute": 10},
+                next_run_at=self.clock.now(),
+                created_by="issue-216",
+            )
+        )
+        run = self.run_service.create_run(
+            run_id="run-sanitize",
+            binding_id="binding-sanitize",
+            source_plugin_id="quantagent.official.source.rss",
+            source_plugin_version=None,
+            trigger_mode=PluginTriggerType.MANUAL,
+            request_id="req-sanitize",
+            status=PluginRunStatus.RUNNING,
+        )
+
+        finished = self.run_service.finish_run(
+            run_id=run.run_id,
+            status=PluginRunStatus.FAILED,
+            finished_at=self.clock.now(),
+            failure_message="token=abc123 refused at /Users/private/app.env",
+            failure_code="PLUGIN_FAILED",
+            failure_stage="invoke",
+        )
+
+        self.assertEqual(finished.failure_message, "[REDACTED] refused at [REDACTED]")
+        self.assertNotIn("abc123", finished.failure_message or "")
+        self.assertNotIn("/Users/private/app.env", finished.failure_message or "")
+
+    def test_repository_list_queries_apply_default_limit_and_cap(self) -> None:
+        request_id = "req-limit"
+        owner_id = "semiconductor"
+        plugin_id = "quantagent.official.source.rss"
+        for index in range(205):
+            binding = self.binding_service.create_binding(
+                CreateSourceBindingInput(
+                    binding_id=f"binding-limit-{index:03d}",
+                    owner_type="industry",
+                    owner_id=owner_id,
+                    source_plugin_id=plugin_id,
+                    effective_config_snapshot={"feed": f"https://example.com/rss/{index}"},
+                    schedule_policy={"interval_seconds": 60},
+                    retry_policy={"max_attempts": 2},
+                    rate_limit_policy={"requests_per_minute": 10},
+                    next_run_at=self.clock.now(),
+                    created_by="issue-216",
+                )
+            )
+            self.run_service.create_run(
+                run_id=f"run-limit-{index:03d}",
+                binding_id=binding.binding_id,
+                source_plugin_id=plugin_id,
+                source_plugin_version=None,
+                trigger_mode=PluginTriggerType.MANUAL,
+                request_id=request_id,
+                status=PluginRunStatus.RUNNING,
+            )
+
+        owner_default = self.binding_repository.list_by_owner(owner_type="industry", owner_id=owner_id)
+        plugin_capped = self.binding_repository.list_by_plugin(source_plugin_id=plugin_id, limit=999)
+        request_default = self.run_repository.list_by_request(request_id=request_id)
+        binding_capped = self.run_repository.list_by_binding(binding_id="binding-limit-000", limit=999)
+
+        self.assertEqual(len(owner_default), 50)
+        self.assertEqual(len(plugin_capped), 200)
+        self.assertEqual(len(request_default), 50)
+        self.assertEqual(len(binding_capped), 1)
+
+    def test_repository_list_queries_reject_non_positive_limit(self) -> None:
+        with self.assertRaisesRegex(ValueError, "limit must be greater than zero"):
+            self.binding_repository.list_by_owner(owner_type="industry", owner_id="owner", limit=0)
+
+        with self.assertRaisesRegex(ValueError, "limit must be greater than zero"):
+            self.run_repository.list_by_request(request_id="req", limit=-1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -32,8 +32,8 @@ class DatabaseCliTestCase(unittest.TestCase):
             with patch.dict("os.environ", {cli.MIGRATION_ROOT_ENV: str(root)}):
                 config = cli.create_alembic_config()
 
-        self.assertEqual(Path(config.config_file_name).parent, root)
-        self.assertEqual(Path(config.get_main_option("script_location")), root / "alembic")
+        self.assertEqual(Path(config.config_file_name).parent.resolve(), root.resolve())
+        self.assertEqual(Path(config.get_main_option("script_location")).resolve(), (root / "alembic").resolve())
 
     def test_invalid_migration_root_fails_before_running_alembic(self) -> None:
         stderr = io.StringIO()
@@ -63,8 +63,11 @@ class DatabaseCliTestCase(unittest.TestCase):
             with patch("quantagent.core.db.cli.Path.cwd", return_value=repo_root / "apps" / "api"):
                 config = cli.create_alembic_config()
 
-        self.assertEqual(Path(config.config_file_name).parent, migration_root)
-        self.assertEqual(Path(config.get_main_option("script_location")), migration_root / "alembic")
+        self.assertEqual(Path(config.config_file_name).parent.resolve(), migration_root.resolve())
+        self.assertEqual(
+            Path(config.get_main_option("script_location")).resolve(),
+            (migration_root / "alembic").resolve(),
+        )
 
     def test_migration_root_discovers_repo_layout_from_module_file_parent(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -85,8 +88,11 @@ class DatabaseCliTestCase(unittest.TestCase):
                     with patch("quantagent.core.db.cli.__file__", str(module_file)):
                         config = cli.create_alembic_config()
 
-        self.assertEqual(Path(config.config_file_name).parent, migration_root)
-        self.assertEqual(Path(config.get_main_option("script_location")), migration_root / "alembic")
+        self.assertEqual(Path(config.config_file_name).parent.resolve(), migration_root.resolve())
+        self.assertEqual(
+            Path(config.get_main_option("script_location")).resolve(),
+            (migration_root / "alembic").resolve(),
+        )
 
     def test_upgrade_defaults_to_head(self) -> None:
         with patch.object(settings, "DATABASE_URL", "sqlite:///:memory:"):
@@ -102,6 +108,22 @@ class DatabaseCliTestCase(unittest.TestCase):
         script = ScriptDirectory.from_config(config)
 
         self.assertEqual(script.get_heads(), ["20260601_0001"])
+
+    def test_upgrade_accepts_postgresql_url_override(self) -> None:
+        with patch.object(settings, "DATABASE_URL", None):
+            with patch("quantagent.core.db.cli.command.upgrade") as upgrade:
+                exit_code = cli.main(
+                    [
+                        "--database-url",
+                        "postgresql+psycopg://qa_user:qa_pass@localhost:15432/quantagent",
+                        "upgrade",
+                        "head",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        upgrade.assert_called_once()
+        self.assertEqual(upgrade.call_args.args[1], "head")
 
     def test_current_invokes_alembic_current(self) -> None:
         with patch.object(settings, "DATABASE_URL", "sqlite:///:memory:"):

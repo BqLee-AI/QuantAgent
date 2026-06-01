@@ -4,10 +4,20 @@ from datetime import datetime
 
 from quantagent.core.db.models.scheduler_run import SchedulerRunORM
 from quantagent.core.db.repositories.scheduler_run_repository import SchedulerRunRepository
+from quantagent.core.events.codec import sanitize_string
 from quantagent.core.scheduling.clock import SchedulingClock, SystemSchedulingClock
 from quantagent.core.scheduling.models import PluginRunStatus, PluginTriggerType
 from quantagent.core.scheduling.run_models import SchedulerRunRecord
 from quantagent.plugin_sdk.io import JsonObject, freeze_json_mapping, to_json_value
+
+TERMINAL_RUN_STATUSES = frozenset(
+    {
+        PluginRunStatus.SUCCEEDED,
+        PluginRunStatus.FAILED,
+        PluginRunStatus.TIMEOUT,
+        PluginRunStatus.CANCELLED,
+    }
+)
 
 
 class SchedulerRunService:
@@ -69,12 +79,15 @@ class SchedulerRunService:
         current = self._require_run(run_id)
         if current.finished_at is not None:
             raise ValueError("finished scheduler run cannot be overwritten.")
+        if status not in TERMINAL_RUN_STATUSES:
+            raise ValueError("finish_run only accepts terminal scheduler run statuses.")
         # append-only 的含义是每个 run_id 只允许从进行中推进到终态，禁止事后覆盖终态历史。
         current.status = status.value
         current.finished_at = finished_at or self._clock.now()
         current.duration_ms = duration_ms
         current.failure_code = failure_code
-        current.failure_message = failure_message
+        # 失败摘要只保留脱敏后的可审计信息，避免把 token、cookie 或本地路径原样入库。
+        current.failure_message = _sanitize_failure_message(failure_message)
         current.failure_stage = failure_stage
         current.retryable = retryable
         current.output_summary = dict(to_json_value(freeze_json_mapping(output_summary or {}, stage="invoke")))
@@ -114,3 +127,10 @@ def _to_record(run: SchedulerRunORM) -> SchedulerRunRecord:
         metadata=freeze_json_mapping(run.metadata_json or {}, stage="schedule_precheck"),
         created_at=run.created_at,
     )
+
+
+def _sanitize_failure_message(value: str | None) -> str | None:
+    if value is None:
+        return None
+    sanitized = sanitize_string(value).strip()
+    return sanitized or None
