@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://quantagent.dev/contracts/source-binding-scheduler-run-api-v1.schema.json",
+  "title": "SourceBinding SchedulerRun API V1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "sourceBindingSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "source_plugin_id",
+        "owner_type",
+        "owner_id",
+        "status",
+        "schedule_summary",
+        "health_summary",
+        "allowed_actions"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "source_plugin_id": { "type": "string", "minLength": 1 },
+        "owner_type": { "type": "string", "minLength": 1 },
+        "owner_id": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["active", "paused", "disabled"] },
+        "blocked_reason": { "type": ["string", "null"] },
+        "schedule_summary": { "type": "object" },
+        "last_run_ref": { "type": ["object", "null"] },
+        "next_run_at": { "type": ["string", "null"], "format": "date-time" },
+        "health_summary": { "type": "object" },
+        "allowed_actions": {
+          "type": "array",
+          "items": { "enum": ["pause", "resume", "run-now"] }
+        }
+      }
+    },
+    "schedulerRunSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "binding_id",
+        "source_plugin_id",
+        "trigger_mode",
+        "status",
+        "failure_summary"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "binding_id": { "type": "string", "minLength": 1 },
+        "source_plugin_id": { "type": "string", "minLength": 1 },
+        "trigger_mode": { "enum": ["manual", "interval"] },
+        "status": { "enum": ["queued", "running", "succeeded", "failed", "timeout", "cancelled"] },
+        "started_at": { "type": ["string", "null"], "format": "date-time" },
+        "finished_at": { "type": ["string", "null"], "format": "date-time" },
+        "duration_ms": { "type": ["integer", "null"], "minimum": 0 },
+        "attempt_index": { "type": ["integer", "null"], "minimum": 0 },
+        "captured_count": { "type": ["integer", "null"], "minimum": 0 },
+        "failure_summary": { "type": "object" }
+      }
+    },
+    "bindingActionAccepted": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["binding_id", "accepted_at", "audit_ref"],
+      "properties": {
+        "binding_id": { "type": "string", "minLength": 1 },
+        "target_state": { "enum": ["active", "paused", "disabled"] },
+        "already_in_target_state": { "type": "boolean" },
+        "accepted_at": { "type": "string", "format": "date-time" },
+        "request_id": { "type": "string" },
+        "requested_run_ref": { "type": "string" },
+        "audit_ref": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

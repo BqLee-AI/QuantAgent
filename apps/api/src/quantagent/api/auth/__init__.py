@@ -12,6 +12,8 @@ from quantagent.api.auth.actor import (
     PLUGIN_INSTALL_CAPABILITY,
     RUNTIME_INSPECT_CAPABILITY,
     SECRET_MANAGE_CAPABILITY,
+    SOURCE_BINDING_CONTROL_CAPABILITY,
+    SOURCE_BINDING_READ_CAPABILITY,
 )
 from quantagent.api.auth.audit import ActorAuditContext, build_actor_audit_context
 from quantagent.api.auth.capability import require_capability
@@ -50,6 +52,8 @@ __all__ = [
     "PLUGIN_INSTALL_CAPABILITY",
     "RUNTIME_INSPECT_CAPABILITY",
     "SECRET_MANAGE_CAPABILITY",
+    "SOURCE_BINDING_CONTROL_CAPABILITY",
+    "SOURCE_BINDING_READ_CAPABILITY",
     "SessionData",
     "authenticate_admin_password",
     "build_actor_audit_context",

@@ -43,6 +43,8 @@ from quantagent.api.routers.v1.register import (
     register_api_v1_protected_router,
 )
 from quantagent.core.db.base import Base
+from quantagent.core.db.models.scheduler_run import SchedulerRunORM
+from quantagent.core.db.models.source_binding import SourceBindingORM
 from quantagent.core.model_config import FixedModelCallClient, ModelConfigCrypto, ModelTokenUsage
 from quantagent.core.model_config.service import ModelCallResult
 from quantagent.core.registry import PluginRegistry, PluginStatus, RegistryScanner
@@ -1875,6 +1877,155 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(by_key["economy_text"]["primary_model"]["id"], text_model_id)
         self.assertEqual(by_key["economy_text"]["fallback_model"]["id"], vision_model_id)
 
+    def test_source_binding_routes_return_envelope_and_mask_sensitive_config(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            session = client.app.state.db_session_factory()
+            try:
+                session.add(
+                    SourceBindingORM(
+                        binding_id="binding-api-001",
+                        owner_type="industry",
+                        owner_id="semiconductor",
+                        source_plugin_id="quantagent.official.source.rss",
+                        effective_config_snapshot={
+                            "feed": "https://example.com/rss",
+                            "api_key": "should-not-leak",
+                            "keywords": ["chip", "fab"],
+                        },
+                        schedule_policy={"interval_seconds": 300},
+                        retry_policy={"max_attempts": 3},
+                        rate_limit_policy={"requests_per_minute": 10},
+                        status="active",
+                        created_by="issue-226",
+                        updated_by="issue-226",
+                    )
+                )
+                session.add(
+                    SchedulerRunORM(
+                        run_id="run-api-001",
+                        binding_id="binding-api-001",
+                        source_plugin_id="quantagent.official.source.rss",
+                        source_plugin_version=None,
+                        trigger_mode="manual",
+                        request_id="req-run-api-001",
+                        status="failed",
+                        failure_code="PLUGIN_FAILED",
+                        failure_message="sanitized failure",
+                        failure_stage="invoke",
+                        retryable=False,
+                        metadata_json={"actor": {"actor_id": "local_admin", "actor_type": "local_single_user"}},
+                    )
+                )
+                session.commit()
+            finally:
+                session.close()
+
+            self._login_with_client(client, settings)
+            list_response = client.get("/api/v1/source-bindings")
+            detail_response = client.get("/api/v1/source-bindings/binding-api-001")
+            binding_runs_response = client.get("/api/v1/source-bindings/binding-api-001/scheduler-runs")
+            run_detail_response = client.get("/api/v1/scheduler-runs/run-api-001")
+
+        list_body = list_response.json()
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(list_body["code"], 0)
+        self.assertEqual(list_body["data"]["items"][0]["id"], "binding-api-001")
+        self.assertIn("run-now", list_body["data"]["items"][0]["allowed_actions"])
+
+        detail_body = detail_response.json()
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertNotIn("api_key", detail_body["data"]["effective_config_summary"]["values"])
+        self.assertIn("api_key", detail_body["data"]["effective_config_summary"]["secret_fields_masked"])
+
+        binding_runs_body = binding_runs_response.json()
+        self.assertEqual(binding_runs_response.status_code, 200)
+        self.assertEqual(binding_runs_body["data"]["items"][0]["binding_id"], "binding-api-001")
+
+        run_detail_body = run_detail_response.json()
+        self.assertEqual(run_detail_response.status_code, 200)
+        self.assertEqual(run_detail_body["data"]["request_id"], "req-run-api-001")
+        self.assertEqual(run_detail_body["data"]["error_code"], "PLUGIN_FAILED")
+
+    def test_source_binding_actions_are_idempotent_and_run_now_is_accepted(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            session = client.app.state.db_session_factory()
+            try:
+                session.add(
+                    SourceBindingORM(
+                        binding_id="binding-action-001",
+                        owner_type="industry",
+                        owner_id="oil",
+                        source_plugin_id="quantagent.official.source.rss",
+                        effective_config_snapshot={"feed": "https://example.com/oil"},
+                        schedule_policy={"interval_seconds": 600},
+                        retry_policy={},
+                        rate_limit_policy={},
+                        status="active",
+                        created_by="issue-226",
+                        updated_by="issue-226",
+                    )
+                )
+                session.commit()
+            finally:
+                session.close()
+
+            csrf_token = self._login_with_client(client, settings)
+            pause_response = client.post(
+                "/api/v1/source-bindings/binding-action-001/actions/pause",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+            )
+            repeat_pause_response = client.post(
+                "/api/v1/source-bindings/binding-action-001/actions/pause",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+            )
+            run_now_response = client.post(
+                "/api/v1/source-bindings/binding-action-001/actions/run-now",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token, "X-Request-ID": "req-run-now-api"},
+            )
+            invalid_binding_response = client.post(
+                "/api/v1/source-bindings/missing-binding/actions/pause",
+                headers={settings.AUTH_CSRF_HEADER_NAME: csrf_token},
+            )
+
+            session = client.app.state.db_session_factory()
+            try:
+                created_runs = session.query(SchedulerRunORM).filter(SchedulerRunORM.request_id == "req-run-now-api").all()
+            finally:
+                session.close()
+
+        pause_body = pause_response.json()
+        self.assertEqual(pause_response.status_code, 200)
+        self.assertFalse(pause_body["data"]["already_in_target_state"])
+        self.assertEqual(pause_body["data"]["target_state"], "paused")
+
+        repeat_pause_body = repeat_pause_response.json()
+        self.assertEqual(repeat_pause_response.status_code, 200)
+        self.assertTrue(repeat_pause_body["data"]["already_in_target_state"])
+
+        run_now_body = run_now_response.json()
+        self.assertEqual(run_now_response.status_code, 200)
+        self.assertEqual(run_now_body["data"]["request_id"], "req-run-now-api")
+        self.assertEqual(len(created_runs), 1)
+        self.assertEqual(created_runs[0].status, "queued")
+
+        invalid_body = invalid_binding_response.json()
+        self.assertEqual(invalid_binding_response.status_code, 404)
+        self.assertEqual(invalid_body["error"]["code"], "NOT_FOUND")
+
     def test_discord_interactions_endpoint_returns_not_found_when_disabled(self) -> None:
         response = self.client.post("/api/v1/integrations/discord/interactions", content=b"{}")
         body = response.json()
@@ -2366,6 +2517,12 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertIn("models", schema["paths"]["/api/v1/models/presets"]["get"]["tags"])
         self.assertIn("models", schema["paths"]["/api/v1/models/presets/{preset_key}"]["put"]["tags"])
         self.assertIn("models", schema["paths"]["/api/v1/models/invocations"]["get"]["tags"])
+        self.assertIn("source-bindings", schema["paths"]["/api/v1/source-bindings"]["get"]["tags"])
+        self.assertIn("source-bindings", schema["paths"]["/api/v1/source-bindings/{binding_id}"]["get"]["tags"])
+        self.assertIn("source-bindings", schema["paths"]["/api/v1/source-bindings/{binding_id}/scheduler-runs"]["get"]["tags"])
+        self.assertIn("source-bindings", schema["paths"]["/api/v1/source-bindings/{binding_id}/actions/run-now"]["post"]["tags"])
+        self.assertIn("scheduler-runs", schema["paths"]["/api/v1/scheduler-runs"]["get"]["tags"])
+        self.assertIn("scheduler-runs", schema["paths"]["/api/v1/scheduler-runs/{run_id}"]["get"]["tags"])
         self.assertNotIn("/api/v1/auth/test-actions/runtime-inspect", schema["paths"])
 
         login_schema = self._resolve_response_schema(schema, "/api/v1/auth/login", method="post")
@@ -2420,6 +2577,12 @@ class ApiAppTestCase(unittest.TestCase):
 
         models_schema = self._resolve_response_schema(schema, "/api/v1/models/providers")
         self.assertTrue({"code", "data", "msg", "error"}.issubset(models_schema["properties"].keys()))
+
+        source_bindings_schema = self._resolve_response_schema(schema, "/api/v1/source-bindings")
+        self.assertTrue({"code", "data", "msg", "error"}.issubset(source_bindings_schema["properties"].keys()))
+
+        scheduler_run_schema = self._resolve_response_schema(schema, "/api/v1/scheduler-runs/{run_id}")
+        self.assertTrue({"code", "data", "msg", "error"}.issubset(scheduler_run_schema["properties"].keys()))
 
     def test_production_openapi_excludes_debug_routes(self) -> None:
         production_app = create_app(self._settings(APP_ENV="production"))
@@ -2558,6 +2721,11 @@ class ApiAppTestCase(unittest.TestCase):
     def _login(self) -> None:
         response = self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
         self.assertEqual(response.status_code, 200)
+
+    def _login_with_client(self, client: TestClient, settings: Settings) -> str:
+        response = client.post("/api/v1/auth/login", json={"password": settings.AUTH_ADMIN_PASSWORD})
+        self.assertEqual(response.status_code, 200)
+        return response.json()["data"]["csrf_token"]
 
     def _resolve_response_schema(self, openapi_schema: dict, path: str, *, method: str = "get") -> dict:
         response_schema = openapi_schema["paths"][path][method]["responses"]["200"]["content"]["application/json"]["schema"]

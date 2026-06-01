@@ -7,6 +7,8 @@
 - `models.py` 保留通用调度 run/request DTO 与状态枚举。
 - `binding_models.py` / `run_models.py` 表达 binding/run 的领域输入输出，不暴露 ORM。
 - `binding_service.py` / `run_service.py` 承接状态机、摘要回写、最小审计字段和失败路径保护。
+- `query_service.py` 提供 SourceBinding / SchedulerRun 的只读查询入口，给 API 读模型使用。
+- `action_service.py` 提供 `pause` / `resume` / `run-now` 的动作编排入口，但不承接 scheduler loop。
 - `repository.py` / `service.py` 保留已有 plugin-scheduling-v1 单次触发能力。
 
 不要放什么：

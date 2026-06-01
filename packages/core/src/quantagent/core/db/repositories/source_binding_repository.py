@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, and_, or_, select
 from sqlalchemy.orm import Session
 
 from quantagent.core.db.models.source_binding import SourceBindingORM
@@ -68,6 +68,52 @@ class SourceBindingRepository:
         self._session.add(binding)
         self._session.flush()
         return binding
+
+    def list_for_api(
+        self,
+        *,
+        owner_type: str | None = None,
+        owner_id: str | None = None,
+        source_plugin_id: str | None = None,
+        status: str | None = None,
+        cursor: dict[str, str] | None = None,
+        limit: int = DEFAULT_LIST_LIMIT,
+    ) -> tuple[list[SourceBindingORM], dict[str, str] | None]:
+        bounded_limit = _bounded_limit(limit)
+        statement: Select[tuple[SourceBindingORM]] = select(SourceBindingORM)
+        if owner_type is not None:
+            statement = statement.where(SourceBindingORM.owner_type == owner_type)
+        if owner_id is not None:
+            statement = statement.where(SourceBindingORM.owner_id == owner_id)
+        if source_plugin_id is not None:
+            statement = statement.where(SourceBindingORM.source_plugin_id == source_plugin_id)
+        if status is not None:
+            statement = statement.where(SourceBindingORM.status == status)
+        if cursor is not None:
+            cursor_updated_at = datetime.fromisoformat(cursor["updated_at"])
+            cursor_binding_id = cursor["binding_id"]
+            statement = statement.where(
+                or_(
+                    SourceBindingORM.updated_at < cursor_updated_at,
+                    and_(
+                        SourceBindingORM.updated_at == cursor_updated_at,
+                        SourceBindingORM.binding_id < cursor_binding_id,
+                    ),
+                )
+            )
+        statement = statement.order_by(SourceBindingORM.updated_at.desc(), SourceBindingORM.binding_id.desc()).limit(
+            bounded_limit + 1
+        )
+        items = list(self._session.scalars(statement).all())
+        next_cursor = None
+        if len(items) > bounded_limit:
+            last = items[bounded_limit - 1]
+            next_cursor = {
+                "updated_at": last.updated_at.astimezone(UTC).isoformat(),
+                "binding_id": last.binding_id,
+            }
+            items = items[:bounded_limit]
+        return items, next_cursor
 
 
 def _bounded_limit(limit: int) -> int:

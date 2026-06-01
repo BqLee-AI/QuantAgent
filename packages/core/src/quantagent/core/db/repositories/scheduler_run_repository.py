@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import Select, desc, select
+from datetime import UTC, datetime
+
+from sqlalchemy import Select, and_, desc, or_, select
 from sqlalchemy.orm import Session
 
 from quantagent.core.db.models.scheduler_run import SchedulerRunORM
@@ -43,6 +45,55 @@ class SchedulerRunRepository:
             .limit(_bounded_limit(limit))
         )
         return list(self._session.scalars(statement).all())
+
+    def list_for_api(
+        self,
+        *,
+        binding_id: str | None = None,
+        status: str | None = None,
+        trigger_mode: str | None = None,
+        started_after: datetime | None = None,
+        started_before: datetime | None = None,
+        cursor: dict[str, str] | None = None,
+        limit: int = DEFAULT_LIST_LIMIT,
+    ) -> tuple[list[SchedulerRunORM], dict[str, str] | None]:
+        bounded_limit = _bounded_limit(limit)
+        statement: Select[tuple[SchedulerRunORM]] = select(SchedulerRunORM)
+        if binding_id is not None:
+            statement = statement.where(SchedulerRunORM.binding_id == binding_id)
+        if status is not None:
+            statement = statement.where(SchedulerRunORM.status == status)
+        if trigger_mode is not None:
+            statement = statement.where(SchedulerRunORM.trigger_mode == trigger_mode)
+        if started_after is not None:
+            statement = statement.where(SchedulerRunORM.started_at.is_not(None)).where(SchedulerRunORM.started_at >= started_after)
+        if started_before is not None:
+            statement = statement.where(SchedulerRunORM.started_at.is_not(None)).where(SchedulerRunORM.started_at <= started_before)
+        if cursor is not None:
+            cursor_created_at = datetime.fromisoformat(cursor["created_at"])
+            cursor_run_id = cursor["run_id"]
+            statement = statement.where(
+                or_(
+                    SchedulerRunORM.created_at < cursor_created_at,
+                    and_(
+                        SchedulerRunORM.created_at == cursor_created_at,
+                        SchedulerRunORM.run_id < cursor_run_id,
+                    ),
+                )
+            )
+        statement = statement.order_by(desc(SchedulerRunORM.created_at), desc(SchedulerRunORM.run_id)).limit(
+            bounded_limit + 1
+        )
+        items = list(self._session.scalars(statement).all())
+        next_cursor = None
+        if len(items) > bounded_limit:
+            last = items[bounded_limit - 1]
+            next_cursor = {
+                "created_at": last.created_at.astimezone(UTC).isoformat(),
+                "run_id": last.run_id,
+            }
+            items = items[:bounded_limit]
+        return items, next_cursor
 
 
 def _bounded_limit(limit: int) -> int:
