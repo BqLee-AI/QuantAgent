@@ -7,6 +7,8 @@ from contextlib import redirect_stderr
 from pathlib import Path
 from unittest.mock import patch
 
+from alembic.script import ScriptDirectory
+
 from quantagent.core.config.settings import settings
 from quantagent.core.db import cli
 
@@ -94,6 +96,12 @@ class DatabaseCliTestCase(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         upgrade.assert_called_once()
         self.assertEqual(upgrade.call_args.args[1], "head")
+
+    def test_migration_graph_has_single_head(self) -> None:
+        config = cli.create_alembic_config()
+        script = ScriptDirectory.from_config(config)
+
+        self.assertEqual(script.get_heads(), ["20260601_0001"])
 
     def test_current_invokes_alembic_current(self) -> None:
         with patch.object(settings, "DATABASE_URL", "sqlite:///:memory:"):
