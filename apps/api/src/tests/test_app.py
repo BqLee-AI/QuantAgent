@@ -47,6 +47,8 @@ from quantagent.core.model_config import FixedModelCallClient, ModelConfigCrypto
 from quantagent.core.model_config.service import ModelCallResult
 from quantagent.core.registry import PluginRegistry, PluginStatus, RegistryScanner
 from quantagent.core.registry.models import PluginManifest, PluginRecord, PluginSource, PluginType
+from quantagent.core.db.repositories.scheduler_run_repository import SchedulerRunRepository
+from quantagent.core.scheduling import PluginRunStatus, PluginTriggerType, SchedulerRunService
 from quantagent.core.wallet import (
     AccountMode,
     CashBalanceSnapshot,
@@ -1591,6 +1593,152 @@ class ApiAppTestCase(unittest.TestCase):
 
         self.assertEqual(response.status_code, 401)
         self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+
+    def test_runtime_health_reports_degraded_when_runtime_read_models_are_partial(self) -> None:
+        self._login()
+
+        response = self.client.get("/api/v1/runtime/health")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["data"]["partial_status"], "degraded")
+        self.assertEqual(body["data"]["backend_status"]["api"], "healthy")
+        self.assertEqual(body["data"]["backend_status"]["scheduler"], "unavailable")
+        self.assertEqual(body["data"]["backend_status"]["worker"], "not_configured")
+        reasons = {item["reason"] for item in body["data"]["unavailable_resources"]}
+        self.assertIn("agent_runs:agent_runs_read_model_missing", reasons)
+        self.assertIn("tool_invocations:tool_invocations_read_model_missing", reasons)
+        self.assertIn("runtime_errors:runtime_errors_read_model_missing", reasons)
+
+    def test_runtime_list_resources_require_session(self) -> None:
+        response = self.client.get("/api/v1/scheduler-runs")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
+
+    def test_runtime_unavailable_resources_return_controlled_unavailable_meta(self) -> None:
+        self._login()
+
+        response = self.client.get("/api/v1/agents/runs")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["data"]["items"], [])
+        self.assertEqual(body["data"]["meta"]["state"], "unavailable")
+        self.assertEqual(body["data"]["meta"]["unavailable"]["status"], "unavailable")
+        self.assertIn("agent_runs_read_model_missing", body["data"]["meta"]["unavailable"]["reason"])
+
+    def test_runtime_unavailable_detail_uses_not_found_envelope(self) -> None:
+        self._login()
+
+        response = self.client.get("/api/v1/tools/invocations/invoke-001")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(body["error"]["code"], "NOT_FOUND")
+        self.assertEqual(body["error"]["details"]["reason"], "tool_invocations_read_model_missing")
+
+    def test_scheduler_runs_list_and_detail_follow_runtime_contract(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        app = create_app(self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}"))
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            seed_session = client.app.state.db_session_factory()
+            try:
+                repository = SchedulerRunRepository(seed_session)
+                service = SchedulerRunService(repository)
+                run = service.create_run(
+                    run_id="run-runtime-001",
+                    binding_id="binding-runtime-001",
+                    source_plugin_id="quantagent.official.source.rss",
+                    source_plugin_version="1.0.0",
+                    trigger_mode=PluginTriggerType.INTERVAL,
+                    request_id="req-runtime-001",
+                    status=PluginRunStatus.RUNNING,
+                    started_at=datetime(2026, 6, 1, 8, 0, 0, tzinfo=UTC),
+                    timeout_ms=30000,
+                )
+                service.finish_run(
+                    run_id=run.run_id,
+                    status=PluginRunStatus.FAILED,
+                    finished_at=datetime(2026, 6, 1, 8, 0, 3, tzinfo=UTC),
+                    duration_ms=3000,
+                    failure_code="PLUGIN_TIMEOUT",
+                    failure_message="token=secret123 /Users/me/project failed",
+                    failure_stage="invoke",
+                    retryable=True,
+                    captured_count=2,
+                )
+                seed_session.commit()
+            finally:
+                seed_session.close()
+            login_response = client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+            self.assertEqual(login_response.status_code, 200)
+
+            list_response = client.get("/api/v1/scheduler-runs", params={"plugin_id": "quantagent.official.source.rss"})
+            detail_response = client.get("/api/v1/scheduler-runs/run-runtime-001")
+
+        list_body = list_response.json()
+        detail_body = detail_response.json()
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(list_body["data"]["meta"]["state"], "ready")
+        self.assertEqual(list_body["data"]["meta"]["page"]["returned"], 1)
+        self.assertEqual(list_body["data"]["items"][0]["run_id"], "run-runtime-001")
+        self.assertEqual(list_body["data"]["items"][0]["plugin_id"], "quantagent.official.source.rss")
+        self.assertEqual(list_body["data"]["items"][0]["trigger_type"], "interval")
+        self.assertEqual(list_body["data"]["items"][0]["error_summary"]["error_code"], "PLUGIN_TIMEOUT")
+        self.assertNotIn("secret123", list_body["data"]["items"][0]["error_summary"]["error_message_summary"])
+        self.assertNotIn("/Users/me/project", list_body["data"]["items"][0]["error_summary"]["error_message_summary"])
+
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_body["data"]["run_id"], "run-runtime-001")
+        self.assertEqual(detail_body["data"]["captured_count_summary"], {"captured_count": 2})
+
+    def test_scheduler_runs_detail_returns_not_found_for_unknown_run(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        app = create_app(self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}"))
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+            response = client.get("/api/v1/scheduler-runs/missing-run")
+
+        body = response.json()
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(body["error"]["code"], "NOT_FOUND")
+        self.assertEqual(body["error"]["details"]["run_id"], "missing-run")
+
+    def test_scheduler_runs_without_database_return_service_unavailable(self) -> None:
+        self._login()
+
+        response = self.client.get("/api/v1/scheduler-runs")
+        body = response.json()
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(body["error"]["code"], "SERVICE_UNAVAILABLE")
+        self.assertEqual(body["error"]["details"]["resource"], "scheduler_runs")
+
+    def test_scheduler_runs_reject_unsupported_trace_filter(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        app = create_app(self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}"))
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+            response = client.get("/api/v1/scheduler-runs", params={"trace_id": "trace-1"})
+
+        body = response.json()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(body["error"]["code"], "BAD_REQUEST")
+        self.assertEqual(body["error"]["details"]["filter"], "trace_id")
 
     def test_model_provider_create_masks_key_and_test_connection_records_usage(self) -> None:
         database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)

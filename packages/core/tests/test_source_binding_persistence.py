@@ -215,6 +215,68 @@ class SourceBindingPersistenceTestCase(unittest.TestCase):
                 finished_at=self.clock.now(),
             )
 
+    def test_list_runs_supports_runtime_inspect_filters_and_pagination(self) -> None:
+        self.binding_service.create_binding(
+            CreateSourceBindingInput(
+                binding_id="binding-filter",
+                owner_type="industry",
+                owner_id="macro",
+                source_plugin_id="quantagent.official.source.rss",
+                effective_config_snapshot={"feed": "https://example.com/rss"},
+                schedule_policy={"interval_seconds": 60},
+                retry_policy={"max_attempts": 2},
+                rate_limit_policy={"requests_per_minute": 10},
+                next_run_at=self.clock.now(),
+                created_by="issue-222",
+            )
+        )
+        first = self.run_service.create_run(
+            run_id="run-filter-1",
+            binding_id="binding-filter",
+            source_plugin_id="quantagent.official.source.rss",
+            source_plugin_version=None,
+            trigger_mode=PluginTriggerType.INTERVAL,
+            request_id="req-filter-1",
+            status=PluginRunStatus.RUNNING,
+            started_at=self.clock.now(),
+        )
+        self.run_service.finish_run(
+            run_id=first.run_id,
+            status=PluginRunStatus.FAILED,
+            finished_at=self.clock.now(),
+            duration_ms=1000,
+            failure_code="FAILED",
+            failure_message="token=secret",
+        )
+        second = self.run_service.create_run(
+            run_id="run-filter-2",
+            binding_id="binding-filter",
+            source_plugin_id="quantagent.official.source.rss",
+            source_plugin_version=None,
+            trigger_mode=PluginTriggerType.MANUAL,
+            request_id="req-filter-2",
+            status=PluginRunStatus.RUNNING,
+            started_at=self.clock.now() + timedelta(minutes=1),
+        )
+        self.run_service.finish_run(
+            run_id=second.run_id,
+            status=PluginRunStatus.SUCCEEDED,
+            finished_at=self.clock.now() + timedelta(minutes=1),
+            duration_ms=2000,
+        )
+
+        filtered = self.run_repository.list_runs(
+            status="failed",
+            source_plugin_id="quantagent.official.source.rss",
+            trigger_mode="interval",
+            limit=10,
+        )
+        paged = self.run_repository.list_runs(limit=1, offset=1)
+
+        self.assertEqual([item.run_id for item in filtered], ["run-filter-1"])
+        self.assertEqual(len(paged), 1)
+        self.assertEqual(paged[0].run_id, "run-filter-1")
+
     def test_finish_run_sanitizes_failure_message_before_persisting(self) -> None:
         self.binding_service.create_binding(
             CreateSourceBindingInput(
