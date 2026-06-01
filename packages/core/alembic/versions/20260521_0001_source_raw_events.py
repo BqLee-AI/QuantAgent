@@ -78,6 +78,7 @@ def upgrade() -> None:
         sa.Column("duration_ms", sa.Integer(), nullable=True),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("finished_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(["source_binding_id"], ["source_bindings.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
@@ -101,4 +102,3 @@ def downgrade() -> None:
     op.drop_index("ix_raw_events_source_external", table_name="raw_events")
     op.drop_index("ix_raw_events_captured_at", table_name="raw_events")
     op.drop_table("raw_events")
-

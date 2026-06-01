@@ -57,9 +57,11 @@ class RawEventRepository:
             existing_after_conflict = self._session.scalar(
                 select(RawEvent).where(RawEvent.dedupe_key == identity.key)
             )
+            if existing_after_conflict is None:
+                raise
             return StoreRawEventResult(
                 is_duplicate=True,
-                event=_to_stored_event(existing_after_conflict) if existing_after_conflict else None,
+                event=_to_stored_event(existing_after_conflict),
                 dedupe_reason=identity.reason,
             )
 

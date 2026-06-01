@@ -5,10 +5,16 @@ description = "Shared QuantAgent core infrastructure"
 requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.17.2",
+    "defusedxml>=0.7.1",
     "pydantic-settings>=2.14.1",
     "psycopg[binary]>=3.3.2",
+    "pyyaml>=6.0.3",
+    "quantagent-plugin-sdk",
     "sqlalchemy>=2.0.44",
 ]
+
+[tool.uv.sources]
+quantagent-plugin-sdk = { workspace = true }
 
 [tool.uv.build-backend]
 module-root = "src"

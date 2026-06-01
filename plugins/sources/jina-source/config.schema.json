@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Jina Reader Source Plugin Config",
+  "type": "object",
+  "properties": {
+    "url": {
+      "type": "string",
+      "format": "uri"
+    },
+    "headers": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "timeout_seconds": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 60,
+      "default": 10
+    },
+    "endpoint": {
+      "type": "string",
+      "minLength": 1,
+      "default": "https://r.jina.ai/http://{url_without_scheme}"
+    }
+  },
+  "required": [
+    "url"
+  ],
+  "additionalProperties": false
+}

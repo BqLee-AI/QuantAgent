@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import logging
 from time import perf_counter
-from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,8 @@ from quantagent.core.db.models.sources import SourceFetchRun, SourceFetchRunStat
 from quantagent.core.db.repositories.raw_events import RawEventRepository
 from quantagent.core.events.dto import StoredRawEvent
 from quantagent.core.sources.protocols import PullSourcePlugin, RuntimeContext, SourceBindingConfig
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,12 @@ class SourceFetchService:
         binding: SourceBindingConfig,
         cursor: str | None = None,
     ) -> SourceFetchResult:
+        if plugin.id != binding.source_plugin_id:
+            raise ValueError(
+                "Source plugin id does not match binding.source_plugin_id: "
+                f"{plugin.id} != {binding.source_plugin_id}"
+            )
+
         started_at = _utc_now()
         run = SourceFetchRun(
             source_binding_id=binding.id,
@@ -49,11 +57,13 @@ class SourceFetchService:
         plugin_started = False
         stored: list[StoredRawEvent] = []
         duplicates = 0
+        fetched_count = 0
         try:
             plugin.load(RuntimeContext(plugin_id=binding.source_plugin_id))
-            plugin.start()
             plugin_started = True
+            plugin.start()
             drafts = plugin.fetch(cursor, binding.effective_config)
+            fetched_count = len(drafts)
             for draft in drafts:
                 result = self._raw_events.store_if_new(draft)
                 if result.is_duplicate:
@@ -73,8 +83,14 @@ class SourceFetchService:
                 stored_events=tuple(stored),
             )
         except Exception as exc:
+            logger.exception(
+                "Source fetch failed for plugin %s binding %s",
+                binding.source_plugin_id,
+                binding.id,
+            )
             run.status = SourceFetchRunStatus.failed
-            run.error_summary = f"{type(exc).__name__}: {exc}"
+            run.error_summary = f"{type(exc).__name__}: fetch failed"
+            run.fetched_count = fetched_count
             run.stored_count = len(stored)
             run.duplicate_count = duplicates
             return SourceFetchResult(
@@ -89,6 +105,11 @@ class SourceFetchService:
                 try:
                     plugin.stop()
                 except Exception:
+                    logger.exception(
+                        "Source plugin stop failed for plugin %s binding %s",
+                        binding.source_plugin_id,
+                        binding.id,
+                    )
                     if run.status != SourceFetchRunStatus.failed:
                         run.status = SourceFetchRunStatus.failed
                         run.error_summary = "Plugin stop failed after fetch."

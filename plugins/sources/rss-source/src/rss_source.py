@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.request import Request, urlopen
-from xml.etree import ElementTree
+from defusedxml import ElementTree
 
 from quantagent.core.events.dto import RawEventDraft
 from quantagent.core.sources.protocols import RuntimeContext
@@ -170,4 +170,3 @@ def _parse_datetime(value: str | None) -> datetime | None:
 
 
 plugin = RssSourcePlugin()
-

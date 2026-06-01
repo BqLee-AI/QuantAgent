@@ -24,6 +24,7 @@
 - **WHEN** 平台调用 `Readability Link Reader` 插件
 - **THEN** 插件 MUST 只读取传入的 `url`
 - **AND** 插件 MAY 读取可选 `headers` 与 `timeout_seconds`
+- **AND** 插件 MAY 读取少量正文抽取相关参数，但这些参数 MUST 保持为最小必要集合，不能扩展成浏览器自动化、代理池或复杂抓取策略配置
 - **AND** 插件 MUST NOT 自行承担配置保存、启停、调度、审计或生命周期管理
 
 ### Requirement: Reader Plugin Returns RawEventDraft-Compatible Output

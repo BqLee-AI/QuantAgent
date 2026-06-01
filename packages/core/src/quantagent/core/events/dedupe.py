@@ -32,30 +32,30 @@ def hash_content(content: str | None) -> str | None:
 def build_dedupe_identity(event: RawEventDraft) -> DedupeIdentity:
     if event.external_id:
         return DedupeIdentity(
-            key=f"{event.source_type}:external:{event.external_id}",
-            reason="source_type+external_id",
+            key=f"{event.source_plugin_id}:external:{event.external_id}",
+            reason="source_plugin_id+external_id",
         )
 
     canonical_url = normalize_url(event.canonical_url or event.url)
     content_hash = hash_content(event.content or event.title)
     if canonical_url and content_hash:
+        url_hash = hash_content(canonical_url)
         return DedupeIdentity(
-            key=f"{event.source_type}:url_content:{canonical_url}:{content_hash}",
-            reason="source_type+canonical_url+content_hash",
+            key=f"{event.source_plugin_id}:url_content:{url_hash}:{content_hash}",
+            reason="source_plugin_id+canonical_url+content_hash",
             content_hash=content_hash,
             canonical_url=canonical_url,
         )
 
     if event.dedupe_hint:
         return DedupeIdentity(
-            key=f"{event.source_type}:hint:{event.dedupe_hint}",
-            reason="source_type+dedupe_hint",
+            key=f"{event.source_plugin_id}:hint:{event.dedupe_hint}",
+            reason="source_plugin_id+dedupe_hint",
         )
 
     fallback_hash = hash_content(f"{event.title}:{event.captured_at.isoformat()}")
     return DedupeIdentity(
-        key=f"{event.source_type}:fallback:{fallback_hash}",
-        reason="source_type+title+captured_at",
+        key=f"{event.source_plugin_id}:fallback:{fallback_hash}",
+        reason="source_plugin_id+title+captured_at",
         content_hash=fallback_hash,
     )
-

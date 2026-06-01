@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import DateTime, Enum, Index, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import DateTime, Enum, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from quantagent.core.db.base import Base
@@ -94,7 +94,11 @@ class SourceFetchRun(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    source_binding_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    source_binding_id: Mapped[str] = mapped_column(
+        String(36),
+        ForeignKey("source_bindings.id", ondelete="CASCADE"),
+        nullable=False,
+    )
     source_plugin_id: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[SourceFetchRunStatus] = mapped_column(
         Enum(SourceFetchRunStatus, native_enum=False),
@@ -108,4 +112,3 @@ class SourceFetchRun(Base):
     duration_ms: Mapped[int | None] = mapped_column(Integer)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-

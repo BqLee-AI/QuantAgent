@@ -1,0 +1,9 @@
+id: quantagent.official.source.jina
+name: Jina Reader Source
+type: source
+version: 0.1.0
+entrypoint: jina_source:plugin
+description: External Jina-style reader source plugin.
+capabilities:
+  - source.fetch
+config_schema: config.schema.json
