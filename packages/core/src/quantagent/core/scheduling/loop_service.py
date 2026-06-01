@@ -178,6 +178,24 @@ class SourceBindingSchedulerLoopService:
         next_run_at = None
 
         try:
+            # 先原子 claim 再 invoke，避免两个 scheduler 基于同一个 due snapshot 重复执行同一 binding。
+            claimed_binding = self._binding_service.claim_due_binding(
+                binding.binding_id,
+                expected_next_run_at=binding.next_run_at,
+                claimed_at=started_at,
+                actor=self._actor,
+            )
+            if claimed_binding is None:
+                return SourceBindingLoopRunResult(
+                    binding_id=binding.binding_id,
+                    run_id=None,
+                    status=None,
+                    request_id=request_id,
+                    next_run_at=None,
+                    captured_count=0,
+                    event_published=False,
+                    skipped=True,
+                )
             run = self._run_service.create_run(
                 run_id=f"run_{uuid4().hex}",
                 binding_id=binding.binding_id,
@@ -189,11 +207,6 @@ class SourceBindingSchedulerLoopService:
                 timeout_ms=self._default_timeout_ms,
                 metadata=metadata,
                 started_at=started_at,
-            )
-            self._binding_service.mark_heartbeat(
-                binding.binding_id,
-                heartbeat_at=started_at,
-                actor=self._actor,
             )
             if not self._commit_initial_state(binding_id=binding.binding_id, run_id=run.run_id):
                 return SourceBindingLoopRunResult(
@@ -227,7 +240,7 @@ class SourceBindingSchedulerLoopService:
             else:
                 try:
                     source_result = await self._invoke_source_plugin(
-                        binding=binding,
+                        binding=claimed_binding,
                         request_id=request_id,
                         metadata=metadata,
                     )
@@ -264,7 +277,7 @@ class SourceBindingSchedulerLoopService:
                 output_summary=output_summary,
                 captured_count=captured_count,
             )
-            self._binding_service.apply_run_result(
+            binding_updated = self._binding_service.apply_run_result_if_active(
                 binding_id=binding.binding_id,
                 run_id=finished.run_id,
                 status=finished.status,
@@ -278,25 +291,28 @@ class SourceBindingSchedulerLoopService:
                     run_id=finished.run_id,
                     status=run_status,
                     request_id=request_id,
-                    next_run_at=next_run_at,
+                    next_run_at=next_run_at if binding_updated is not None else None,
                     captured_count=captured_count,
                     event_published=False,
                     persistence_failed=True,
                     error_code="SCHEDULER_PERSISTENCE_FAILED",
                 )
 
-            event_published = await self._publish_source_event(
-                binding=binding,
-                source_result=source_result,
-                request_id=request_id,
-                run_id=finished.run_id,
-            )
+            event_published = False
+            # terminal run 要落库，但只有 binding 仍 active 才允许回写下一次调度并向下游发成功事件。
+            if binding_updated is not None:
+                event_published = await self._publish_source_event(
+                    binding=claimed_binding,
+                    source_result=source_result,
+                    request_id=request_id,
+                    run_id=finished.run_id,
+                )
             return SourceBindingLoopRunResult(
                 binding_id=binding.binding_id,
                 run_id=finished.run_id,
                 status=run_status,
                 request_id=request_id,
-                next_run_at=next_run_at,
+                next_run_at=next_run_at if binding_updated is not None else None,
                 captured_count=captured_count,
                 event_published=event_published,
                 error_code=error_summary["code"] if error_summary is not None else None,

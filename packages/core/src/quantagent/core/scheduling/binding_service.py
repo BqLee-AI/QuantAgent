@@ -46,6 +46,26 @@ class SourceBindingService:
         due_at = now or self._clock.now()
         return [_to_record(item) for item in self._repository.list_due_bindings(now=due_at, limit=limit)]
 
+    def claim_due_binding(
+        self,
+        binding_id: str,
+        *,
+        expected_next_run_at: datetime,
+        claimed_at: datetime | None = None,
+        actor: str | None = None,
+    ) -> SourceBindingRecord | None:
+        actual_claimed_at = claimed_at or self._clock.now()
+        claimed = self._repository.claim_due_binding(
+            binding_id=binding_id,
+            expected_next_run_at=expected_next_run_at,
+            claimed_at=actual_claimed_at,
+            actor=actor,
+        )
+        if not claimed:
+            return None
+        binding = self._require_binding(binding_id)
+        return _to_record(binding)
+
     def mark_heartbeat(self, binding_id: str, *, heartbeat_at: datetime | None = None, actor: str | None = None) -> SourceBindingRecord:
         binding = self._require_binding(binding_id)
         binding.last_heartbeat_at = heartbeat_at or self._clock.now()
@@ -75,6 +95,39 @@ class SourceBindingService:
         elif status in {PluginRunStatus.FAILED, PluginRunStatus.TIMEOUT, PluginRunStatus.CANCELLED}:
             binding.consecutive_failure_count += 1
         return _to_record(self._repository.save(binding))
+
+    def apply_run_result_if_active(
+        self,
+        *,
+        binding_id: str,
+        run_id: str,
+        status: PluginRunStatus,
+        finished_at: datetime,
+        next_run_at: datetime | None,
+        actor: str | None = None,
+    ) -> SourceBindingRecord | None:
+        values: dict[str, object] = {
+            "last_run_id": run_id,
+            "last_run_status": status.value,
+            "last_run_at": finished_at,
+            "next_run_at": next_run_at,
+            "updated_by": actor,
+        }
+        # 非显然约束：只有 binding 仍是 active 才允许回写下一次调度与热路径摘要，避免 pause/disable during invoke 被旧结果覆盖。
+        if status == PluginRunStatus.SUCCEEDED:
+            values["last_success_at"] = finished_at
+            values["consecutive_failure_count"] = 0
+        elif status in {PluginRunStatus.FAILED, PluginRunStatus.TIMEOUT, PluginRunStatus.CANCELLED}:
+            binding = self._require_binding(binding_id)
+            values["consecutive_failure_count"] = binding.consecutive_failure_count + 1
+        updated = self._repository.update_if_status(
+            binding_id=binding_id,
+            expected_status=SourceBindingStatus.ACTIVE.value,
+            values=values,
+        )
+        if not updated:
+            return None
+        return _to_record(self._require_binding(binding_id))
 
     def disable_binding(self, binding_id: str, *, reason: str, actor: str | None = None) -> SourceBindingRecord:
         binding = self._require_binding(binding_id)

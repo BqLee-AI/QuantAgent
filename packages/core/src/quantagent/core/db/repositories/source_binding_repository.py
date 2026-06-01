@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Select, and_, or_, select
+from sqlalchemy import Select, and_, or_, select, update
 from sqlalchemy.orm import Session
 
 from quantagent.core.db.models.source_binding import SourceBindingORM
@@ -68,6 +68,48 @@ class SourceBindingRepository:
         self._session.add(binding)
         self._session.flush()
         return binding
+
+    def claim_due_binding(
+        self,
+        *,
+        binding_id: str,
+        expected_next_run_at: datetime,
+        claimed_at: datetime,
+        actor: str | None = None,
+    ) -> bool:
+        statement = (
+            update(SourceBindingORM)
+            .where(SourceBindingORM.binding_id == binding_id)
+            .where(SourceBindingORM.status == "active")
+            .where(SourceBindingORM.next_run_at == expected_next_run_at)
+            .values(
+                next_run_at=None,
+                last_heartbeat_at=claimed_at,
+                updated_by=actor,
+            )
+            .execution_options(synchronize_session="fetch")
+        )
+        result = self._session.execute(statement)
+        self._session.flush()
+        return result.rowcount == 1
+
+    def update_if_status(
+        self,
+        *,
+        binding_id: str,
+        expected_status: str,
+        values: dict[str, object],
+    ) -> bool:
+        statement = (
+            update(SourceBindingORM)
+            .where(SourceBindingORM.binding_id == binding_id)
+            .where(SourceBindingORM.status == expected_status)
+            .values(**values)
+            .execution_options(synchronize_session="fetch")
+        )
+        result = self._session.execute(statement)
+        self._session.flush()
+        return result.rowcount == 1
 
     def list_for_api(
         self,

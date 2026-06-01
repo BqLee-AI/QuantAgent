@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 import unittest
+import asyncio
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from quantagent.core.runtime import PluginRuntimeService
 from quantagent.core.scheduling import (
     CreateSourceBindingInput,
     FrozenSchedulingClock,
+    SourceBindingStatus,
     SchedulerRunService,
     SourceBindingSchedulerLoopService,
     SourceBindingService,
@@ -41,6 +43,29 @@ class RecordingHandler:
         self.seen.append(envelope)
 
 
+class BlockingInvokePlugin(BasePlugin):
+    started = None
+    release = None
+
+    async def invoke(self, request):
+        assert BlockingInvokePlugin.started is not None
+        assert BlockingInvokePlugin.release is not None
+        BlockingInvokePlugin.started.set()
+        await BlockingInvokePlugin.release.wait()
+        return PluginInvokeResult(
+            output={
+                "items": [
+                    {
+                        "external_id": "evt-blocked-1",
+                        "title": "Macro changed",
+                        "raw_payload": {"id": "evt-blocked-1"},
+                    }
+                ],
+                "metadata": {"source": "blocked"},
+            }
+        )
+
+
 class SourceBindingSchedulerLoopServiceTestCase(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self) -> None:
         self.engine = create_engine("sqlite:///:memory:")
@@ -59,6 +84,8 @@ class SourceBindingSchedulerLoopServiceTestCase(unittest.IsolatedAsyncioTestCase
             handler=self.event_handler,
         )
         self.module_name = "test_scheduler_loop_source_plugin"
+        BlockingInvokePlugin.started = None
+        BlockingInvokePlugin.release = None
 
     async def asyncTearDown(self) -> None:
         self.session.close()
@@ -224,6 +251,253 @@ class SourceBindingSchedulerLoopServiceTestCase(unittest.IsolatedAsyncioTestCase
         self.assertEqual(len(runs), 1)
         self.assertEqual(runs[0].status, "failed")
         self.assertEqual(runs[0].failure_code, "PLUGIN_DTO_VALIDATION_FAILED")
+
+    async def test_concurrent_binding_runs_only_create_one_run_after_claim(self) -> None:
+        class SourcePlugin(BasePlugin):
+            async def invoke(self, request):
+                return PluginInvokeResult(output={"items": [], "metadata": {"source": "noop"}})
+
+        plugin_path = Path(__file__).resolve()
+        module = type(sys)(self.module_name)
+        module.plugin = SourcePlugin
+        sys.modules[self.module_name] = module
+        registry = PluginRegistry(
+            StaticScanner(
+                [
+                    PluginRecord(
+                        id="quantagent.official.source.concurrent",
+                        source=PluginSource.OFFICIAL,
+                        path=plugin_path,
+                        status=PluginStatus.VALID,
+                        manifest=PluginManifest(
+                            id="quantagent.official.source.concurrent",
+                            name="Concurrent Source",
+                            type=PluginType.SOURCE,
+                            version="1.0.0",
+                            entrypoint=f"{self.module_name}:plugin",
+                            capabilities=("source.fetch",),
+                            config_schema="config.schema.json",
+                        ),
+                        config_schema_path=plugin_path,
+                    )
+                ]
+            )
+        )
+        binding = self.binding_service.create_binding(
+            CreateSourceBindingInput(
+                binding_id="binding-concurrent",
+                owner_type="industry",
+                owner_id="macro",
+                source_plugin_id="quantagent.official.source.concurrent",
+                source_plugin_version="1.0.0",
+                effective_config_snapshot={
+                    "source_plugin_id": "quantagent.official.source.concurrent",
+                    "config": {},
+                    "config_fingerprint": "fingerprint-concurrent",
+                    "template_refs": {"layers": ["override"]},
+                    "validated_at": "2026-06-01T08:00:00+00:00",
+                },
+                schedule_policy={"interval_seconds": 60},
+                retry_policy={"max_attempts": 1},
+                rate_limit_policy={"requests_per_window": 10, "window_seconds": 60},
+                next_run_at=self.clock.now() - timedelta(seconds=5),
+                created_by="issue-251",
+            )
+        )
+        service = SourceBindingSchedulerLoopService(
+            registry=registry,
+            runtime=PluginRuntimeService(),
+            binding_service=self.binding_service,
+            run_service=self.run_service,
+            clock=self.clock,
+            commit=self.session.commit,
+            rollback=self.session.rollback,
+            publisher=SourceEventPublisher(self.event_bus),
+            default_timeout_ms=30_000,
+        )
+
+        due_snapshot = self.binding_service.list_due_bindings(limit=10)[0]
+        first, second = await asyncio.gather(
+            service._run_binding(due_snapshot),
+            service._run_binding(due_snapshot),
+        )
+
+        self.assertEqual(len(self.run_repository.list_by_binding(binding_id=binding.binding_id, limit=10)), 1)
+        self.assertEqual(sum(1 for item in (first, second) if item.skipped), 1)
+        self.assertEqual(sum(1 for item in (first, second) if item.status is not None), 1)
+
+    async def test_pause_during_invoke_only_records_run_terminal_state(self) -> None:
+        plugin_path = Path(__file__).resolve()
+        pause_module_name = f"{self.module_name}_pause"
+        module = type(sys)(pause_module_name)
+        module.plugin = BlockingInvokePlugin
+        sys.modules[pause_module_name] = module
+        registry = PluginRegistry(
+            StaticScanner(
+                [
+                    PluginRecord(
+                        id="quantagent.official.source.blocking",
+                        source=PluginSource.OFFICIAL,
+                        path=plugin_path,
+                        status=PluginStatus.VALID,
+                        manifest=PluginManifest(
+                            id="quantagent.official.source.blocking",
+                            name="Blocking Source",
+                            type=PluginType.SOURCE,
+                            version="1.0.0",
+                            entrypoint=f"{pause_module_name}:plugin",
+                            capabilities=("source.fetch",),
+                            config_schema="config.schema.json",
+                        ),
+                        config_schema_path=plugin_path,
+                    )
+                ]
+            )
+        )
+        binding = self.binding_service.create_binding(
+            CreateSourceBindingInput(
+                binding_id="binding-pause-during-invoke",
+                owner_type="industry",
+                owner_id="macro",
+                source_plugin_id="quantagent.official.source.blocking",
+                source_plugin_version="1.0.0",
+                effective_config_snapshot={
+                    "source_plugin_id": "quantagent.official.source.blocking",
+                    "config": {},
+                    "config_fingerprint": "fingerprint-blocking",
+                    "template_refs": {"layers": ["override"]},
+                    "validated_at": "2026-06-01T08:00:00+00:00",
+                },
+                schedule_policy={"interval_seconds": 60},
+                retry_policy={"max_attempts": 1},
+                rate_limit_policy={"requests_per_window": 10, "window_seconds": 60},
+                next_run_at=self.clock.now() - timedelta(seconds=5),
+                created_by="issue-251",
+            )
+        )
+        service = SourceBindingSchedulerLoopService(
+            registry=registry,
+            runtime=PluginRuntimeService(),
+            binding_service=self.binding_service,
+            run_service=self.run_service,
+            clock=self.clock,
+            commit=self.session.commit,
+            rollback=self.session.rollback,
+            publisher=SourceEventPublisher(self.event_bus),
+            default_timeout_ms=30_000,
+        )
+        BlockingInvokePlugin.started = asyncio.Event()
+        BlockingInvokePlugin.release = asyncio.Event()
+
+        run_task = asyncio.create_task(service.run_once())
+        await BlockingInvokePlugin.started.wait()
+
+        self.binding_service.pause_binding(binding.binding_id, actor="reviewer")
+        self.session.commit()
+        BlockingInvokePlugin.release.set()
+
+        result = await run_task
+
+        updated_binding = self.binding_repository.get(binding.binding_id)
+        self.assertIsNotNone(updated_binding)
+        assert updated_binding is not None
+        self.assertEqual(updated_binding.status, SourceBindingStatus.PAUSED.value)
+        self.assertIsNone(updated_binding.last_run_id)
+        self.assertIsNone(updated_binding.last_run_status)
+        self.assertIsNone(updated_binding.next_run_at)
+        self.assertEqual(result.emitted_events, 0)
+        self.assertEqual(len(self.event_handler.seen), 0)
+
+        runs = self.run_repository.list_by_binding(binding_id=binding.binding_id, limit=10)
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0].status, "succeeded")
+
+    async def test_disable_during_invoke_only_records_run_terminal_state(self) -> None:
+        plugin_path = Path(__file__).resolve()
+        disable_module_name = f"{self.module_name}_disable"
+        module = type(sys)(disable_module_name)
+        module.plugin = BlockingInvokePlugin
+        sys.modules[disable_module_name] = module
+        registry = PluginRegistry(
+            StaticScanner(
+                [
+                    PluginRecord(
+                        id="quantagent.official.source.blocking-disable",
+                        source=PluginSource.OFFICIAL,
+                        path=plugin_path,
+                        status=PluginStatus.VALID,
+                        manifest=PluginManifest(
+                            id="quantagent.official.source.blocking-disable",
+                            name="Blocking Disable Source",
+                            type=PluginType.SOURCE,
+                            version="1.0.0",
+                            entrypoint=f"{disable_module_name}:plugin",
+                            capabilities=("source.fetch",),
+                            config_schema="config.schema.json",
+                        ),
+                        config_schema_path=plugin_path,
+                    )
+                ]
+            )
+        )
+        binding = self.binding_service.create_binding(
+            CreateSourceBindingInput(
+                binding_id="binding-disable-during-invoke",
+                owner_type="industry",
+                owner_id="macro",
+                source_plugin_id="quantagent.official.source.blocking-disable",
+                source_plugin_version="1.0.0",
+                effective_config_snapshot={
+                    "source_plugin_id": "quantagent.official.source.blocking-disable",
+                    "config": {},
+                    "config_fingerprint": "fingerprint-disable",
+                    "template_refs": {"layers": ["override"]},
+                    "validated_at": "2026-06-01T08:00:00+00:00",
+                },
+                schedule_policy={"interval_seconds": 60},
+                retry_policy={"max_attempts": 1},
+                rate_limit_policy={"requests_per_window": 10, "window_seconds": 60},
+                next_run_at=self.clock.now() - timedelta(seconds=5),
+                created_by="issue-251",
+            )
+        )
+        service = SourceBindingSchedulerLoopService(
+            registry=registry,
+            runtime=PluginRuntimeService(),
+            binding_service=self.binding_service,
+            run_service=self.run_service,
+            clock=self.clock,
+            commit=self.session.commit,
+            rollback=self.session.rollback,
+            publisher=SourceEventPublisher(self.event_bus),
+            default_timeout_ms=30_000,
+        )
+        BlockingInvokePlugin.started = asyncio.Event()
+        BlockingInvokePlugin.release = asyncio.Event()
+
+        run_task = asyncio.create_task(service.run_once())
+        await BlockingInvokePlugin.started.wait()
+
+        self.binding_service.disable_binding(binding.binding_id, reason="reviewer-disable", actor="reviewer")
+        self.session.commit()
+        BlockingInvokePlugin.release.set()
+
+        result = await run_task
+
+        updated_binding = self.binding_repository.get(binding.binding_id)
+        self.assertIsNotNone(updated_binding)
+        assert updated_binding is not None
+        self.assertEqual(updated_binding.status, SourceBindingStatus.DISABLED.value)
+        self.assertEqual(updated_binding.disabled_reason, "reviewer-disable")
+        self.assertIsNone(updated_binding.last_run_id)
+        self.assertIsNone(updated_binding.last_run_status)
+        self.assertIsNone(updated_binding.next_run_at)
+        self.assertEqual(result.emitted_events, 0)
+        self.assertEqual(len(self.event_handler.seen), 0)
+
+        runs = self.run_repository.list_by_binding(binding_id=binding.binding_id, limit=10)
+        self.assertEqual(len(runs), 1)
+        self.assertEqual(runs[0].status, "succeeded")
 
 
 if __name__ == "__main__":
