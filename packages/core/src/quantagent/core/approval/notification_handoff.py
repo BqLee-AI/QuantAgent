@@ -5,7 +5,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
-from uuid import uuid4
 
 from quantagent.core.approval.models import ApprovalInput
 from quantagent.core.approval.service import ApprovalOrchestrationService
@@ -134,7 +133,8 @@ def _input_id_from_request(request: NotificationApprovalHandoffRequest) -> str:
     raw = request.metadata.get("approval_input_id") or request.payload_summary.get("approval_input_id")
     if isinstance(raw, str) and raw.strip():
         return raw.strip()
-    return f"approval_input_{request.fact_id}_{request.interaction_id}_{uuid4().hex}"
+    # 幂等边界：同一 notification receive fact 重试时必须落到同一个 ApprovalInput.id。
+    return f"approval_input_{request.fact_id}_{request.interaction_id}"
 
 
 def _actor_ref_from_request(request: NotificationApprovalHandoffRequest) -> str:

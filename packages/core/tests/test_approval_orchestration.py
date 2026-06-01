@@ -32,6 +32,37 @@ class ApprovalOrchestrationTestCase(unittest.IsolatedAsyncioTestCase):
         await self.bus.subscribe(topics=("approval.completed",), group_id="test", handler=self.completed)
         await self.bus.subscribe(topics=("notification.requested",), group_id="test", handler=self.notifications)
 
+    async def test_approval_requested_payload_uses_safe_summary(self) -> None:
+        approval_requested = RecordingHandler()
+        await self.bus.subscribe(topics=("approval.requested",), group_id="test", handler=approval_requested)
+        service, _, _, _ = self._service()
+
+        await service.submit_action(
+            ActionRequest(
+                id="act-sensitive",
+                action_type="adjust_strategy",
+                action_side="increase_risk",
+                target_type="strategy",
+                target_id="strategy-1",
+                proposed_payload={
+                    "prompt": "private strategy thesis without token marker",
+                    "private_policy": "never publish this policy body",
+                    "broker_order": {"symbol": "BTC-USD", "side": "buy"},
+                },
+            )
+        )
+
+        self.assertEqual(len(approval_requested.seen), 1)
+        payload = approval_requested.seen[0].payload
+        rendered = str(payload)
+        self.assertNotIn("proposed_payload", payload)
+        self.assertNotIn("private strategy thesis without token marker", rendered)
+        self.assertNotIn("never publish this policy body", rendered)
+        self.assertNotIn("broker_order", rendered)
+        self.assertEqual(payload["approval_id"], "approval-fixed")
+        self.assertEqual(payload["action_request_id"], "act-sensitive")
+        self.assertEqual(payload["safe_context"]["risk_level"], "high")
+
     async def test_approve_calls_policy_gate_and_executor(self) -> None:
         service, gate, executor, repository = self._service()
         result = await service.submit_action(_approval_required_action())

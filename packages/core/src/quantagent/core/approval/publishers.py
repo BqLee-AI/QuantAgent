@@ -22,7 +22,7 @@ class ApprovalEventPublisher:
     async def publish_approval_requested(self, approval: ApprovalRequest, *, correlation_id: str | None) -> EventEnvelope:
         return await self._publish(
             topic="approval.requested",
-            payload=approval.to_mapping(),
+            payload=_approval_requested_payload(approval),
             correlation_id=correlation_id,
             causation_id=approval.action_request_id,
             headers={"approval_id": approval.id, "action_request_id": approval.action_request_id},
@@ -94,3 +94,31 @@ class ApprovalEventPublisher:
             headers=sanitize_mapping(headers),
         )
         return await self.publisher.publish(envelope)
+
+
+def _approval_requested_payload(approval: ApprovalRequest) -> dict[str, object]:
+    # 脱敏边界：approval.requested 是状态变化摘要，不携带可直接执行的 proposed_payload 原文。
+    return {
+        "approval_id": approval.id,
+        "action_request_id": approval.action_request_id,
+        "summary": approval.summary,
+        "target_type": approval.target_type,
+        "target_id": approval.target_id,
+        "action_type": approval.action_type,
+        "action_side": approval.action_side,
+        "risk_level": approval.risk_level,
+        "urgency": approval.urgency,
+        "required_confirmation_level": approval.required_confirmation_level.value,
+        "expires_at": approval.expires_at,
+        "expiration_action": approval.expiration_action.value,
+        "allowed_channels": list(approval.allowed_channels),
+        "policy_source": approval.policy_source,
+        "status": approval.status.value,
+        "safe_context": {
+            "target_type": approval.target_type,
+            "target_id": approval.target_id,
+            "action_type": approval.action_type,
+            "urgency": approval.urgency,
+            "risk_level": approval.risk_level,
+        },
+    }

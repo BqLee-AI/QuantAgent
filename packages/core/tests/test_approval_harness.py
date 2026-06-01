@@ -175,6 +175,54 @@ class ApprovalHarnessTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(seen[0].topic, "approval.input_received")
         self.assertEqual(seen[0].payload["approval_id"], "approval-1")
 
+    async def test_notification_handoff_default_input_id_is_stable_for_retries(self) -> None:
+        bus = InMemoryEventBus()
+        executor = FakeActionExecutor()
+        service = ApprovalOrchestrationService(
+            repository=InMemoryApprovalRepository(),
+            event_publisher=ApprovalEventPublisher(bus),
+            policy_gate=FakePolicyGate(),
+            executor=executor,
+            id_factory=_fixed_id,
+        )
+        approval = (
+            await service.submit_action(
+                ActionRequest(
+                    id="act-stable-handoff",
+                    action_type="monitor",
+                    action_side="increase_risk",
+                    target_type="strategy",
+                    target_id="strategy-1",
+                    user_policy={"mode": "approval_required", "required_confirmation_level": "soft_confirm"},
+                )
+            )
+        ).approval
+        adapter = ApprovalNotificationHandoffAdapter(service=service)
+        request = NotificationApprovalHandoffRequest(
+            handoff_id="handoff-retry",
+            fact_id="fact-retry",
+            plugin_id="quantagent.official.notification.fake",
+            transport="web",
+            request_id="req-retry",
+            correlation_id="corr-retry",
+            interaction_id="interaction-retry",
+            source_id="source-retry",
+            text="approve",
+            payload_summary={"approval_id": approval.id},
+            metadata={},
+            received_at="2026-06-01T00:00:02+00:00",
+            author_id="user-1",
+        )
+
+        first = await adapter.handoff(request)
+        second = await adapter.handoff(request)
+
+        self.assertEqual(first.metadata["input_id"], "approval_input_fact-retry_interaction-retry")
+        self.assertEqual(second.metadata["input_id"], "approval_input_fact-retry_interaction-retry")
+        self.assertEqual(first.metadata["decision_status"], "execution_requested")
+        self.assertEqual(second.metadata["decision_status"], "execution_requested")
+        self.assertEqual(len(executor.calls), 1)
+
     async def test_notification_handoff_failure_paths_do_not_execute(self) -> None:
         cases = [
             ("missing_approval_id", None, None, "approve"),
