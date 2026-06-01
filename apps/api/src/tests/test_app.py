@@ -865,6 +865,23 @@ class ApiAppTestCase(unittest.TestCase):
 
         self.assertEqual(settings.LOG_LEVEL, "ERROR")
 
+    def test_discord_allowlist_dotenv_accepts_empty_and_comma_separated_values(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            workspace = Path(tmp_dir)
+            api_dir = workspace / "apps/api"
+            api_dir.mkdir(parents=True)
+            (api_dir / ".env").write_text(
+                "DISCORD_INTERACTIONS_GUILD_ALLOWLIST=guild-1,guild-2\n"
+                "DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST=\n",
+                encoding="utf-8",
+            )
+            env_files = _build_env_file_paths(cwd=workspace, source_repo_root=workspace, source_api_app_dir=api_dir)
+
+            settings = Settings(_env_file=tuple(str(path) for path in env_files))
+
+        self.assertEqual(settings.DISCORD_INTERACTIONS_GUILD_ALLOWLIST, ("guild-1", "guild-2"))
+        self.assertEqual(settings.DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST, ())
+
     def test_app_env_selects_only_matching_api_environment_dotenv(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_dir:
             workspace = Path(tmp_dir)

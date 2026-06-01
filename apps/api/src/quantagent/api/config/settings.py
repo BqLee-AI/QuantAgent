@@ -3,11 +3,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import socket
-from typing import Literal
+from typing import Annotated, Literal
 
 from dotenv import dotenv_values
 from pydantic import AliasChoices, Field, field_validator, model_validator
-from pydantic_settings import SettingsConfigDict
+from pydantic_settings import NoDecode, SettingsConfigDict
 
 from quantagent.core.config.settings import Settings as CoreSettings
 
@@ -193,8 +193,8 @@ class Settings(CoreSettings):
     DISCORD_INTERACTIONS_PUBLIC_KEY: str | None = None
     DISCORD_INTERACTIONS_RESPONSE_TEXT: str = "QuantAgent received your Discord interaction."
     DISCORD_INTERACTIONS_TIMESTAMP_TOLERANCE_SECONDS: int = Field(default=300, ge=0)
-    DISCORD_INTERACTIONS_GUILD_ALLOWLIST: tuple[str, ...] = ()
-    DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST: tuple[str, ...] = ()
+    DISCORD_INTERACTIONS_GUILD_ALLOWLIST: Annotated[tuple[str, ...], NoDecode] = ()
+    DISCORD_INTERACTIONS_CHANNEL_ALLOWLIST: Annotated[tuple[str, ...], NoDecode] = ()
 
     @field_validator("AUTH_COOKIE_SAME_SITE", mode="before")
     @classmethod
