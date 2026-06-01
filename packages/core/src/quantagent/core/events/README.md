@@ -186,6 +186,7 @@ await source_publisher.publish_source_fetch_result(
     producer="plugin-scheduling",
     request_id="req-1",
     plugin_id="quantagent.official.source.placeholder",
+    binding_id="binding-1",
 )
 ```
 
@@ -194,7 +195,7 @@ await source_publisher.publish_source_fetch_result(
 - 固定 topic 为 `source.event.captured`
 - 生成消息级 `id`
 - 把 `SourceFetchResult` 转成标准 `payload`
-- 补上 `request_id`、`plugin_id`、`item_count` 等 header
+- 补上 `binding_id`、`request_id`、`plugin_id`、`item_count` 等 payload/header 字段
 
 ## 订阅方式
 

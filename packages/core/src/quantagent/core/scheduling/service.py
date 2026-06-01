@@ -197,6 +197,9 @@ class PluginSchedulingService:
         # 仅 source.fetch 发布事件：V1 先验证桥接模式可行，后续按需扩展其他 capability
         if request.capability != "source.fetch":
             return
+        if request.binding_id is None:
+            # worker 路由以 binding_id 为一级真源；缺少 binding 的手动 source.fetch 不发布，避免制造必失败消息。
+            return
         if invocation.result is None or not invocation.result.output:
             return
         try:
@@ -207,6 +210,7 @@ class PluginSchedulingService:
                 producer="plugin-scheduling",
                 request_id=request.request_id,
                 plugin_id=request.plugin_id,
+                binding_id=request.binding_id,
                 causation_id=run.run_id,
             )
         except Exception as exc:

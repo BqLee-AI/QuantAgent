@@ -568,8 +568,8 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
             publisher=bus,
         )
 
-    async def test_trigger_publishes_source_event_when_publisher_provided(self) -> None:
-        """有 publisher 时 source.fetch 成功 → InMemoryEventBus 上出现 source.event.captured"""
+    async def test_trigger_publishes_source_event_with_binding_when_publisher_provided(self) -> None:
+        """有 publisher 且请求带 binding_id 时 source.fetch 成功 → 下游收到可路由事件。"""
 
         bus = InMemoryEventBus()
         handler = _RecordingHandler()
@@ -583,7 +583,7 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
 
         self._install_module("test_publish_source", SourcePlugin)
         service = self._service_with_publisher(self._record(entrypoint="test_publish_source:plugin"), bus)
-        request = self._request(request_id="req-publish-1")
+        request = self._request(request_id="req-publish-1", binding_id="binding-manual-001")
 
         run = await service.trigger(request)
 
@@ -593,7 +593,30 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(envelope.topic, "source.event.captured")
         self.assertIn("plugin_id", envelope.payload)
         self.assertEqual(envelope.payload["plugin_id"], "quantagent.test.scheduling")
-        self.assertNotIn("binding_id", envelope.payload)
+        self.assertEqual(envelope.payload["binding_id"], "binding-manual-001")
+        self.assertEqual(envelope.headers["binding_id"], "binding-manual-001")
+
+    async def test_trigger_does_not_publish_source_event_without_binding_id(self) -> None:
+        """source.event.captured 缺 binding_id 会让 worker 走 missing-binding，生产侧必须拦住。"""
+
+        bus = InMemoryEventBus()
+        handler = _RecordingHandler()
+        await bus.subscribe(topics=["source.event.captured"], group_id="test-group", handler=handler)
+
+        class SourcePlugin(BasePlugin):
+            async def invoke(self, request):
+                return PluginInvokeResult(
+                    output={"items": [{"external_id": "a1", "title": "Test"}], "metadata": {}},
+                )
+
+        self._install_module("test_publish_source_without_binding", SourcePlugin)
+        service = self._service_with_publisher(self._record(entrypoint="test_publish_source_without_binding:plugin"), bus)
+        request = self._request(request_id="req-publish-no-binding")
+
+        run = await service.trigger(request)
+
+        self.assertEqual(run.status, PluginRunStatus.SUCCEEDED)
+        self.assertEqual(len(handler.envelopes), 0)
 
     async def test_trigger_without_publisher_behaves_identically(self) -> None:
         """无 publisher 时行为不变"""
@@ -717,8 +740,12 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self._install_module("test_concurrent_publish", SlowSourcePlugin)
         service = self._service_with_publisher(self._record(entrypoint="test_concurrent_publish:plugin"), bus)
 
-        first_task = asyncio.create_task(service.trigger(self._request(request_id="req-conc-a")))
-        second_task = asyncio.create_task(service.trigger(self._request(request_id="req-conc-b")))
+        first_task = asyncio.create_task(
+            service.trigger(self._request(request_id="req-conc-a", binding_id="binding-conc-a"))
+        )
+        second_task = asyncio.create_task(
+            service.trigger(self._request(request_id="req-conc-b", binding_id="binding-conc-b"))
+        )
         await asyncio.sleep(0)
         release.set()
 
@@ -729,6 +756,8 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(handler.envelopes), 2)
         event_plugin_ids = {e.payload["plugin_id"] for e in handler.envelopes}
         self.assertEqual(event_plugin_ids, {"quantagent.test.scheduling"})
+        event_binding_ids = {e.payload["binding_id"] for e in handler.envelopes}
+        self.assertEqual(event_binding_ids, {"binding-conc-a", "binding-conc-b"})
 
     def _service(self, record: PluginRecord) -> PluginSchedulingService:
         registry = PluginRegistry(StaticScanner([record]))
@@ -746,6 +775,7 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
         input_data: dict[str, object] | None = None,
         effective_config: dict[str, object] | None = None,
         metadata: dict[str, object] | None = None,
+        binding_id: str | None = None,
         timeout_ms: int | None = None,
     ) -> PluginTriggerRequest:
         return PluginTriggerRequest(
@@ -756,6 +786,7 @@ class PluginSchedulingServiceTestCase(unittest.IsolatedAsyncioTestCase):
             input=input_data or {},
             effective_config=effective_config or {"enabled": True},
             metadata=metadata or {},
+            binding_id=binding_id,
             timeout_ms=timeout_ms,
         )
 

@@ -31,6 +31,7 @@ class PluginTriggerRequest:
     input: JsonObject = field(default_factory=dict)
     effective_config: JsonObject = field(default_factory=dict)
     metadata: JsonObject = field(default_factory=dict)
+    binding_id: str | None = None
     timeout_ms: int | None = None
 
     def __post_init__(self) -> None:
@@ -39,6 +40,8 @@ class PluginTriggerRequest:
         _require_non_empty("request_id", self.request_id)
         if self.timeout_ms is not None and self.timeout_ms <= 0:
             raise ValueError("timeout_ms must be greater than zero when provided.")
+        if self.binding_id is not None:
+            _require_non_empty("binding_id", self.binding_id)
         object.__setattr__(self, "input", freeze_json_mapping(self.input, stage="invoke"))
         object.__setattr__(self, "effective_config", freeze_json_mapping(self.effective_config, stage="config"))
         object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata, stage="schedule_precheck"))
@@ -106,6 +109,7 @@ class IntervalSchedulePolicy:
         effective_config: Mapping[str, object] | None = None,
         input_payload: Mapping[str, object] | None = None,
         metadata: Mapping[str, object] | None = None,
+        binding_id: str | None = None,
         timeout_ms: int | None = None,
     ) -> PluginTriggerRequest:
         merged_metadata = dict(self.metadata)
@@ -118,6 +122,7 @@ class IntervalSchedulePolicy:
             input=input_payload or {},
             effective_config=effective_config or {},
             metadata=merged_metadata,
+            binding_id=binding_id,
             timeout_ms=timeout_ms,
         )
 

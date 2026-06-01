@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 
 from quantagent.core.config import settings
@@ -51,6 +52,14 @@ def create_worker_app() -> WorkerApp:
     return WorkerApp(runtime=runtime, handler=handler, session=session)
 
 
+async def run_once() -> None:
+    app = create_worker_app()
+    try:
+        await app.consume_once()
+    finally:
+        await app.close()
+
+
 def run() -> None:
-    # 当前入口仍保持薄层，只组装 runtime / handler / session；长期消费生命周期后续再扩展。
-    create_worker_app()
+    # V1 CLI 执行一次订阅/消费主流程；长期 loop 后续只扩展生命周期，不把业务塞回入口。
+    asyncio.run(run_once())

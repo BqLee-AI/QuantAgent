@@ -65,10 +65,12 @@ class SourceEventPublisher:
         producer: str,
         request_id: str,
         plugin_id: str,
-        binding_id: str | None = None,
+        binding_id: str,
         causation_id: str | None = None,
         correlation_id: str | None = None,
     ) -> EventEnvelope:
+        if not isinstance(binding_id, str) or not binding_id.strip():
+            raise ValueError("binding_id must be a non-empty string for source.event.captured.")
         envelope = EventEnvelope(
             id=(self.id_factory or _default_event_id_factory)(),
             topic="source.event.captured",
@@ -99,16 +101,15 @@ def _source_fetch_payload(
     result: SourceFetchResult,
     *,
     plugin_id: str,
-    binding_id: str | None,
+    binding_id: str,
 ) -> JsonObject:
     payload: dict[str, Any] = {
         "plugin_id": plugin_id,
+        "binding_id": binding_id,
         "items": [item.to_mapping() for item in result.items],
         "next_cursor": result.next_cursor,
         "metadata": dict(result.metadata),
     }
-    if binding_id is not None:
-        payload["binding_id"] = binding_id
     return freeze_json_mapping(payload, stage="publish")
 
 

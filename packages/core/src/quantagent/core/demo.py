@@ -81,6 +81,7 @@ async def run_demo() -> DemoResult:
         input={"query": "demo"},
         effective_config={},
         metadata={"origin": "quantagent-demo"},
+        binding_id="demo-source-binding",
     )
 
     lines.append("")
