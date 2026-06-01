@@ -12,7 +12,8 @@ from quantagent.core.scheduling import (
     PluginTriggerRequest,
     PluginTriggerType,
 )
-from quantagent.scheduler.main import SchedulerRuntime, _run, create_scheduler_runtime
+from quantagent.scheduler.main import _run
+from quantagent.scheduler.runtime import SchedulerRuntime, create_scheduler_runtime
 
 
 # ---- helpers ----
@@ -90,7 +91,7 @@ class TestMemoryBackend(unittest.TestCase):
 class TestKafkaBackend(unittest.TestCase):
     """task 5.1 / 5.2 / 5.3"""
 
-    @patch("quantagent.scheduler.main.build_event_bus_runtime")
+    @patch("quantagent.scheduler.runtime.build_event_bus_runtime")
     def test_kafka_backend_assembly(self, mock_build) -> None:
         """task 5.1: Kafka 后端组装验证"""
         mock_publisher = MagicMock(spec=KafkaEventBusPublisher)
