@@ -29,15 +29,18 @@ from quantagent.worker.main import create_worker_app, create_worker_runtime, run
 - `create_worker_runtime()`
   组装并返回 `EventBusRuntime`
 - `create_worker_app()`
-  组装 worker 的 session、captured-event handler、Readability enrichment seam、`industry.analysis.requested` topic publisher 和 event bus runtime
+  组装 worker 的 session、captured-event handler、Readability enrichment seam、`industry.analysis.requested` topic publisher、AI intake handler、`event.routed` publisher 和 event bus runtime
 - `run()`
-  执行当前 V1 的一次 `source.event.captured` 订阅/消费流程；长期 loop 后续只扩展生命周期，不改变入口薄层职责
+  启动当前 V1 的常驻 consumer loop，持续消费 `source.event.captured` 与 `industry.analysis.requested`
+- `run_once()`
+  只执行一次单条拉取消费，用于 smoke / 测试，不作为默认本地运行方式
 
 注意：
 
 - `uv run api` 不会自动启动 worker
-- worker 需要单独运行
+- worker 需要单独运行，推荐本地命令是 `uv run quantagent-worker`
 - worker 依赖可用的 `DATABASE_URL`
+- 如果用 Compose 跑 worker，默认会自动改用 `COMPOSE_DATABASE_URL`，不需要手工再写容器内数据库地址
 
 ## 推荐扩展方式
 
@@ -96,13 +99,22 @@ uv sync --extra kafka --package quantagent-worker --package quantagent-core
 uv run --package quantagent-worker python -m unittest discover -s apps/worker/src/tests
 ```
 
-当前测试验证 composition root 默认走 `memory` backend，以及 `run()` 会执行一次 `consume_once()` 并关闭 runtime。
+当前测试验证 composition root 默认走 `memory` backend，`run_once()` 保持单次 smoke 语义，`run()` 默认进入常驻消费并在关闭时回收 runtime。
 
 当前主链路约束：
 
 - worker 在消费 `source.event.captured` 后，可以通过受控 seam 调用 Readability 做正文增强
 - 正文增强失败时允许 degraded 为 RSS 摘要，但必须保留结构化失败标记
 - 半导体 owner 的成功 handoff 通过 `industry.analysis.requested` topic 表达，而不是在 worker 入口直接执行业务分析
+- worker 在消费 `industry.analysis.requested` 后，会通过 `quantagent.core.event_intake` 的 single-call runner 产出 `event.routed`
+- 默认本地 provider 是 review-only，不会裸连真实模型；要验证真实路由行为，优先在测试中注入 fake provider harness
+- 若要让 AI intake 走真实模型，所选 provider / model 必须兼容 OpenAI-style `response_format={\"type\":\"json_object\"}` 结构化输出；不兼容时应预期只能看到连接成功，但 intake 运行阶段会失败或退回 review
+
+AI intake 约束：
+
+- 每篇 article item 最多一次 provider invocation
+- 不允许 tool-call loop、multi-turn agent loop、二次网页抓取或模型分块总结
+- `event.routed` 列表型输出不包含完整正文；完整正文只存在于 bounded context 内供一次 intake 判断使用
 
 ## 运行示例
 
@@ -117,7 +129,6 @@ uv run python -c 'import asyncio; from quantagent.worker.main import run_once; a
 跨进程消费：
 
 ```bash
-DATABASE_URL='postgresql+psycopg://quantagent:quantagent@localhost:15432/quantagent' \
 EVENT_BUS_BACKEND=kafka \
 EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
 uv run quantagent-worker

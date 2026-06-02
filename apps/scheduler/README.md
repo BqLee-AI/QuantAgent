@@ -41,6 +41,7 @@ from quantagent.scheduler.main import create_scheduler_app, create_scheduler_run
 - `uv run api` 不会自动启动 scheduler
 - scheduler 需要单独运行
 - scheduler 依赖可用的 `DATABASE_URL`
+- 如果用 Compose 跑 scheduler，默认会自动改用 `COMPOSE_DATABASE_URL`，不需要手工再写容器内数据库地址
 
 ## 推荐扩展方式
 
@@ -122,7 +123,6 @@ uv run python -c 'import asyncio; from quantagent.scheduler.main import run_once
 跨进程调度：
 
 ```bash
-DATABASE_URL='postgresql+psycopg://quantagent:quantagent@localhost:15432/quantagent' \
 EVENT_BUS_BACKEND=kafka \
 EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
 uv run quantagent-scheduler

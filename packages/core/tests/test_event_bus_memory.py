@@ -85,6 +85,27 @@ class InMemoryEventBusTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raised.exception.code, "EVENT_HANDLER_FAILED")
         self.assertEqual(raised.exception.stage, "dispatch")
 
+    async def test_consume_forever_reuses_subscription_registration(self) -> None:
+        bus = InMemoryEventBus()
+        handler = RecordingHandler()
+
+        await bus.consume_forever(
+            topics=("source.event.captured",),
+            group_id="group-a",
+            handler=handler,
+        )
+        await bus.publish(
+            EventEnvelope(
+                id="evt-1",
+                topic="source.event.captured",
+                payload={"external_id": "news-1"},
+                producer="source-ingestion",
+                created_at="2026-05-30T00:00:00Z",
+            )
+        )
+
+        self.assertEqual(len(handler.seen), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

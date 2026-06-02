@@ -71,6 +71,52 @@ class EventBusContractTestCase(unittest.TestCase):
         self.assertEqual(tuple(decoded.payload["symbols"]), ("AAPL", "MSFT"))
         self.assertEqual(decoded.retry_count, 1)
 
+    def test_event_routed_accepts_event_intake_decision_payload(self) -> None:
+        envelope = EventEnvelope(
+            id="evt-routed-1",
+            topic="event.routed",
+            payload={
+                "schema_version": "event_intake_decision.v1",
+                "trace": {
+                    "message_id": "evt-analysis-1",
+                    "source_message_id": "evt-source-1",
+                    "binding_id": "binding-semi",
+                    "owner_id": "semiconductor",
+                },
+                "decision": "route",
+                "discard_reason": "not_discarded",
+                "routing": {
+                    "target_industries": ("semiconductor",),
+                    "target_topics": ("memory",),
+                    "requires_deep_analysis": True,
+                    "requires_human_review": False,
+                },
+                "quality": {
+                    "content_completeness": "full",
+                    "enrichment_status": "succeeded",
+                    "confidence": 0.88,
+                },
+                "audit": {"reason_summary": "direct HBM relevance"},
+            },
+            producer="ai-event-intake",
+            created_at="2026-06-02T00:00:00Z",
+            correlation_id="corr-1",
+            causation_id="evt-analysis-1",
+            headers={
+                "schema_version": "event_intake_decision.v1",
+                "decision": "route",
+                "binding_id": "binding-semi",
+                "owner_id": "semiconductor",
+            },
+        )
+
+        decoded = EventBusCodec().decode(EventBusCodec().encode(envelope))
+
+        self.assertEqual(decoded.topic, "event.routed")
+        self.assertEqual(decoded.payload["schema_version"], "event_intake_decision.v1")
+        self.assertEqual(decoded.payload["decision"], "route")
+        self.assertEqual(decoded.headers["schema_version"], "event_intake_decision.v1")
+
     def test_codec_rejects_invalid_message(self) -> None:
         codec = EventBusCodec()
         with self.assertRaises(EventBusError) as raised:

@@ -17,6 +17,7 @@ from quantagent.core.model_config import (
     ModelPresetStatus,
     ModelResolutionSource,
     ModelTokenUsage,
+    StructuredModelCallResult,
     UpdateModelPresetInput,
     UpdateModelProviderInput,
     UpdateProviderModelInput,
@@ -50,6 +51,57 @@ class FakeModelClient(FixedModelCallClient):
                 completion_tokens=1,
                 total_tokens=4,
             )
+        )
+
+    def run_structured_json(
+        self,
+        *,
+        base_url: str | None,
+        model: str,
+        api_key: str,
+        system_prompt: str,
+        user_prompt: str,
+        request_id: str | None,
+    ) -> StructuredModelCallResult:
+        self.calls.append(
+            {
+                "base_url": base_url,
+                "model": model,
+                "api_key": api_key,
+                "request_id": request_id,
+            }
+        )
+        return StructuredModelCallResult(
+            output={
+                "schema_version": "event_intake_decision.v1",
+                "decision": "review",
+                "discard_reason": "not_discarded",
+                "quality": {
+                    "is_spam": False,
+                    "noise_flags": (),
+                    "content_completeness": "full",
+                    "enrichment_status": "succeeded",
+                    "confidence": 0.2,
+                },
+                "industry_relevance": (),
+                "structured_news": {
+                    "canonical_title": "test",
+                    "short_summary": "test",
+                },
+                "routing": {
+                    "target_industries": (),
+                    "target_topics": (),
+                    "priority": "low",
+                    "requires_deep_analysis": False,
+                    "requires_human_review": True,
+                },
+                "audit": {
+                    "reason_summary": "test",
+                    "evidence_field_refs": ("trace",),
+                    "schema_validation_status": "valid",
+                },
+            },
+            token_usage=ModelTokenUsage(prompt_tokens=10, completion_tokens=5, total_tokens=15),
         )
 
 
@@ -283,6 +335,35 @@ class ModelConfigServiceTestCase(unittest.TestCase):
         providers = {provider.id: provider for provider in service.list_providers().providers}
         self.assertFalse(providers[first.id].is_default)
         self.assertTrue(providers[second.id].is_default)
+
+    def test_invoke_structured_json_uses_resolved_preset_and_records_invocation(self) -> None:
+        client = FakeModelClient()
+        service = ModelConfigService(self.session, encryption_key=self.encryption_key, client=client)
+        provider = service.create_provider(
+            CreateModelProviderInput(
+                name="Gateway",
+                base_url="http://gateway/v1",
+                api_key="sk-runtime-secret",
+            )
+        )
+        model = service.create_provider_model(provider.id, CreateProviderModelInput(model_name="economy-model"))
+        service.update_preset(
+            ModelPresetKey.ECONOMY_TEXT,
+            UpdateModelPresetInput(primary_model_id=model.id, fallback_model_id=None),
+        )
+
+        call_result, invocation = service.invoke_structured_json(
+            preset_key=ModelPresetKey.ECONOMY_TEXT,
+            system_prompt="system",
+            user_prompt="user",
+            request_id="req-intake",
+            trace_id="trace-intake",
+        )
+
+        self.assertEqual(call_result.token_usage.total_tokens, 15)
+        self.assertEqual(invocation.preset_key, ModelPresetKey.ECONOMY_TEXT)
+        self.assertEqual(invocation.request_id, "req-intake")
+        self.assertEqual(client.calls[-1]["model"], "economy-model")
 
     def _session(self):
         from sqlalchemy.orm import sessionmaker

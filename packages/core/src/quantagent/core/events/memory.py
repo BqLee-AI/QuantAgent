@@ -56,3 +56,12 @@ class InMemoryEventBus(EventBusPublisher, EventBusConsumer):
         for topic in topics:
             validated_topic = self._topic_policy.validate(topic)
             self._handlers_by_topic[validated_topic].append((group_id, handler))
+
+    async def consume_forever(
+        self,
+        *,
+        topics: Iterable[str],
+        group_id: str,
+        handler: EventBusHandler,
+    ) -> None:
+        await self.subscribe(topics=topics, group_id=group_id, handler=handler)

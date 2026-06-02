@@ -240,6 +240,11 @@ export function ProviderEditorForm({
                 />
               </TextField>
             </div>
+            <p className="mt-2 text-[12px] leading-5 text-muted">
+              用于 AI intake 路由的模型还需要支持强制 JSON object 结构化输出。
+              当前 worker 依赖 OpenAI 风格的 <code>response_format=json_object</code>；
+              “检测连接”只验证连通性，不验证这项兼容性。
+            </p>
             {/* Check connection */}
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <Button

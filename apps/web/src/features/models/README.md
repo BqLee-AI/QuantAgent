@@ -22,6 +22,11 @@
 - `types/`: feature 内部 UI 类型
 - `utils/`: 纯格式化和无副作用 helper
 
+当前兼容约束：
+- 这里配置的 provider 虽然统一按 OpenAI-compatible API 管理，但不是所有兼容网关都能用于 worker 的 AI intake
+- `industry.analysis.requested -> event.routed` 需要模型支持 OpenAI-style `response_format={"type":"json_object"}` 结构化 JSON 输出
+- “检测连接”只证明基础可达性，不证明该 provider / model 一定可用于 AI intake 路由
+
 不负责：
 - ProviderPolicy 编辑器
 - budget / cost governance

@@ -38,7 +38,14 @@ cp .env.example .env
 
 `.env.example` 只提供本地开发样例，不包含真实密钥；真实 `.env` 不提交到仓库。
 
-`docker-compose.yml` 通过环境变量插值读取配置，并带有本地开发默认值；`.env.example` 用于展示和覆盖这些默认值。宿主机访问数据库使用 `DATABASE_URL`，API 容器内部访问数据库使用 `API_DATABASE_URL`。
+`docker-compose.yml` 通过环境变量插值读取配置，并带有本地开发默认值；`.env.example` 用于展示和覆盖这些默认值。
+
+默认分两套变量：
+
+- `DATABASE_URL`、`RUNTIME_DIR`
+  给宿主机直跑命令使用，例如 `uv run api`、`uv run quantagent-worker`、`uv run quantagent-scheduler`、`uv run quantagent-db upgrade`
+- `COMPOSE_DATABASE_URL`、`COMPOSE_RUNTIME_DIR`
+  给 Compose 容器内部的 `api`、`worker`、`scheduler`、`migrate` 服务使用
 
 启动本地 PostgreSQL 17：
 
@@ -67,7 +74,7 @@ docker compose --profile migration run --rm migrate
 
 `migrate` 服务默认不会随 `docker compose up api` 自动运行，避免本地启动 API 时隐式修改数据库结构。
 
-如果修改了 `POSTGRES_DB`、`POSTGRES_USER` 或 `POSTGRES_PASSWORD`，请同步调整 `API_DATABASE_URL` 和 `MIGRATION_DATABASE_URL`。
+如果修改了 `POSTGRES_DB`、`POSTGRES_USER` 或 `POSTGRES_PASSWORD`，请同步调整 `DATABASE_URL` 和 `COMPOSE_DATABASE_URL`。
 
 本地直跑数据库迁移命令由 `packages/core` 提供，API 启动流程不负责自动迁移：
 
@@ -86,7 +93,7 @@ uv run quantagent-db check
 - `uv run api`
   只启动 FastAPI HTTP 服务
 - `uv run quantagent-worker`
-  启动后台消费入口，负责消费 `source.event.captured`、做后置 Readability 正文增强，并发布 `industry.analysis.requested`
+  启动后台消费入口，常驻消费 `source.event.captured`、做后置 Readability 正文增强，继续消费 `industry.analysis.requested`，并发布 `industry.analysis.requested` / `event.routed`
 - `uv run quantagent-scheduler`
   启动调度入口，负责扫描 due `SourceBinding`、触发 `source.fetch`、写 `SchedulerRun` 并发布 `source.event.captured`
 
@@ -98,10 +105,18 @@ uv run quantagent-db check
 
 ### 本地最小启动建议
 
+推荐先直接复制默认 env：
+
+```bash
+cp .env.example .env
+```
+
+然后按下面的默认路径启动。只要不改端口，这套默认值就能直接工作。
+
 只看 API：
 
 ```bash
-APP_ENV=development uv run api
+uv run api
 ```
 
 看 scheduler 单次调度 smoke：
@@ -124,6 +139,7 @@ uv run python -c 'import asyncio; from quantagent.worker.main import run_once; a
 
 - 上面两个 `run_once()` 只适合各自单独 smoke；如果 `EVENT_BUS_BACKEND=memory`，两者分开运行不会共享事件
 - 真正的跨进程端到端链路需要 Kafka backend
+- 默认 `uv run quantagent-worker` 是常驻 worker；只有 `run_once()` 是单条 smoke 入口
 
 ### 本地端到端建议
 
@@ -136,7 +152,7 @@ docker compose up -d db
 2. 迁移数据库：
 
 ```bash
-DATABASE_URL='postgresql+psycopg://quantagent:quantagent@localhost:15432/quantagent' uv run quantagent-db upgrade
+uv run quantagent-db upgrade
 ```
 
 3. 如果要跑跨进程 event bus，启用 Kafka profile：
@@ -148,20 +164,55 @@ docker compose --profile kafka up -d kafka
 4. 分别启动 scheduler 和 worker：
 
 ```bash
-DATABASE_URL='postgresql+psycopg://quantagent:quantagent@localhost:15432/quantagent' \
 EVENT_BUS_BACKEND=kafka \
 EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
 uv run quantagent-scheduler
 ```
 
 ```bash
-DATABASE_URL='postgresql+psycopg://quantagent:quantagent@localhost:15432/quantagent' \
 EVENT_BUS_BACKEND=kafka \
 EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
 uv run quantagent-worker
 ```
 
 如果只想验证调度能否真实抓到 RSS，可以只跑数据库 + scheduler，不必带 worker。
+
+### AI intake 模型兼容要求
+
+当前 `industry.analysis.requested -> event.routed` 的单次 AI intake 走受控结构化输出路径。用于该链路的 provider / model 需要同时满足：
+
+- 兼容 OpenAI-style chat completions
+- 支持 `response_format={\"type\":\"json_object\"}` 或等价的强制 JSON object 输出
+- 能稳定返回单个 JSON object，而不是 markdown、自然语言前后缀或 tool call
+
+这意味着：
+
+- `/models` 页面里的“检测连接”只验证基础连通性，不等价于验证该模型可用于 AI intake
+- 某些兼容网关虽然能通过 smoke prompt，但如果不支持结构化 JSON 输出，运行到 worker intake 阶段仍会失败或退回 review
+
+### Compose 默认启动建议
+
+如果你想尽量少记命令，推荐直接用 Compose 默认配置：
+
+```bash
+cp .env.example .env
+docker compose up -d db
+docker compose --profile migration run --rm migrate
+docker compose up --build api
+```
+
+如果要跑完整跨进程链路，再加上 Kafka、scheduler 和 worker：
+
+```bash
+docker compose --profile kafka up -d kafka
+EVENT_BUS_BACKEND=kafka docker compose up --build scheduler worker
+```
+
+说明：
+
+- Compose 内部默认使用 `COMPOSE_DATABASE_URL=postgresql+psycopg://quantagent:quantagent@db:5432/quantagent`
+- 宿主机直跑默认使用 `DATABASE_URL=postgresql+psycopg://quantagent:quantagent@127.0.0.1:15432/quantagent`
+- 两套地址不再混用
 
 ## 半导体 RSS 主链路现状
 

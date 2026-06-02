@@ -204,6 +204,12 @@ class ModelCallResult:
 
 
 @dataclass(frozen=True)
+class StructuredModelCallResult:
+    output: dict[str, Any]
+    token_usage: ModelTokenUsage
+
+
+@dataclass(frozen=True)
 class RemoteProviderModelResult:
     id: str
     owned_by: str | None = None
@@ -228,6 +234,18 @@ class FixedModelCallClient(Protocol):
         api_key: str,
         request_id: str | None,
     ) -> list[RemoteProviderModelResult]:
+        ...
+
+    def run_structured_json(
+        self,
+        *,
+        base_url: str | None,
+        model: str,
+        api_key: str,
+        system_prompt: str,
+        user_prompt: str,
+        request_id: str | None,
+    ) -> StructuredModelCallResult:
         ...
 
 
@@ -379,6 +397,96 @@ class OpenAICompatibleModelClient:
                 safe_details={"status": 404},
             ) from last_not_found
         return []
+
+    def run_structured_json(
+        self,
+        *,
+        base_url: str | None,
+        model: str,
+        api_key: str,
+        system_prompt: str,
+        user_prompt: str,
+        request_id: str | None,
+    ) -> StructuredModelCallResult:
+        endpoint = f"{(base_url or DEFAULT_OPENAI_BASE_URL).rstrip('/')}/chat/completions"
+        payload = json.dumps(
+            {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "temperature": 0,
+                "response_format": {"type": "json_object"},
+            }
+        ).encode("utf-8")
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        if request_id:
+            headers["X-Request-ID"] = request_id
+
+        req = urllib_request.Request(endpoint, data=payload, headers=headers, method="POST")
+        try:
+            with urllib_request.urlopen(req, timeout=30) as response:  # noqa: S310 - user-configured provider endpoint.
+                body = response.read()
+        except urllib.error.HTTPError as exc:
+            raise ModelConfigServiceError(
+                "Model provider request failed",
+                code="MODEL_PROVIDER_HTTP_ERROR",
+                retryable=exc.code >= 500,
+                safe_details={"status": exc.code},
+            ) from exc
+        except urllib.error.URLError as exc:
+            raise ModelConfigServiceError(
+                "Model provider is not reachable",
+                code="MODEL_PROVIDER_UNREACHABLE",
+                retryable=True,
+            ) from exc
+        except TimeoutError as exc:
+            raise ModelConfigServiceError(
+                "Model provider request timed out",
+                code="MODEL_PROVIDER_TIMEOUT",
+                retryable=True,
+            ) from exc
+
+        try:
+            parsed = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ModelConfigServiceError(
+                "Model provider returned an invalid response",
+                code="MODEL_PROVIDER_RESPONSE_INVALID",
+            ) from exc
+
+        choice_content = _extract_choice_content(parsed)
+        if choice_content is None:
+            raise ModelConfigServiceError(
+                "Model provider returned an invalid response",
+                code="MODEL_PROVIDER_RESPONSE_INVALID",
+            )
+        try:
+            output = json.loads(choice_content)
+        except json.JSONDecodeError as exc:
+            raise ModelConfigServiceError(
+                "Model provider returned non-JSON content",
+                code="MODEL_PROVIDER_RESPONSE_INVALID",
+            ) from exc
+        if not isinstance(output, dict):
+            raise ModelConfigServiceError(
+                "Model provider returned an invalid JSON object",
+                code="MODEL_PROVIDER_RESPONSE_INVALID",
+            )
+
+        usage = parsed.get("usage")
+        token_usage = ModelTokenUsage()
+        if isinstance(usage, dict):
+            token_usage = ModelTokenUsage(
+                prompt_tokens=_optional_int(usage.get("prompt_tokens")),
+                completion_tokens=_optional_int(usage.get("completion_tokens")),
+                total_tokens=_optional_int(usage.get("total_tokens")),
+            )
+        return StructuredModelCallResult(output=output, token_usage=token_usage)
 
 
 class ModelConfigService:
@@ -726,6 +834,88 @@ class ModelConfigService:
             _invocation_result(item)
             for item in self._repository.list_invocations(limit=limit, provider_id=provider_id, preset_key=preset_key)
         ]
+
+    def invoke_structured_json(
+        self,
+        *,
+        preset_key: ModelPresetKey,
+        system_prompt: str,
+        user_prompt: str,
+        request_id: str | None = None,
+        trace_id: str | None = None,
+        agent_run_id: str | None = None,
+    ) -> tuple[StructuredModelCallResult, ModelInvocationResult]:
+        resolved = self.resolve_preset_model(preset_key)
+        provider = resolved.provider
+        model = resolved.model
+
+        if not provider.encrypted_api_key:
+            invocation = self._record_failed_invocation_and_commit(
+                provider=provider,
+                model_name=model.model_name,
+                preset_key=preset_key,
+                error_summary="MODEL_PROVIDER_KEY_MISSING",
+                request_id=request_id,
+                trace_id=trace_id,
+            )
+            raise ModelConfigServiceError(
+                "Model provider API key is missing",
+                code="MODEL_PROVIDER_KEY_MISSING",
+                safe_details={"invocation_id": invocation.id, "provider_id": provider.id},
+            )
+
+        try:
+            api_key = self._crypto().decrypt(provider.encrypted_api_key)
+            call_result = self._client.run_structured_json(
+                base_url=provider.base_url,
+                model=model.model_name,
+                api_key=api_key,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                request_id=request_id,
+            )
+        except ModelConfigCryptoError as exc:
+            invocation = self._record_failed_invocation_and_commit(
+                provider=provider,
+                model_name=model.model_name,
+                preset_key=preset_key,
+                error_summary="MODEL_PROVIDER_DECRYPT_FAILED",
+                request_id=request_id,
+                trace_id=trace_id,
+            )
+            raise ModelConfigServiceError(
+                "Model provider API key cannot be decrypted",
+                code="MODEL_PROVIDER_DECRYPT_FAILED",
+                safe_details={"invocation_id": invocation.id, "provider_id": provider.id},
+            ) from exc
+        except ModelConfigServiceError as exc:
+            provider.last_error = exc.code
+            invocation = self._record_failed_invocation_and_commit(
+                provider=provider,
+                model_name=model.model_name,
+                preset_key=preset_key,
+                error_summary=exc.code,
+                request_id=request_id,
+                trace_id=trace_id,
+            )
+            exc.safe_details.setdefault("invocation_id", invocation.id)
+            exc.safe_details.setdefault("provider_id", provider.id)
+            raise
+
+        provider.last_error = None
+        invocation = self._record_invocation(
+            provider=provider,
+            model_name=model.model_name,
+            preset_key=preset_key,
+            status=ModelInvocationStatus.SUCCEEDED,
+            token_usage=call_result.token_usage,
+            error_summary=None,
+            request_id=request_id,
+            trace_id=trace_id,
+            agent_run_id=agent_run_id,
+        )
+        self._session.commit()
+        return call_result, invocation
 
     def _encrypt_key(self, api_key: str) -> str:
         try:
@@ -1090,3 +1280,28 @@ def _optional_int(value: object) -> int | None:
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
+
+
+def _extract_choice_content(parsed: dict[str, Any]) -> str | None:
+    choices = parsed.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+    first = choices[0]
+    if not isinstance(first, dict):
+        return None
+    message = first.get("message")
+    if not isinstance(message, dict):
+        return None
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        text_parts: list[str] = []
+        for item in content:
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") == "text" and isinstance(item.get("text"), str):
+                text_parts.append(item["text"])
+        joined = "".join(text_parts).strip()
+        return joined or None
+    return None

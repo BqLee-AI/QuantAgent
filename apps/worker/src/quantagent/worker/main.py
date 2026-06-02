@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 from quantagent.core.config import settings
 from quantagent.core.db.repositories.source_binding_repository import SourceBindingRepository
@@ -10,9 +11,16 @@ from quantagent.core.db.session import create_session_factory
 from quantagent.core.events import (
     EventBusRuntime,
     EventBusSettings,
-    SourceEventPublisher,
     build_event_bus_runtime,
 )
+from quantagent.core.event_intake import (
+    EventIntakeRoutedPublisher,
+    IndustryEventContextBuilder,
+    ModelConfigStructuredModelInvoker,
+    ReviewOnlyStructuredModelInvoker,
+    SingleCallEventIntakeRunner,
+)
+from quantagent.core.model_config import ModelConfigService
 from quantagent.core.registry import PluginRegistry, RegistryScanner
 from quantagent.core.runtime import PluginRuntimeService
 from quantagent.core.scheduling import SourceBindingService
@@ -23,7 +31,12 @@ from quantagent.core.worker_routing import (
     WorkerArticleEnrichmentService,
     WorkerCapturedEventRoutingService,
 )
-from quantagent.worker.consumer import CapturedSourceEventHandler, InMemoryWorkerRouteAuditSink
+from quantagent.worker.consumer import (
+    CapturedSourceEventHandler,
+    IndustryAnalysisRequestHandler,
+    InMemoryAnalysisRequestIntakeAuditSink,
+    InMemoryWorkerRouteAuditSink,
+)
 
 
 def create_worker_runtime() -> EventBusRuntime:
@@ -35,13 +48,28 @@ def create_worker_runtime() -> EventBusRuntime:
 class WorkerApp:
     runtime: EventBusRuntime
     handler: CapturedSourceEventHandler
+    analysis_request_handler: IndustryAnalysisRequestHandler
     session: object
 
     async def consume_once(self) -> None:
         await self.runtime.consumer.subscribe(
-            topics=("source.event.captured",),
+            topics=("source.event.captured", "industry.analysis.requested"),
             group_id=settings.EVENT_BUS_KAFKA_DEFAULT_GROUP_ID,
-            handler=self.handler,
+            handler=_TopicDispatchHandler(
+                captured_handler=self.handler,
+                analysis_request_handler=self.analysis_request_handler,
+            ),
+        )
+
+    async def consume_forever(self) -> None:
+        # worker 默认作为长期 consumer 运行；run_once 只保留给测试和 smoke，避免文档与运行行为不一致。
+        await self.runtime.consumer.consume_forever(
+            topics=("source.event.captured", "industry.analysis.requested"),
+            group_id=settings.EVENT_BUS_KAFKA_DEFAULT_GROUP_ID,
+            handler=_TopicDispatchHandler(
+                captured_handler=self.handler,
+                analysis_request_handler=self.analysis_request_handler,
+            ),
         )
 
     async def close(self) -> None:
@@ -76,7 +104,15 @@ def create_worker_app() -> WorkerApp:
         ),
         audit_sink=InMemoryWorkerRouteAuditSink(),
     )
-    return WorkerApp(runtime=runtime, handler=handler, session=session)
+    # V1 默认不裸连真实 provider；未配置 AgentRuntime/provider 时发布 review outcome，避免静默丢弃或假装已分析。
+    intake_invoker = _build_intake_invoker(session)
+    analysis_request_handler = IndustryAnalysisRequestHandler(
+        context_builder=IndustryEventContextBuilder(),
+        runner=SingleCallEventIntakeRunner(invoker=intake_invoker),
+        routed_publisher=EventIntakeRoutedPublisher(runtime.publisher),
+        audit_sink=InMemoryAnalysisRequestIntakeAuditSink(),
+    )
+    return WorkerApp(runtime=runtime, handler=handler, analysis_request_handler=analysis_request_handler, session=session)
 
 
 async def run_once() -> None:
@@ -87,10 +123,43 @@ async def run_once() -> None:
         await app.close()
 
 
+async def run_forever() -> None:
+    app = create_worker_app()
+    try:
+        await app.consume_forever()
+    finally:
+        await app.close()
+
+
 def run() -> None:
-    # V1 CLI 执行一次订阅/消费主流程；长期 loop 后续只扩展生命周期，不把业务塞回入口。
-    asyncio.run(run_once())
+    asyncio.run(run_forever())
 
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[5]
+
+
+def _build_intake_invoker(session: object):
+    if settings.MODEL_CONFIG_ENCRYPTION_KEY:
+        service = ModelConfigService(session, encryption_key=settings.MODEL_CONFIG_ENCRYPTION_KEY)
+        return ModelConfigStructuredModelInvoker(service=service)
+    return ReviewOnlyStructuredModelInvoker()
+
+
+class _EnvelopeHandler(Protocol):
+    async def handle(self, envelope) -> None: ...
+
+
+@dataclass(frozen=True)
+class _TopicDispatchHandler:
+    captured_handler: _EnvelopeHandler
+    analysis_request_handler: _EnvelopeHandler
+
+    async def handle(self, envelope) -> None:
+        if envelope.topic == "source.event.captured":
+            await self.captured_handler.handle(envelope)
+            return
+        if envelope.topic == "industry.analysis.requested":
+            await self.analysis_request_handler.handle(envelope)
+            return
+        raise ValueError(f"Unsupported worker topic: {envelope.topic}")

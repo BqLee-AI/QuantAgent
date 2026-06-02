@@ -25,3 +25,11 @@ class EventBusConsumer(Protocol):
         group_id: str,
         handler: EventBusHandler,
     ) -> None: ...
+
+    async def consume_forever(
+        self,
+        *,
+        topics: Iterable[str],
+        group_id: str,
+        handler: EventBusHandler,
+    ) -> None: ...

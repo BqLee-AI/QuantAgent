@@ -7,6 +7,22 @@ services:
     image: quantagent-api:local
     command: ["sh", "-c", "APP_ENV=${APP_ENV:-local} exec uvicorn quantagent.api.main:app --host 0.0.0.0 --port 8000"]
     environment:
+      APP_ENV: ${APP_ENV:-local}
+      DATABASE_URL: ${COMPOSE_DATABASE_URL:-postgresql+psycopg://quantagent:quantagent@db:5432/quantagent}
+      RUNTIME_DIR: ${COMPOSE_RUNTIME_DIR:-/app/runtime}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      EVENT_BUS_BACKEND: ${EVENT_BUS_BACKEND:-memory}
+      EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS: ${COMPOSE_EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      EVENT_BUS_KAFKA_CLIENT_ID: ${EVENT_BUS_KAFKA_CLIENT_ID:-quantagent-local}
+      EVENT_BUS_KAFKA_DEFAULT_GROUP_ID: ${EVENT_BUS_KAFKA_DEFAULT_GROUP_ID:-quantagent-worker}
+      EVENT_BUS_TOPIC_PREFIX: ${EVENT_BUS_TOPIC_PREFIX:-}
+      MODEL_CONFIG_ENCRYPTION_KEY: ${MODEL_CONFIG_ENCRYPTION_KEY:-}
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:-}
+      AUTH_SESSION_SECRET: ${AUTH_SESSION_SECRET:-}
+      AUTH_SESSION_LIFETIME_SECONDS: ${AUTH_SESSION_LIFETIME_SECONDS:-43200}
+      AUTH_SESSION_ABSOLUTE_LIFETIME_SECONDS: ${AUTH_SESSION_ABSOLUTE_LIFETIME_SECONDS:-86400}
+      AUTH_SESSION_REFRESH_THRESHOLD_SECONDS: ${AUTH_SESSION_REFRESH_THRESHOLD_SECONDS:-1800}
       PYTHONPATH: /app/apps/api/src:/app/packages/core/src:/app/packages/plugin-sdk/src
     ports:
       - "${API_BIND_HOST:-127.0.0.1}:${API_PORT:-8000}:8000"
@@ -29,8 +45,23 @@ services:
       target: runtime
     image: quantagent-api:local
     command: ["quantagent-worker"]
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      DATABASE_URL: ${COMPOSE_DATABASE_URL:-postgresql+psycopg://quantagent:quantagent@db:5432/quantagent}
+      RUNTIME_DIR: ${COMPOSE_RUNTIME_DIR:-/app/runtime}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      EVENT_BUS_BACKEND: ${EVENT_BUS_BACKEND:-memory}
+      EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS: ${COMPOSE_EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      EVENT_BUS_KAFKA_CLIENT_ID: ${EVENT_BUS_KAFKA_CLIENT_ID:-quantagent-local}
+      EVENT_BUS_KAFKA_DEFAULT_GROUP_ID: ${EVENT_BUS_KAFKA_DEFAULT_GROUP_ID:-quantagent-worker}
+      EVENT_BUS_TOPIC_PREFIX: ${EVENT_BUS_TOPIC_PREFIX:-}
+      MODEL_CONFIG_ENCRYPTION_KEY: ${MODEL_CONFIG_ENCRYPTION_KEY:-}
+      PYTHONPATH: /app/apps/worker/src:/app/packages/core/src:/app/packages/plugin-sdk/src
     volumes:
       - ./apps/worker:/app/apps/worker
+      - ./packages/core:/app/packages/core
+      - ./packages/plugin-sdk:/app/packages/plugin-sdk
+      - ./plugins:/app/plugins
       - ./runtime:/app/runtime
     depends_on:
       db:
@@ -49,8 +80,22 @@ services:
       target: runtime
     image: quantagent-api:local
     command: ["quantagent-scheduler"]
+    environment:
+      APP_ENV: ${APP_ENV:-local}
+      DATABASE_URL: ${COMPOSE_DATABASE_URL:-postgresql+psycopg://quantagent:quantagent@db:5432/quantagent}
+      RUNTIME_DIR: ${COMPOSE_RUNTIME_DIR:-/app/runtime}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      EVENT_BUS_BACKEND: ${EVENT_BUS_BACKEND:-memory}
+      EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS: ${COMPOSE_EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS:-kafka:9092}
+      EVENT_BUS_KAFKA_CLIENT_ID: ${EVENT_BUS_KAFKA_CLIENT_ID:-quantagent-local}
+      EVENT_BUS_KAFKA_DEFAULT_GROUP_ID: ${EVENT_BUS_KAFKA_DEFAULT_GROUP_ID:-quantagent-worker}
+      EVENT_BUS_TOPIC_PREFIX: ${EVENT_BUS_TOPIC_PREFIX:-}
+      PYTHONPATH: /app/apps/scheduler/src:/app/packages/core/src:/app/packages/plugin-sdk/src
     volumes:
       - ./apps/scheduler:/app/apps/scheduler
+      - ./packages/core:/app/packages/core
+      - ./packages/plugin-sdk:/app/packages/plugin-sdk
+      - ./plugins:/app/plugins
       - ./runtime:/app/runtime
     depends_on:
       db:
@@ -74,8 +119,8 @@ services:
     command: ["quantagent-db", "upgrade"]
     environment:
       APP_ENV: ${APP_ENV:-local}
-      DATABASE_URL: ${MIGRATION_DATABASE_URL:-postgresql+psycopg://quantagent:quantagent@db:5432/quantagent}
-      RUNTIME_DIR: /app/runtime
+      DATABASE_URL: ${COMPOSE_DATABASE_URL:-postgresql+psycopg://quantagent:quantagent@db:5432/quantagent}
+      RUNTIME_DIR: ${COMPOSE_RUNTIME_DIR:-/app/runtime}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
       db:

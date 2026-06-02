@@ -16,6 +16,7 @@
 - 提供 `KafkaEventBusPublisher` 与 `KafkaEventBusConsumer`
 - 提供 `EventBusSettings` 和 `build_event_bus_runtime(...)`
 - 提供 `SourceEventPublisher`，把 `SourceFetchResult` 转成 `source.event.captured`
+- 支持 `EventIntakeRoutedPublisher` 通过 `event.routed` 发布 `event_intake_decision.v1` outcome；具体 schema / runner 在 `quantagent.core.event_intake`
 
 这个目录当前不负责：
 
@@ -24,6 +25,7 @@
 - FastAPI route、HTTP 状态码、前端 DTO
 - 插件直接发布事件
 - Router / Decision / Approval / Notification 业务逻辑
+- AI intake 的 context 构建、schema 校验或 provider 调用
 
 ## 文件结构
 
@@ -196,6 +198,24 @@ await source_publisher.publish_source_fetch_result(
 - 生成消息级 `id`
 - 把 `SourceFetchResult` 转成标准 `payload`
 - 补上 `binding_id`、`request_id`、`plugin_id`、`item_count` 等 payload/header 字段
+
+### 4. 发布 AI intake routed outcome
+
+`event.routed` 当前允许承载 AI intake 的 V1 结构化结果：
+
+```text
+payload.schema_version = "event_intake_decision.v1"
+payload.decision       = "discard" | "route" | "review"
+payload.trace          = industry.analysis.requested / source.event.captured trace snapshot
+payload.routing        = target_industries、target_topics、deep-analysis / review 标记
+payload.audit          = 短原因、schema validation 状态、provider invocation 摘要
+```
+
+约束：
+
+- `event.routed` 不直接广播完整文章正文或完整 provider raw response。
+- `discard`、`route`、`review` 三类 outcome 都通过该 topic 发布，下游不用解析自然语言即可区分。
+- payload / headers 必须 JSON-safe，不能包含 ORM object、plugin instance、provider client、secret-bearing object 或完整 chain-of-thought。
 
 ## 订阅方式
 
