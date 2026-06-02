@@ -50,7 +50,7 @@ POST /api/v1/integrations/notifications/ingress
 
 当前实现只落地第一版 HTTP host adapter，但模型设计需要兼容 webhook、websocket、polling 三类 transport。任何平台专属字段都通过 `NOTIFICATION_INGRESS_PLUGIN_CONFIG` 进入目标 notification 插件，API 层不再维护平台专属 env 名称。
 
-Discord approval loop 的发送侧 dispatcher 属于 core/worker/scheduler 可复用能力，入口配置建议保持为：
+Discord approval loop 的发送侧 dispatcher 属于 core/worker/scheduler 可复用能力；当前仓库没有在 API 进程内自动读取这些变量并启动 dispatcher 的默认入口。下面仅给出推荐的环境变量命名，实际需要在 worker/consumer 组装 `NotificationDispatchService` 时读取并接线：
 
 ```bash
 NOTIFICATION_DISPATCH_ENABLED=true
