@@ -26,15 +26,12 @@ from .alpaca_wallet_api_e2e_support import (
     AlpacaPaperConfig,
     AlpacaReadOnlySnapshot,
     fetch_read_only_snapshot,
-    get_read_only_smoke_skip_reason,
+    get_wallet_api_external_smoke_skip_reason,
     load_alpaca_paper_config,
     map_alpaca_account,
     map_alpaca_fill_activity,
     map_alpaca_order,
 )
-
-
-QUANTAGENT_ALPACA_WALLET_API_E2E_SMOKE_ENV = "QUANTAGENT_ALPACA_WALLET_API_E2E_SMOKE"
 
 
 class AlpacaWalletApiE2ETestCase(unittest.TestCase):
@@ -400,9 +397,7 @@ class AlpacaWalletApiE2ETestCase(unittest.TestCase):
         return min(desired_quantity, affordable_quantity)
 
     def _get_external_smoke_skip_reason(self, config: AlpacaPaperConfig) -> str | None:
-        if os.environ.get(QUANTAGENT_ALPACA_WALLET_API_E2E_SMOKE_ENV) != "1":
-            return f"{QUANTAGENT_ALPACA_WALLET_API_E2E_SMOKE_ENV} is not enabled."
-        return get_read_only_smoke_skip_reason(config)
+        return get_wallet_api_external_smoke_skip_reason(config, os.environ)
 
     def _login(self) -> None:
         response = self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})

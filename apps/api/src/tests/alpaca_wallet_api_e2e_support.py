@@ -20,6 +20,9 @@ ALPACA_PAPER_BASE_URL_ENV = "ALPACA_PAPER_BASE_URL"
 APCA_API_KEY_ID_ENV = "APCA_API_KEY_ID"
 APCA_API_SECRET_KEY_ENV = "APCA_API_SECRET_KEY"
 QUANTAGENT_ALPACA_PAPER_SMOKE_ENV = "QUANTAGENT_ALPACA_PAPER_SMOKE"
+QUANTAGENT_ALPACA_WALLET_API_E2E_SMOKE_ENV = "QUANTAGENT_ALPACA_WALLET_API_E2E_SMOKE"
+QUANTAGENT_ALPACA_WALLET_API_E2E_RUN_TOKEN_ENV = "QUANTAGENT_ALPACA_WALLET_API_E2E_RUN_TOKEN"
+QUANTAGENT_ALPACA_WALLET_API_E2E_RUN_TOKEN_VALUE = "run-external-alpaca-smoke"
 REDACTED = "<redacted>"
 REDACTED_RESPONSE_BODY = "<redacted-response-body>"
 REDACTED_MESSAGE = "<redacted-message>"
@@ -185,6 +188,21 @@ def get_read_only_smoke_skip_reason(config: AlpacaPaperConfig) -> str | None:
     if not config.api_key_id or not config.api_secret_key:
         return "Alpaca paper credentials are missing."
     return None
+
+
+def get_wallet_api_external_smoke_skip_reason(
+    config: AlpacaPaperConfig,
+    env: Mapping[str, str] | None = None,
+) -> str | None:
+    source = env if env is not None else os.environ
+    if source.get(QUANTAGENT_ALPACA_WALLET_API_E2E_SMOKE_ENV) != "1":
+        return f"{QUANTAGENT_ALPACA_WALLET_API_E2E_SMOKE_ENV} is not enabled."
+    # 外部 smoke 需要本次命令显式 token，避免本机常驻 .env/direnv 变量让默认 discover 访问真实网络。
+    if source.get(QUANTAGENT_ALPACA_WALLET_API_E2E_RUN_TOKEN_ENV) != (
+        QUANTAGENT_ALPACA_WALLET_API_E2E_RUN_TOKEN_VALUE
+    ):
+        return f"{QUANTAGENT_ALPACA_WALLET_API_E2E_RUN_TOKEN_ENV} is not confirmed for this run."
+    return get_read_only_smoke_skip_reason(config)
 
 
 def redact_sensitive_value(value: Any) -> Any:

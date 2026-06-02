@@ -57,3 +57,8 @@
 - [x] 8.2 实现 PR 说明链接本 change，并写清 `notification.requested`、`notification.completed`、`approval.completed` 三者语义差异。
 - [x] 8.3 Review 时确认 `packages/core` 没有依赖 FastAPI、apps 或具体 Discord 插件实现。
 - [x] 8.4 Review 时确认 Discord 插件没有承担审批状态、Policy Gate、executor 或 Event Bus 发布职责。
+
+## 9. Local smoke replay
+
+- [x] 9.1 固化本地 fullflow smoke 入口，提供明确命令创建 `ActionRequest`、发送 Discord 通知、等待 `/notify` 回流，并只在该命令运行时暴露 debug 状态接口。
+- [x] 9.2 补充 `docs/demo/` 操作指南，说明 env、localtunnel、Discord App endpoint、`/notify` 文本和预期结果；不得记录真实 secret。
