@@ -4,6 +4,7 @@ import { AuthApi } from "@/shared/auth/api";
 import type { RuntimeConfig } from "@/shared/config";
 import { createModelProviderApi } from "@/features/models/api";
 import { createRuntimeAuditApi } from "@/features/runtime/api";
+import { createEventAuditApi } from "@/features/event-audit/api";
 
 import type { AppRuntime, AuthRuntimeBridge } from "./runtime.types";
 
@@ -25,6 +26,7 @@ export function createAppRuntime({
   });
   const modelProviderApi = createModelProviderApi(apiClient);
   const runtimeAuditApi = createRuntimeAuditApi(apiClient);
+  const eventAuditApi = createEventAuditApi(apiClient);
 
   return {
     apiClient,
@@ -35,6 +37,7 @@ export function createAppRuntime({
       // 中文注释：兼容当前 PR 分支里仍在使用 `modelProviders` 的调用点，避免一次重构同时打断旧引用。
       modelProviders: modelProviderApi,
       runtimeAudit: runtimeAuditApi,
+      eventAudit: eventAuditApi,
     },
     realtime: {
       client: null,

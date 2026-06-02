@@ -21,8 +21,9 @@ import { Route as AppworkspaceEventsIndexRouteImport } from './routes/_app/(work
 import { Route as AppworkspaceApprovalsIndexRouteImport } from './routes/_app/(workspace)/approvals/index'
 import { Route as AppworkspacePluginsPluginIdRouteImport } from './routes/_app/(workspace)/plugins/$pluginId'
 import { Route as AppworkspaceEventsAllRouteImport } from './routes/_app/(workspace)/events/all'
-import { Route as AppworkspaceEventsEventIdRouteImport } from './routes/_app/(workspace)/events/$eventId'
 import { Route as AppworkspaceApprovalsApprovalIdRouteImport } from './routes/_app/(workspace)/approvals/$approvalId'
+import { Route as AppworkspaceEventsEventIdRouteRouteImport } from './routes/_app/(workspace)/events/$eventId/route'
+import { Route as AppworkspaceEventsEventIdIndexRouteImport } from './routes/_app/(workspace)/events/$eventId/index'
 import { Route as AppworkspaceRuntimeToolsInvocationIdRouteImport } from './routes/_app/(workspace)/runtime/tools/$invocationId'
 import { Route as AppworkspaceRuntimeAgentsRunIdRouteImport } from './routes/_app/(workspace)/runtime/agents/$runId'
 import { Route as AppworkspaceEventsEventIdAuditRouteImport } from './routes/_app/(workspace)/events/$eventId/audit'
@@ -92,17 +93,23 @@ const AppworkspaceEventsAllRoute = AppworkspaceEventsAllRouteImport.update({
   path: '/events/all',
   getParentRoute: () => AppworkspaceRouteRoute,
 } as any)
-const AppworkspaceEventsEventIdRoute =
-  AppworkspaceEventsEventIdRouteImport.update({
-    id: '/events/$eventId',
-    path: '/events/$eventId',
-    getParentRoute: () => AppworkspaceRouteRoute,
-  } as any)
 const AppworkspaceApprovalsApprovalIdRoute =
   AppworkspaceApprovalsApprovalIdRouteImport.update({
     id: '/approvals/$approvalId',
     path: '/approvals/$approvalId',
     getParentRoute: () => AppworkspaceRouteRoute,
+  } as any)
+const AppworkspaceEventsEventIdRouteRoute =
+  AppworkspaceEventsEventIdRouteRouteImport.update({
+    id: '/events/$eventId',
+    path: '/events/$eventId',
+    getParentRoute: () => AppworkspaceRouteRoute,
+  } as any)
+const AppworkspaceEventsEventIdIndexRoute =
+  AppworkspaceEventsEventIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AppworkspaceEventsEventIdRouteRoute,
   } as any)
 const AppworkspaceRuntimeToolsInvocationIdRoute =
   AppworkspaceRuntimeToolsInvocationIdRouteImport.update({
@@ -120,15 +127,15 @@ const AppworkspaceEventsEventIdAuditRoute =
   AppworkspaceEventsEventIdAuditRouteImport.update({
     id: '/audit',
     path: '/audit',
-    getParentRoute: () => AppworkspaceEventsEventIdRoute,
+    getParentRoute: () => AppworkspaceEventsEventIdRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
   '/login': typeof publicLoginRoute
   '/approval-link/$token': typeof publicApprovalLinkTokenRoute
   '/': typeof AppworkspaceIndexRoute
+  '/events/$eventId': typeof AppworkspaceEventsEventIdRouteRouteWithChildren
   '/approvals/$approvalId': typeof AppworkspaceApprovalsApprovalIdRoute
-  '/events/$eventId': typeof AppworkspaceEventsEventIdRouteWithChildren
   '/events/all': typeof AppworkspaceEventsAllRoute
   '/plugins/$pluginId': typeof AppworkspacePluginsPluginIdRoute
   '/approvals/': typeof AppworkspaceApprovalsIndexRoute
@@ -140,13 +147,13 @@ export interface FileRoutesByFullPath {
   '/events/$eventId/audit': typeof AppworkspaceEventsEventIdAuditRoute
   '/runtime/agents/$runId': typeof AppworkspaceRuntimeAgentsRunIdRoute
   '/runtime/tools/$invocationId': typeof AppworkspaceRuntimeToolsInvocationIdRoute
+  '/events/$eventId/': typeof AppworkspaceEventsEventIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof publicLoginRoute
   '/approval-link/$token': typeof publicApprovalLinkTokenRoute
   '/': typeof AppworkspaceIndexRoute
   '/approvals/$approvalId': typeof AppworkspaceApprovalsApprovalIdRoute
-  '/events/$eventId': typeof AppworkspaceEventsEventIdRouteWithChildren
   '/events/all': typeof AppworkspaceEventsAllRoute
   '/plugins/$pluginId': typeof AppworkspacePluginsPluginIdRoute
   '/approvals': typeof AppworkspaceApprovalsIndexRoute
@@ -158,6 +165,7 @@ export interface FileRoutesByTo {
   '/events/$eventId/audit': typeof AppworkspaceEventsEventIdAuditRoute
   '/runtime/agents/$runId': typeof AppworkspaceRuntimeAgentsRunIdRoute
   '/runtime/tools/$invocationId': typeof AppworkspaceRuntimeToolsInvocationIdRoute
+  '/events/$eventId': typeof AppworkspaceEventsEventIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -165,8 +173,8 @@ export interface FileRoutesById {
   '/(public)/login': typeof publicLoginRoute
   '/(public)/approval-link/$token': typeof publicApprovalLinkTokenRoute
   '/_app/(workspace)/': typeof AppworkspaceIndexRoute
+  '/_app/(workspace)/events/$eventId': typeof AppworkspaceEventsEventIdRouteRouteWithChildren
   '/_app/(workspace)/approvals/$approvalId': typeof AppworkspaceApprovalsApprovalIdRoute
-  '/_app/(workspace)/events/$eventId': typeof AppworkspaceEventsEventIdRouteWithChildren
   '/_app/(workspace)/events/all': typeof AppworkspaceEventsAllRoute
   '/_app/(workspace)/plugins/$pluginId': typeof AppworkspacePluginsPluginIdRoute
   '/_app/(workspace)/approvals/': typeof AppworkspaceApprovalsIndexRoute
@@ -178,6 +186,7 @@ export interface FileRoutesById {
   '/_app/(workspace)/events/$eventId/audit': typeof AppworkspaceEventsEventIdAuditRoute
   '/_app/(workspace)/runtime/agents/$runId': typeof AppworkspaceRuntimeAgentsRunIdRoute
   '/_app/(workspace)/runtime/tools/$invocationId': typeof AppworkspaceRuntimeToolsInvocationIdRoute
+  '/_app/(workspace)/events/$eventId/': typeof AppworkspaceEventsEventIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -185,8 +194,8 @@ export interface FileRouteTypes {
     | '/login'
     | '/approval-link/$token'
     | '/'
-    | '/approvals/$approvalId'
     | '/events/$eventId'
+    | '/approvals/$approvalId'
     | '/events/all'
     | '/plugins/$pluginId'
     | '/approvals/'
@@ -198,13 +207,13 @@ export interface FileRouteTypes {
     | '/events/$eventId/audit'
     | '/runtime/agents/$runId'
     | '/runtime/tools/$invocationId'
+    | '/events/$eventId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
     | '/approval-link/$token'
     | '/'
     | '/approvals/$approvalId'
-    | '/events/$eventId'
     | '/events/all'
     | '/plugins/$pluginId'
     | '/approvals'
@@ -216,14 +225,15 @@ export interface FileRouteTypes {
     | '/events/$eventId/audit'
     | '/runtime/agents/$runId'
     | '/runtime/tools/$invocationId'
+    | '/events/$eventId'
   id:
     | '__root__'
     | '/_app/(workspace)'
     | '/(public)/login'
     | '/(public)/approval-link/$token'
     | '/_app/(workspace)/'
-    | '/_app/(workspace)/approvals/$approvalId'
     | '/_app/(workspace)/events/$eventId'
+    | '/_app/(workspace)/approvals/$approvalId'
     | '/_app/(workspace)/events/all'
     | '/_app/(workspace)/plugins/$pluginId'
     | '/_app/(workspace)/approvals/'
@@ -235,6 +245,7 @@ export interface FileRouteTypes {
     | '/_app/(workspace)/events/$eventId/audit'
     | '/_app/(workspace)/runtime/agents/$runId'
     | '/_app/(workspace)/runtime/tools/$invocationId'
+    | '/_app/(workspace)/events/$eventId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -329,19 +340,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppworkspaceEventsAllRouteImport
       parentRoute: typeof AppworkspaceRouteRoute
     }
-    '/_app/(workspace)/events/$eventId': {
-      id: '/_app/(workspace)/events/$eventId'
-      path: '/events/$eventId'
-      fullPath: '/events/$eventId'
-      preLoaderRoute: typeof AppworkspaceEventsEventIdRouteImport
-      parentRoute: typeof AppworkspaceRouteRoute
-    }
     '/_app/(workspace)/approvals/$approvalId': {
       id: '/_app/(workspace)/approvals/$approvalId'
       path: '/approvals/$approvalId'
       fullPath: '/approvals/$approvalId'
       preLoaderRoute: typeof AppworkspaceApprovalsApprovalIdRouteImport
       parentRoute: typeof AppworkspaceRouteRoute
+    }
+    '/_app/(workspace)/events/$eventId': {
+      id: '/_app/(workspace)/events/$eventId'
+      path: '/events/$eventId'
+      fullPath: '/events/$eventId'
+      preLoaderRoute: typeof AppworkspaceEventsEventIdRouteRouteImport
+      parentRoute: typeof AppworkspaceRouteRoute
+    }
+    '/_app/(workspace)/events/$eventId/': {
+      id: '/_app/(workspace)/events/$eventId/'
+      path: '/'
+      fullPath: '/events/$eventId/'
+      preLoaderRoute: typeof AppworkspaceEventsEventIdIndexRouteImport
+      parentRoute: typeof AppworkspaceEventsEventIdRouteRoute
     }
     '/_app/(workspace)/runtime/tools/$invocationId': {
       id: '/_app/(workspace)/runtime/tools/$invocationId'
@@ -362,29 +380,31 @@ declare module '@tanstack/react-router' {
       path: '/audit'
       fullPath: '/events/$eventId/audit'
       preLoaderRoute: typeof AppworkspaceEventsEventIdAuditRouteImport
-      parentRoute: typeof AppworkspaceEventsEventIdRoute
+      parentRoute: typeof AppworkspaceEventsEventIdRouteRoute
     }
   }
 }
 
-interface AppworkspaceEventsEventIdRouteChildren {
+interface AppworkspaceEventsEventIdRouteRouteChildren {
   AppworkspaceEventsEventIdAuditRoute: typeof AppworkspaceEventsEventIdAuditRoute
+  AppworkspaceEventsEventIdIndexRoute: typeof AppworkspaceEventsEventIdIndexRoute
 }
 
-const AppworkspaceEventsEventIdRouteChildren: AppworkspaceEventsEventIdRouteChildren =
+const AppworkspaceEventsEventIdRouteRouteChildren: AppworkspaceEventsEventIdRouteRouteChildren =
   {
     AppworkspaceEventsEventIdAuditRoute: AppworkspaceEventsEventIdAuditRoute,
+    AppworkspaceEventsEventIdIndexRoute: AppworkspaceEventsEventIdIndexRoute,
   }
 
-const AppworkspaceEventsEventIdRouteWithChildren =
-  AppworkspaceEventsEventIdRoute._addFileChildren(
-    AppworkspaceEventsEventIdRouteChildren,
+const AppworkspaceEventsEventIdRouteRouteWithChildren =
+  AppworkspaceEventsEventIdRouteRoute._addFileChildren(
+    AppworkspaceEventsEventIdRouteRouteChildren,
   )
 
 interface AppworkspaceRouteRouteChildren {
   AppworkspaceIndexRoute: typeof AppworkspaceIndexRoute
+  AppworkspaceEventsEventIdRouteRoute: typeof AppworkspaceEventsEventIdRouteRouteWithChildren
   AppworkspaceApprovalsApprovalIdRoute: typeof AppworkspaceApprovalsApprovalIdRoute
-  AppworkspaceEventsEventIdRoute: typeof AppworkspaceEventsEventIdRouteWithChildren
   AppworkspaceEventsAllRoute: typeof AppworkspaceEventsAllRoute
   AppworkspacePluginsPluginIdRoute: typeof AppworkspacePluginsPluginIdRoute
   AppworkspaceApprovalsIndexRoute: typeof AppworkspaceApprovalsIndexRoute
@@ -399,8 +419,9 @@ interface AppworkspaceRouteRouteChildren {
 
 const AppworkspaceRouteRouteChildren: AppworkspaceRouteRouteChildren = {
   AppworkspaceIndexRoute: AppworkspaceIndexRoute,
+  AppworkspaceEventsEventIdRouteRoute:
+    AppworkspaceEventsEventIdRouteRouteWithChildren,
   AppworkspaceApprovalsApprovalIdRoute: AppworkspaceApprovalsApprovalIdRoute,
-  AppworkspaceEventsEventIdRoute: AppworkspaceEventsEventIdRouteWithChildren,
   AppworkspaceEventsAllRoute: AppworkspaceEventsAllRoute,
   AppworkspacePluginsPluginIdRoute: AppworkspacePluginsPluginIdRoute,
   AppworkspaceApprovalsIndexRoute: AppworkspaceApprovalsIndexRoute,

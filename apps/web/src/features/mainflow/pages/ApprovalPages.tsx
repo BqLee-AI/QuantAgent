@@ -157,6 +157,11 @@ export function ApprovalDetailPageContent({ approvalId }: { approvalId: string }
             ) : (
               <InfoTag>当前审批暂无关联事件</InfoTag>
             )}
+            {relatedEvent ? (
+              <LinkButton to="/events/$eventId/audit" params={{ eventId: relatedEvent.id }} variant="outline">
+                审计时间线
+              </LinkButton>
+            ) : null}
             {relatedRun ? (
               <LinkButton to="/runtime/agents/$runId" params={{ runId: relatedRun.id }} variant="outline">
                 查看运行详情
