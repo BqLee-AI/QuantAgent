@@ -71,8 +71,9 @@ class ApprovalHarnessTestCase(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        self.assertIsNotNone(input_handler.last_result)
-        self.assertEqual(input_handler.last_result.decision.status.value, "execution_requested")
+        decision = repository.latest_decision(message.approval_id)
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.status.value, "execution_requested")
 
     async def test_raw_text_ambiguous_input_escalates_in_harness(self) -> None:
         bus = InMemoryEventBus()
@@ -109,7 +110,9 @@ class ApprovalHarnessTestCase(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        self.assertEqual(input_handler.last_result.decision.status.value, "escalated")
+        decision = service.repository.latest_decision(message.approval_id)
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.status.value, "escalated")
 
     async def test_notification_handoff_directly_enters_approval_evaluation(self) -> None:
         bus = InMemoryEventBus()
@@ -256,6 +259,7 @@ class ApprovalHarnessTestCase(unittest.IsolatedAsyncioTestCase):
                     approval = (await service.submit_action(action)).approval
                     approval_id = approval.id
                 if setup == "reject-first":
+                    # 这里预置 input-first，依赖 adapter 后续派生出不同 input id，才能验证终态后新输入被 ignored。
                     await service.submit_input(
                         ApprovalInput(
                             id="input-first",
@@ -266,6 +270,7 @@ class ApprovalHarnessTestCase(unittest.IsolatedAsyncioTestCase):
                         )
                     )
                 if setup == "duplicate-first":
+                    # 这里预置 input-notif_fact_1，依赖 adapter 复用相同派生 id，才能验证重复输入复用既有 rejected 决策。
                     await service.submit_input(
                         ApprovalInput(
                             id="input-notif_fact_1",

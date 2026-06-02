@@ -445,9 +445,7 @@ class ApprovalOrchestrationService:
         return decision
 
     def _link_decision(self, input_id: str, decision: ApprovalDecision) -> None:
-        link = getattr(self._repository, "link_decision_to_input", None)
-        if callable(link):
-            link(input_id, decision)
+        self._repository.link_decision_to_input(input_id, decision)
 
 
 def _approval_from_action(action: ActionRequest, policy: object, *, approval_id: str) -> ApprovalRequest:

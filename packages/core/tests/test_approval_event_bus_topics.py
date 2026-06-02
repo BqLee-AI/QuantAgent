@@ -75,8 +75,9 @@ class ApprovalEventBusTopicsTestCase(unittest.IsolatedAsyncioTestCase):
             )
         )
 
-        self.assertIsNotNone(input_handler.last_result)
-        self.assertEqual(input_handler.last_result.decision.status.value, "execution_requested")
+        decision = repository.latest_decision(approval.id)
+        self.assertIsNotNone(decision)
+        self.assertEqual(decision.status.value, "execution_requested")
 
 
 def _fixed_id(prefix: str) -> str:

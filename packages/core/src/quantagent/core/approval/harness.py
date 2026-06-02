@@ -35,7 +35,7 @@ class FakeAIActionProducer:
 class HumanAuthorizationMessageBuilder:
     def build(self, envelope: EventEnvelope) -> HumanAuthorizationMessage:
         payload = dict(envelope.payload)
-        # 脱敏边界：授权消息只能使用 notification.requested 中已脱敏摘要。
+        # 脱敏边界: 授权消息只能使用 notification.requested 中已脱敏摘要。
         safe_context = sanitize_mapping(dict(payload.get("safe_context") or {}))
         return HumanAuthorizationMessage(
             approval_id=str(payload["approval_id"]),

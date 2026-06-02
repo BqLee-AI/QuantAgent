@@ -2,7 +2,7 @@
 
 ### Requirement: Event Bus V1 restricts topic names through topic policy
 
-Kafka Event Bus V1 SHALL validate event topics against a stable topic policy.
+Event Bus V1 SHALL validate event topics against a stable topic policy.
 
 #### Scenario: default topic set is accepted
 - **WHEN** a publisher validates a V1 topic
@@ -29,7 +29,7 @@ Kafka Event Bus V1 SHALL validate event topics against a stable topic policy.
 
 ### Requirement: Event Bus V1 protects sensitive data in errors and logs
 
-Kafka Event Bus V1 SHALL prevent secrets and sensitive local context from appearing in event bus errors, headers, payload diagnostics, and logs.
+Event Bus V1 SHALL prevent secrets and sensitive local context from appearing in event bus errors, headers, payload diagnostics, and logs.
 
 #### Scenario: event bus error summary is sanitized
 - **WHEN** publish, decode, subscribe, or handler dispatch fails
