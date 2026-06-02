@@ -1,11 +1,16 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { RuntimeDashboardPageContent } from '../../../../features/mainflow/MainflowSections'
+import { RuntimeAuditPage } from '../../../../features/runtime'
+import { toRuntimeAuditSearch } from '../../../../features/runtime'
+import type { RuntimeAuditFilters } from '../../../../features/runtime'
+
+type RuntimeSearch = Partial<RuntimeAuditFilters>
 
 export const Route = createFileRoute('/_app/(workspace)/runtime/')({
+  validateSearch: (search): RuntimeSearch => toRuntimeAuditSearch(search),
   component: RuntimePage,
 })
 
 function RuntimePage() {
-  return <RuntimeDashboardPageContent />
+  return <RuntimeAuditPage search={Route.useSearch()} />
 }

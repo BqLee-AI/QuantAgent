@@ -1,0 +1,5 @@
+schema: spec-driven
+change_id: runtime-audit-chat-view-v1
+title: 将 Runtime 改为 Chat App 风格审计流
+status: draft
+created: 2026-06-02
