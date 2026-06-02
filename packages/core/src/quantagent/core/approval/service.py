@@ -194,7 +194,10 @@ class ApprovalOrchestrationService:
                 )
             )
             self._link_decision(stored_input.id, decision)
-            return ApprovalServiceResult(approval=approval, evaluation=evaluation, decision=decision)
+            final_approval = approval.with_status(_status_from_decision(decision))
+            self._repository.save_approval_request(final_approval)
+            await self._event_publisher.publish_approval_completed(decision)
+            return ApprovalServiceResult(approval=final_approval, evaluation=evaluation, decision=decision)
 
         decision = await self._decision_from_evaluation(approval, action, evaluation)
         self._link_decision(stored_input.id, decision)
@@ -229,7 +232,10 @@ class ApprovalOrchestrationService:
                     reason_summary="Original action request was not found for expiration.",
                 )
             )
-            return ApprovalServiceResult(approval=approval, decision=decision)
+            final_approval = approval.with_status(_status_from_decision(decision))
+            self._repository.save_approval_request(final_approval)
+            await self._event_publisher.publish_approval_completed(decision)
+            return ApprovalServiceResult(approval=final_approval, decision=decision)
 
         if approval.expiration_action == ExpirationAction.EXPIRE_APPROVE:
             decision = await self._execute_after_gate(

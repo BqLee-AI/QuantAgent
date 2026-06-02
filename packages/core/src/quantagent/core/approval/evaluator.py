@@ -37,7 +37,7 @@ class ApprovalRuleEvaluator:
         intent_value: str,
     ) -> ApprovalEvaluation:
         try:
-            intent = ApprovalIntent(intent_value)
+            intent = ApprovalIntent(intent_value.strip().lower())
         except ValueError:
             intent = ApprovalIntent.UNCLEAR
         requires_stronger = _requires_stronger_confirmation(approval, user_input, intent)

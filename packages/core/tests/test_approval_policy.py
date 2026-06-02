@@ -65,6 +65,7 @@ class ApprovalPolicyTestCase(unittest.TestCase):
         )
 
         self.assertEqual(policy.mode, ApprovalMode.APPROVAL_REQUIRED)
+        self.assertEqual(policy.required_confirmation_level, ConfirmationLevel.LINK_CONFIRM)
 
     def test_user_policy_can_configure_expiration_action(self) -> None:
         policy = ApprovalPolicyResolver().resolve(
@@ -76,6 +77,37 @@ class ApprovalPolicyTestCase(unittest.TestCase):
             )
         )
 
+        self.assertEqual(policy.expiration_action, ExpirationAction.ESCALATE)
+
+    def test_ai_hint_cannot_weaken_confirmation_or_expiration_baseline(self) -> None:
+        policy = ApprovalPolicyResolver().resolve(
+            _action(
+                action_type="execute_order",
+                action_side="increase_risk",
+                urgency="time_sensitive",
+                ai_policy_hint={
+                    "required_confirmation_level": "informational",
+                    "expiration_action": "expire_approve",
+                },
+            )
+        )
+
+        self.assertEqual(policy.required_confirmation_level, ConfirmationLevel.LINK_CONFIRM)
+        self.assertEqual(policy.expiration_action, ExpirationAction.EXPIRE_REANALYSIS)
+
+    def test_policy_can_tighten_confirmation_and_expiration(self) -> None:
+        policy = ApprovalPolicyResolver().resolve(
+            _action(
+                action_type="adjust_strategy",
+                action_side="increase_risk",
+                user_policy={
+                    "required_confirmation_level": "manual_only",
+                    "expiration_action": "escalate",
+                },
+            )
+        )
+
+        self.assertEqual(policy.required_confirmation_level, ConfirmationLevel.MANUAL_ONLY)
         self.assertEqual(policy.expiration_action, ExpirationAction.ESCALATE)
 
 
