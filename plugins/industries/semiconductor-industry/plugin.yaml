@@ -1,0 +1,19 @@
+id: quantagent.official.industry.semiconductor
+name: Semiconductor Industry Package
+type: industry
+version: 0.1.0
+entrypoint: industry_plugin:plugin
+description: Official semiconductor and memory industry package with RSS baseline, RSS expansion, and Readability source bindings.
+capabilities:
+  - industry.analysis
+config_schema: config.schema.json
+source_bindings:
+  - source_plugin_id: quantagent.official.source.rss
+    required: true
+    config_template: templates/source_bindings/rss.baseline.yaml
+  - source_plugin_id: quantagent.official.source.rss
+    required: false
+    config_template: templates/source_bindings/rss.expansion.yaml
+  - source_plugin_id: quantagent.official.source.readability
+    required: false
+    config_template: templates/source_bindings/readability.default.yaml

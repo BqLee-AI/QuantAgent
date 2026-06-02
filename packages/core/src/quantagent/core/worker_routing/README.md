@@ -6,8 +6,10 @@
 
 - `captured_event_decoder.py` 只做 `EventEnvelope -> CapturedSourceEventInput` 的字段提取与最小校验。
 - `service.py` 负责 `binding_id` 查询、duplicate 语义、owner 解析、gateway 调用与结构化结果映射。
+- `enrichment_service.py` 负责 worker 后置正文增强编排和 degraded 路径，不让 RSS source 插件直接抓正文。
 - `owner_resolver.py` 只负责把 `SourceBinding.owner_type / owner_id` 解析为受控入口引用。
-- `industry_gateway.py` 是行业入口的 core port；V1 允许 no-op/fake，但必须返回结构化结果。
+- `industry_gateway.py` 是行业入口的 core port；V1 允许 no-op/fake，也允许 topic publish adapter，但必须返回结构化结果。
+- `analysis_request_publisher.py` 负责把 worker enrichment 结果发布为 `industry.analysis.requested`。
 - `models.py` 固定 route status、consumer disposition、audit payload 等 worker 契约。
 
 不要放什么：

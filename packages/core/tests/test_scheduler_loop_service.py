@@ -10,10 +10,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from quantagent.core.db.base import Base
+from quantagent.core.db.repositories.raw_event_capture_repository import RawEventCaptureRepository
+from quantagent.core.db.repositories.raw_event_repository import RawEventRepository
 from quantagent.core.db.repositories.scheduler_run_repository import SchedulerRunRepository
 from quantagent.core.db.repositories.source_binding_repository import SourceBindingRepository
 from quantagent.core.events import InMemoryEventBus
 from quantagent.core.events.service import SourceEventPublisher
+from quantagent.core.raw_events import RawEventService
 from quantagent.core.registry import PluginManifest, PluginRecord, PluginRegistry, PluginSource, PluginStatus, PluginType
 from quantagent.core.runtime import PluginRuntimeService
 from quantagent.core.scheduling import (
@@ -74,6 +77,8 @@ class SourceBindingSchedulerLoopServiceTestCase(unittest.IsolatedAsyncioTestCase
         self.clock = FrozenSchedulingClock(datetime(2026, 6, 1, 8, 0, tzinfo=UTC))
         self.binding_repository = SourceBindingRepository(self.session)
         self.run_repository = SchedulerRunRepository(self.session)
+        self.raw_event_repository = RawEventRepository(self.session)
+        self.raw_event_capture_repository = RawEventCaptureRepository(self.session)
         self.binding_service = SourceBindingService(self.binding_repository, clock=self.clock)
         self.run_service = SchedulerRunService(self.run_repository, clock=self.clock)
         self.event_bus = InMemoryEventBus()
@@ -161,6 +166,12 @@ class SourceBindingSchedulerLoopServiceTestCase(unittest.IsolatedAsyncioTestCase
             runtime=PluginRuntimeService(),
             binding_service=self.binding_service,
             run_service=self.run_service,
+            raw_event_service=RawEventService(
+                raw_event_repository=self.raw_event_repository,
+                raw_event_capture_repository=self.raw_event_capture_repository,
+                source_binding_repository=self.binding_repository,
+                scheduler_run_repository=self.run_repository,
+            ),
             clock=self.clock,
             commit=self.session.commit,
             rollback=self.session.rollback,
@@ -198,6 +209,9 @@ class SourceBindingSchedulerLoopServiceTestCase(unittest.IsolatedAsyncioTestCase
         self.assertEqual(runs[0].status, "succeeded")
         self.assertEqual(runs[0].captured_count, 1)
         self.assertEqual(runs[0].output_summary["item_count"], 1)
+        raw_events = self.raw_event_repository.list_by_run(scheduler_run_id=runs[0].run_id, limit=10)
+        self.assertEqual(len(raw_events), 1)
+        self.assertEqual(raw_events[0].external_id, "evt-1")
 
         self.assertEqual(len(self.event_handler.seen), 1)
         self.assertEqual(self.event_handler.seen[0].topic, "source.event.captured")

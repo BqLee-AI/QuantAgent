@@ -55,6 +55,15 @@
       "maximum": 20000,
       "default": 4000
     },
+    "keywords": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "maxItems": 50
+    },
     "include_content": {
       "type": "boolean",
       "default": true

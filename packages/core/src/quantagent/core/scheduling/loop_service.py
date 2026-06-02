@@ -9,6 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from quantagent.core.events.service import SourceEventPublisher
+from quantagent.core.raw_events.service import RawEventService
 from quantagent.core.registry.models import PluginError
 from quantagent.core.registry.service import PluginRegistry
 from quantagent.core.runtime import PluginRuntimeInvocation, PluginRuntimeService
@@ -76,6 +77,7 @@ class SourceBindingSchedulerLoopService:
         commit: Callable[[], None] | None = None,
         rollback: Callable[[], None] | None = None,
         publisher: SourceEventPublisher | None = None,
+        raw_event_service: RawEventService | None = None,
         capability: str = "source.fetch",
         default_timeout_ms: int | None = None,
         actor: str = "scheduler-loop",
@@ -88,6 +90,7 @@ class SourceBindingSchedulerLoopService:
         self._commit = commit or (lambda: None)
         self._rollback = rollback or (lambda: None)
         self._publisher = publisher
+        self._raw_event_service = raw_event_service
         self._capability = capability
         self._default_timeout_ms = default_timeout_ms
         self._actor = actor
@@ -298,6 +301,24 @@ class SourceBindingSchedulerLoopService:
                     error_code="SCHEDULER_PERSISTENCE_FAILED",
                 )
 
+            raw_event_persisted = self._persist_raw_events(
+                binding=claimed_binding,
+                source_result=source_result,
+                run_id=finished.run_id,
+            )
+            if not raw_event_persisted:
+                return SourceBindingLoopRunResult(
+                    binding_id=binding.binding_id,
+                    run_id=finished.run_id,
+                    status=run_status,
+                    request_id=request_id,
+                    next_run_at=next_run_at if binding_updated is not None else None,
+                    captured_count=captured_count,
+                    event_published=False,
+                    persistence_failed=True,
+                    error_code="RAW_EVENT_PERSIST_FAILED",
+                )
+
             event_published = False
             # terminal run 要落库，但只有 binding 仍 active 才允许回写下一次调度并向下游发成功事件。
             if binding_updated is not None:
@@ -455,6 +476,32 @@ class SourceBindingSchedulerLoopService:
                     "error_type": exc.__class__.__name__,
                     "error_message": str(exc),
                 },
+            )
+            return False
+
+    def _persist_raw_events(
+        self,
+        *,
+        binding: SourceBindingRecord,
+        source_result: SourceFetchResult | None,
+        run_id: str,
+    ) -> bool:
+        if self._raw_event_service is None or source_result is None or not source_result.items:
+            return True
+        try:
+            self._raw_event_service.persist_source_fetch_result(
+                source_plugin_id=binding.source_plugin_id,
+                result=source_result,
+                source_binding_id=binding.binding_id,
+                scheduler_run_id=run_id,
+            )
+            self._commit()
+            return True
+        except Exception:
+            self._rollback_safely(binding_id=binding.binding_id)
+            logger.exception(
+                "Scheduler failed to persist raw events after successful source fetch.",
+                extra={"binding_id": binding.binding_id, "run_id": run_id},
             )
             return False
 

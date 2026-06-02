@@ -68,6 +68,7 @@ class RSSSourcePlugin(BasePlugin):
             max_response_bytes = _coerce_max_response_bytes(config.get("max_response_bytes"))
             max_content_chars = _coerce_max_content_chars(config.get("max_content_chars"))
             include_content = _coerce_bool(config.get("include_content"), key="include_content", default=True)
+            keywords = _coerce_keywords(config.get("keywords"))
             headers = _coerce_headers(config.get("headers"), user_agent=config.get("user_agent"))
             captured_at = datetime.now(UTC).isoformat()
 
@@ -96,6 +97,7 @@ class RSSSourcePlugin(BasePlugin):
                         include_content=include_content,
                         max_items_per_feed=max_items_per_feed,
                         max_content_chars=max_content_chars,
+                        keywords=keywords,
                     )
                 )
 
@@ -298,6 +300,17 @@ def _coerce_bool(value: Any, *, key: str, default: bool) -> bool:
     raise ValueError(f"{key} must be a boolean")
 
 
+def _coerce_keywords(value: Any) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, list | tuple):
+        raise ValueError("keywords must be an array of non-empty strings")
+    keywords = tuple(item.strip().lower() for item in value if isinstance(item, str) and item.strip())
+    if not keywords:
+        raise ValueError("keywords must contain at least one non-empty string when provided")
+    return keywords
+
+
 def _coerce_headers(value: Any, *, user_agent: Any) -> dict[str, str]:
     headers: dict[str, str] = {"Accept": DEFAULT_ACCEPT}
     if value is not None:
@@ -452,9 +465,12 @@ def _build_source_items(
     include_content: bool,
     max_items_per_feed: int,
     max_content_chars: int,
+    keywords: tuple[str, ...],
 ) -> list[SourceItemDraft]:
     items: list[SourceItemDraft] = []
     for index, entry in enumerate(parsed_feed.entries[:max_items_per_feed], start=1):
+        if keywords and not _matches_keywords(entry=entry, keywords=keywords):
+            continue
         external_id = entry.entry_id or entry.url or _fallback_external_id(parsed_feed.feed_url, index=index, title=entry.title)
         # 只保证 feed 自带 summary/content 片段，不保证正文完整；正文抓取应由平台决定是否再协作 reader 插件。
         content = _truncate_content(entry.content, max_content_chars=max_content_chars) if include_content else None
@@ -478,6 +494,15 @@ def _build_source_items(
             )
         )
     return items
+
+
+def _matches_keywords(*, entry: _ParsedEntry, keywords: tuple[str, ...]) -> bool:
+    haystack = " ".join(
+        item.strip().lower()
+        for item in (entry.title, entry.content, entry.url)
+        if isinstance(item, str) and item.strip()
+    )
+    return any(keyword in haystack for keyword in keywords)
 
 
 def _fallback_external_id(feed_url: str, *, index: int, title: str | None) -> str:

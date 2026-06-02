@@ -29,9 +29,15 @@ from quantagent.worker.main import create_worker_app, create_worker_runtime, run
 - `create_worker_runtime()`
   组装并返回 `EventBusRuntime`
 - `create_worker_app()`
-  组装 worker 的 session、captured-event handler 和 event bus runtime
+  组装 worker 的 session、captured-event handler、Readability enrichment seam、`industry.analysis.requested` topic publisher 和 event bus runtime
 - `run()`
   执行当前 V1 的一次 `source.event.captured` 订阅/消费流程；长期 loop 后续只扩展生命周期，不改变入口薄层职责
+
+注意：
+
+- `uv run api` 不会自动启动 worker
+- worker 需要单独运行
+- worker 依赖可用的 `DATABASE_URL`
 
 ## 推荐扩展方式
 
@@ -70,6 +76,12 @@ worker 使用和 core 一致的 event bus 配置：
 - `kafka`
   需要显式配置 Kafka bootstrap servers
 
+关键限制：
+
+- `memory` backend 只在当前进程内有效
+- 如果 `scheduler` 和 `worker` 分开进程运行，`memory` backend 不会把 `source.event.captured` 从 scheduler 传给 worker
+- 需要跨进程验证时，必须改用 `kafka`
+
 如果需要启用 Kafka backend，安装时要带上 Kafka extra：
 
 ```bash
@@ -85,3 +97,28 @@ uv run --package quantagent-worker python -m unittest discover -s apps/worker/sr
 ```
 
 当前测试验证 composition root 默认走 `memory` backend，以及 `run()` 会执行一次 `consume_once()` 并关闭 runtime。
+
+当前主链路约束：
+
+- worker 在消费 `source.event.captured` 后，可以通过受控 seam 调用 Readability 做正文增强
+- 正文增强失败时允许 degraded 为 RSS 摘要，但必须保留结构化失败标记
+- 半导体 owner 的成功 handoff 通过 `industry.analysis.requested` topic 表达，而不是在 worker 入口直接执行业务分析
+
+## 运行示例
+
+单次消费 smoke：
+
+```bash
+DATABASE_URL='postgresql+psycopg://quantagent:quantagent@localhost:15432/quantagent' \
+EVENT_BUS_BACKEND=memory \
+uv run python -c 'import asyncio; from quantagent.worker.main import run_once; asyncio.run(run_once())'
+```
+
+跨进程消费：
+
+```bash
+DATABASE_URL='postgresql+psycopg://quantagent:quantagent@localhost:15432/quantagent' \
+EVENT_BUS_BACKEND=kafka \
+EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
+uv run quantagent-worker
+```

@@ -44,6 +44,7 @@ from quantagent.api.routers.v1.register import (
 )
 from quantagent.core.db.base import Base
 from quantagent.core.db.models.scheduler_run import SchedulerRunORM
+from quantagent.core.db.models.raw_event import RawEventORM
 from quantagent.core.db.models.source_binding import SourceBindingORM
 from quantagent.core.model_config import FixedModelCallClient, ModelConfigCrypto, ModelTokenUsage
 from quantagent.core.model_config.service import ModelCallResult
@@ -1790,6 +1791,62 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(body["error"]["code"], "BAD_REQUEST")
         self.assertEqual(body["error"]["details"]["filter"], "trace_id")
+
+    def test_raw_events_list_and_detail_split_summary_and_full_content(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        app = create_app(self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}"))
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            seed_session = client.app.state.db_session_factory()
+            try:
+                seed_session.add(
+                    RawEventORM(
+                        raw_event_id="rawevt-api-001",
+                        source_plugin_id="quantagent.official.source.rss",
+                        external_id="rss-entry-001",
+                        canonical_url="https://example.com/articles/1",
+                        title="HBM market moves",
+                        content="full body " * 80,
+                        author="Reporter",
+                        published_at=datetime(2026, 6, 2, 8, 0, 0, tzinfo=UTC),
+                        first_captured_at=datetime(2026, 6, 2, 8, 1, 0, tzinfo=UTC),
+                        last_captured_at=datetime(2026, 6, 2, 8, 2, 0, tzinfo=UTC),
+                        raw_payload={"body": "very large body", "url": "https://example.com/articles/1"},
+                        metadata_json={"source": "rss", "feed": "semiconductor"},
+                        canonical_dedupe_key="dedupe-001",
+                        dedupe_strategy="external_id",
+                        content_hash="hash-001",
+                        first_binding_id="binding-api-001",
+                        first_run_id="run-api-001",
+                        duplicate_capture_count=2,
+                    )
+                )
+                seed_session.commit()
+            finally:
+                seed_session.close()
+            client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+
+            list_response = client.get("/api/v1/raw-events", params={"source_plugin_id": "quantagent.official.source.rss"})
+            detail_response = client.get("/api/v1/raw-events/rawevt-api-001")
+
+        list_body = list_response.json()
+        detail_body = detail_response.json()
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(list_body["data"]["items"][0]["raw_event_id"], "rawevt-api-001")
+        self.assertEqual(list_body["data"]["items"][0]["source_plugin_id"], "quantagent.official.source.rss")
+        self.assertIn("content_preview", list_body["data"]["items"][0])
+        self.assertNotIn("content", list_body["data"]["items"][0])
+        self.assertNotIn("raw_payload", list_body["data"]["items"][0])
+        self.assertIsNone(list_body["data"]["next_cursor"])
+
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_body["data"]["raw_event_id"], "rawevt-api-001")
+        self.assertIn("content", detail_body["data"])
+        self.assertIn("raw_payload", detail_body["data"])
+        self.assertEqual(detail_body["data"]["raw_payload"]["url"], "https://example.com/articles/1")
 
     def test_model_provider_create_masks_key_and_test_connection_records_usage(self) -> None:
         database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)

@@ -11,9 +11,12 @@ from quantagent.core.config import settings
 from quantagent.core.events import EventBusRuntime, EventBusSettings, build_event_bus_runtime
 from quantagent.core.events.service import SourceEventPublisher
 from quantagent.core.db.repositories.scheduler_run_repository import SchedulerRunRepository
+from quantagent.core.db.repositories.raw_event_capture_repository import RawEventCaptureRepository
+from quantagent.core.db.repositories.raw_event_repository import RawEventRepository
 from quantagent.core.db.repositories.source_binding_repository import SourceBindingRepository
 from quantagent.core.db.session import create_session_factory
 from quantagent.core.registry import PluginRegistry, RegistryScanner
+from quantagent.core.raw_events import RawEventService
 from quantagent.core.runtime import PluginRuntimeService
 from quantagent.core.scheduling import (
     SchedulerLoopTickResult,
@@ -67,6 +70,12 @@ def create_scheduler_app() -> SchedulerApp:
         runtime=PluginRuntimeService(),
         binding_service=SourceBindingService(SourceBindingRepository(session)),
         run_service=SchedulerRunService(SchedulerRunRepository(session)),
+        raw_event_service=RawEventService(
+            raw_event_repository=RawEventRepository(session),
+            raw_event_capture_repository=RawEventCaptureRepository(session),
+            source_binding_repository=SourceBindingRepository(session),
+            scheduler_run_repository=SchedulerRunRepository(session),
+        ),
         commit=session.commit,
         rollback=session.rollback,
         publisher=SourceEventPublisher(runtime.publisher),

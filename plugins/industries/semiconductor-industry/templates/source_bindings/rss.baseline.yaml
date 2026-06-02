@@ -1,0 +1,11 @@
+feeds:
+  - https://investors.micron.com/rss/news-releases.xml
+  - https://investor.marvell.com/news-events/press-releases/rss
+  - https://semiengineering.com/feed/
+  - https://newsroom.intel.com/feed/
+keywords:
+  - hbm
+  - ddr5
+  - memory
+  - ai accelerator
+source_tier: baseline

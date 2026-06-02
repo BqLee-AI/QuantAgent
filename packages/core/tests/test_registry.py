@@ -295,6 +295,44 @@ class PluginRegistryScannerTestCase(unittest.TestCase):
             ),
         )
 
+    def test_semiconductor_industry_plugin_source_bindings_are_scanned_from_repo(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        registry = PluginRegistry(
+            RegistryScanner(
+                official_root=repo_root / "plugins",
+                runtime_root=repo_root / "runtime" / "plugins",
+            )
+        )
+
+        record = registry.get_plugin("quantagent.official.industry.semiconductor")
+
+        self.assertIsNotNone(record)
+        assert record is not None
+        self.assertEqual(record.status, PluginStatus.VALID)
+        self.assertIsNotNone(record.manifest)
+        assert record.manifest is not None
+        self.assertEqual(record.manifest.type, PluginType.INDUSTRY)
+        self.assertEqual(
+            tuple(item.source_plugin_id for item in record.manifest.source_bindings),
+            (
+                "quantagent.official.source.rss",
+                "quantagent.official.source.rss",
+                "quantagent.official.source.readability",
+            ),
+        )
+        self.assertEqual(
+            tuple(item.required for item in record.manifest.source_bindings),
+            (True, False, False),
+        )
+        self.assertEqual(
+            tuple(item.config_template for item in record.manifest.source_bindings),
+            (
+                "templates/source_bindings/rss.baseline.yaml",
+                "templates/source_bindings/rss.expansion.yaml",
+                "templates/source_bindings/readability.default.yaml",
+            ),
+        )
+
     def test_source_bindings_templates_must_stay_inside_plugin_dir(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)

@@ -17,6 +17,7 @@ from quantagent.api.routers.v1.plugins import router as plugins_router
 from quantagent.api.routers.v1.agent_runs import router as agent_runs_router
 from quantagent.api.routers.v1.runtime_errors import router as runtime_errors_router
 from quantagent.api.routers.v1.runtime_health import router as runtime_health_router
+from quantagent.api.routers.v1.raw_events import router as raw_events_router
 from quantagent.api.routers.v1.scheduler_runs import router as scheduler_runs_router
 from quantagent.api.routers.v1.source_bindings import router as source_bindings_router
 from quantagent.api.routers.v1.tool_invocations import router as tool_invocations_router
@@ -46,6 +47,7 @@ STANDARD_API_V1_ROUTER_REGISTRATIONS = (
     ApiV1RouterRegistration(router=wallet_router, access="protected"),
     ApiV1RouterRegistration(router=models_router, access="protected"),
     ApiV1RouterRegistration(router=runtime_health_router, access="protected"),
+    ApiV1RouterRegistration(router=raw_events_router, access="protected"),
     ApiV1RouterRegistration(router=runtime_errors_router, access="protected"),
     ApiV1RouterRegistration(router=agent_runs_router, access="protected"),
     ApiV1RouterRegistration(router=tool_invocations_router, access="protected"),

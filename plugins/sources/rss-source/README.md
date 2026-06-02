@@ -44,6 +44,10 @@
   "max_items_per_feed": 20,
   "max_response_bytes": 262144,
   "max_content_chars": 4000,
+  "keywords": [
+    "hbm",
+    "memory"
+  ],
   "include_content": true
 }
 ```
@@ -64,12 +68,15 @@
   单个 feed 响应体大小上限，避免异常 feed 撑大内存和输出
 - `max_content_chars`
   单条内容片段最大长度，超出后会截断
+- `keywords`
+  可选关键词过滤，命中 title / content / url 任一字段时保留该 entry
 - `include_content`
   是否输出 feed 层 summary / content snippet
 
 约束说明：
 
 - `feeds` 当前最多 20 条，避免一次调用触发无上限外部请求
+- `keywords` 是轻量包含匹配，不是语义检索，也不会调用模型做分类
 - `headers` 只允许非敏感公共请求头；`Authorization`、`Cookie`、`X-Api-Key` 这类敏感头不允许明文放在插件配置里
 
 ## 输出结构

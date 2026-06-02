@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from sqlalchemy import Select, desc, select, update
+from datetime import UTC, datetime
+
+from sqlalchemy import Select, and_, desc, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -91,8 +93,78 @@ class RawEventRepository:
         )
         return list(self._session.scalars(statement).unique().all())
 
+    def list_for_api(
+        self,
+        *,
+        source_plugin_id: str | None = None,
+        cursor: dict[str, str] | None = None,
+        limit: int = DEFAULT_LIST_LIMIT,
+    ) -> tuple[list[RawEventORM], dict[str, str] | None]:
+        bounded_limit = _bounded_limit(limit)
+        # 没有 published_at 的源仍要可见；这里退化到 last_captured_at，保证新闻流排序稳定且可翻页。
+        effective_published_at = func.coalesce(RawEventORM.published_at, RawEventORM.last_captured_at)
+        statement: Select[tuple[RawEventORM]] = select(RawEventORM)
+        if source_plugin_id is not None:
+            statement = statement.where(RawEventORM.source_plugin_id == source_plugin_id)
+        if cursor is not None:
+            cursor_effective_published_at, cursor_last_captured_at, cursor_raw_event_id = _parse_raw_event_cursor(cursor)
+            statement = statement.where(
+                or_(
+                    effective_published_at < cursor_effective_published_at,
+                    and_(
+                        effective_published_at == cursor_effective_published_at,
+                        or_(
+                            RawEventORM.last_captured_at < cursor_last_captured_at,
+                            and_(
+                                RawEventORM.last_captured_at == cursor_last_captured_at,
+                                RawEventORM.raw_event_id < cursor_raw_event_id,
+                            ),
+                        ),
+                    ),
+                )
+            )
+        statement = statement.order_by(desc(effective_published_at), desc(RawEventORM.last_captured_at), desc(RawEventORM.raw_event_id)).limit(
+            bounded_limit + 1
+        )
+        items = list(self._session.scalars(statement).all())
+        next_cursor = None
+        if len(items) > bounded_limit:
+            last = items[bounded_limit - 1]
+            next_cursor = {
+                "effective_published_at": (last.published_at or last.last_captured_at).astimezone(UTC).isoformat(),
+                "last_captured_at": last.last_captured_at.astimezone(UTC).isoformat(),
+                "raw_event_id": last.raw_event_id,
+            }
+            items = items[:bounded_limit]
+        return items, next_cursor
+
 
 def _bounded_limit(limit: int) -> int:
     if limit <= 0:
         raise ValueError("limit must be greater than zero.")
     return min(limit, MAX_LIST_LIMIT)
+
+
+def _parse_raw_event_cursor(cursor: dict[str, str]) -> tuple[datetime, datetime, str]:
+    if not isinstance(cursor, dict):
+        raise ValueError("raw event cursor must be an object")
+    if "effective_published_at" not in cursor:
+        raise ValueError("raw event cursor missing effective_published_at")
+    if "last_captured_at" not in cursor:
+        raise ValueError("raw event cursor missing last_captured_at")
+    if "raw_event_id" not in cursor:
+        raise ValueError("raw event cursor missing raw_event_id")
+    effective_published_at_raw = cursor["effective_published_at"]
+    last_captured_at_raw = cursor["last_captured_at"]
+    raw_event_id = cursor["raw_event_id"]
+    try:
+        effective_published_at = datetime.fromisoformat(effective_published_at_raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("raw event cursor has invalid effective_published_at") from exc
+    try:
+        last_captured_at = datetime.fromisoformat(last_captured_at_raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("raw event cursor has invalid last_captured_at") from exc
+    if not raw_event_id:
+        raise ValueError("raw event cursor has invalid raw_event_id")
+    return effective_published_at, last_captured_at, raw_event_id

@@ -36,6 +36,12 @@ from quantagent.scheduler.main import create_scheduler_app, create_scheduler_run
 - `run()`
   进入单进程固定轮询 loop，轮询间隔由共享 settings 控制
 
+注意：
+
+- `uv run api` 不会自动启动 scheduler
+- scheduler 需要单独运行
+- scheduler 依赖可用的 `DATABASE_URL`
+
 ## 推荐扩展方式
 
 后续如果要接入真实调度链路，遵守这个形态：
@@ -78,6 +84,11 @@ scheduler 使用和 core 一致的 event bus 配置：
 - `kafka`
   需要显式配置 Kafka bootstrap servers
 
+关键限制：
+
+- `memory` backend 只适合当前进程内 smoke，不适合把事件跨进程传给 worker
+- 如果 `scheduler` 和 `worker` 要分开进程完成主链路，必须改用 `kafka`
+
 如果需要启用 Kafka backend，安装时要带上 Kafka extra：
 
 ```bash
@@ -97,6 +108,25 @@ uv run --package quantagent-scheduler python -m unittest discover -s apps/schedu
 - composition root 默认走 `memory` backend
 - `run_once()` 会按 `SourceBinding` 扫描 due bindings
 - 成功 run 会写 `SchedulerRun`、回写 `next_run_at` 并发布 `source.event.captured`
+
+## 运行示例
+
+单次调度 smoke：
+
+```bash
+DATABASE_URL='postgresql+psycopg://quantagent:quantagent@localhost:15432/quantagent' \
+EVENT_BUS_BACKEND=memory \
+uv run python -c 'import asyncio; from quantagent.scheduler.main import run_once; print(asyncio.run(run_once()))'
+```
+
+跨进程调度：
+
+```bash
+DATABASE_URL='postgresql+psycopg://quantagent:quantagent@localhost:15432/quantagent' \
+EVENT_BUS_BACKEND=kafka \
+EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
+uv run quantagent-scheduler
+```
 
 明确边界：
 

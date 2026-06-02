@@ -27,6 +27,14 @@ class WorkerMainTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(app.handler)
         app.session.close()
 
+    def test_create_worker_app_uses_topic_publishing_gateway(self) -> None:
+        with patch("quantagent.worker.main.settings.DATABASE_URL", "sqlite:///:memory:"):
+            with patch("quantagent.worker.main.settings.EVENT_BUS_BACKEND", "memory"):
+                app = create_worker_app()
+        gateway = app.handler.routing_service._industry_gateway
+        self.assertEqual(gateway.__class__.__name__, "TopicPublishingIndustryGateway")
+        app.session.close()
+
     async def test_run_once_consumes_once_and_closes_app(self) -> None:
         app = _FakeWorkerApp()
         with patch("quantagent.worker.main.create_worker_app", return_value=app):

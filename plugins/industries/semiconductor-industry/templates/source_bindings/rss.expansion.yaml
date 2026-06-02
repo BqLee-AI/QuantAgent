@@ -1,0 +1,25 @@
+feeds:
+  - https://blogs.nvidia.com/feed/
+  - https://www.tomshardware.com/feeds/all
+  - https://www.eetimes.com/feed/
+  - https://www.digitimes.com/rss/daily.xml
+  - https://www.electronicsweekly.com/feed/
+  - https://www.servethehome.com/feed/
+  - https://news.google.com/rss/search?q=semiconductor%20OR%20memory%20OR%20HBM&hl=en-US&gl=US&ceid=US:en
+  - https://news.google.com/rss/search?q=NVIDIA%20OR%20Micron%20OR%20SK%20hynix%20OR%20TSMC&hl=en-US&gl=US&ceid=US:en
+  - https://export.arxiv.org/rss/cs.AR
+keywords:
+  - foundry
+  - memory pricing
+  - gpu demand
+  - hbm
+  - ddr5
+  - tsmc
+  - sk hynix
+  - micron
+  - nvidia
+  - packaging
+source_tier: expansion
+default_enabled: false
+# NVIDIA feed 在当前环境可用，但默认 RSS 插件 256KiB 上限会截断；可选扩展模板显式放宽到 1MiB。
+max_response_bytes: 1048576

@@ -57,6 +57,13 @@ from quantagent.core.source_binding import (
     is_effective_source_config_mapping,
     resolve_runtime_source_config,
 )
+from quantagent.core.worker_routing import (
+    AnalysisRequestItem,
+    AnalysisRequestPayload,
+    EnrichmentStatus,
+    IndustryAnalysisRequestedPublisher,
+    WorkerArticleEnrichmentService,
+)
 
 __all__ = [
     "__version__",
@@ -105,6 +112,11 @@ __all__ = [
     "SecretValueRef",
     "SourceBindingTemplate",
     "SourceBindingTemplateLoader",
+    "AnalysisRequestItem",
+    "AnalysisRequestPayload",
+    "EnrichmentStatus",
+    "IndustryAnalysisRequestedPublisher",
+    "WorkerArticleEnrichmentService",
     "build_runtime_source_config",
     "extract_defaults_from_schema",
     "is_effective_source_config_mapping",

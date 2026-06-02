@@ -3,8 +3,10 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from quantagent.core.scheduling import SourceBindingRecord, SourceBindingService
+from quantagent.core.worker_routing.enrichment_service import WorkerArticleEnrichmentService
 from quantagent.core.worker_routing.industry_gateway import IndustryGateway
 from quantagent.core.worker_routing.models import (
+    AnalysisRequestPayload,
     CapturedSourceEventInput,
     ConsumerDisposition,
     WorkerRouteResult,
@@ -20,11 +22,13 @@ class WorkerCapturedEventRoutingService:
         binding_service: SourceBindingService,
         owner_resolver: SourceBindingOwnerResolver,
         industry_gateway: IndustryGateway,
+        enrichment_service: WorkerArticleEnrichmentService | None = None,
         duplicate_guard: Callable[[str], bool] | None = None,
     ) -> None:
         self._binding_service = binding_service
         self._owner_resolver = owner_resolver
         self._industry_gateway = industry_gateway
+        self._enrichment_service = enrichment_service
         guard = duplicate_guard or InMemoryMessageDuplicateGuard()
         self._has_seen = guard if callable(guard) else guard.has_seen
         self._remember = None if callable(guard) else guard.remember
@@ -81,7 +85,8 @@ class WorkerCapturedEventRoutingService:
             self._record_if_terminal(result)
             return result
 
-        gateway_result = await self._industry_gateway.invoke(target=target, event=event)
+        analysis_request = await self._build_analysis_request(target=target, event=event)
+        gateway_result = await self._industry_gateway.invoke(target=target, event=event, analysis_request=analysis_request)
         if gateway_result.status == "failed":
             return _route_result(
                 event,
@@ -92,7 +97,10 @@ class WorkerCapturedEventRoutingService:
                 owner_type=target.owner_type,
                 owner_id=target.owner_id,
                 route_target=gateway_result.target_ref,
-                extra_audit={"gateway_error": gateway_result.error_summary},
+                extra_audit={
+                    "gateway_error": gateway_result.error_summary,
+                    "analysis_request": analysis_request.to_mapping() if analysis_request is not None else {},
+                },
             )
         result = _route_result(
             event,
@@ -103,6 +111,9 @@ class WorkerCapturedEventRoutingService:
             owner_type=target.owner_type,
             owner_id=target.owner_id,
             route_target=gateway_result.target_ref,
+            extra_audit={
+                "analysis_request": analysis_request.to_mapping() if analysis_request is not None else {},
+            },
         )
         self._record_if_terminal(result)
         return result
@@ -114,6 +125,36 @@ class WorkerCapturedEventRoutingService:
         if result.retryable or self._remember is None:
             return
         self._remember(result.message_id)
+
+    async def _build_analysis_request(
+        self,
+        *,
+        target: object,
+        event: CapturedSourceEventInput,
+    ) -> AnalysisRequestPayload:
+        owner_type = getattr(target, "owner_type")
+        owner_id = getattr(target, "owner_id")
+        binding_id = getattr(target, "binding_id")
+        if self._enrichment_service is None:
+            items = ()
+        else:
+            items = await self._enrichment_service.build_analysis_items(
+                owner_id=owner_id,
+                event=event,
+            )
+        degraded = any(item.enrichment_status.value == "failed_degraded" for item in items)
+        return AnalysisRequestPayload(
+            owner_type=owner_type,
+            owner_id=owner_id,
+            binding_id=binding_id,
+            source_message_id=event.message_id,
+            request_id=event.request_id,
+            plugin_id=event.plugin_id,
+            correlation_id=event.correlation_id,
+            causation_id=event.causation_id,
+            degraded=degraded,
+            items=items,
+        )
 
 
 class InMemoryMessageDuplicateGuard:

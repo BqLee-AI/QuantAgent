@@ -349,6 +349,33 @@ class RSSSourcePluginTestCase(unittest.TestCase):
         output = SourceFetchResult.from_mapping(result.output)
         self.assertEqual(len(output.items[0].content or ""), 256)
 
+    def test_keywords_filter_keeps_only_matching_entries(self) -> None:
+        rss_xml = RSS_FIXTURE.read_text(encoding="utf-8")
+        responses = {
+            "https://feeds.example.com/rss.xml": _FakeHTTPResponse(rss_xml),
+        }
+
+        _set_plugin_config(
+            self.plugin,
+            {
+                "feeds": ["https://feeds.example.com/rss.xml"],
+                "keywords": ["battery"],
+            },
+        )
+        with patch.object(type(self.plugin), "opener", staticmethod(_fake_opener(responses))):
+            result = asyncio.run(
+                self.plugin.invoke(
+                    PluginInvokeRequest(
+                        capability="source.fetch",
+                        request_id="req-rss-keywords",
+                    )
+                )
+            )
+
+        output = SourceFetchResult.from_mapping(result.output)
+        self.assertEqual(len(output.items), 1)
+        self.assertEqual(output.items[0].external_id, "rss-item-1")
+
     def test_remote_disconnect_maps_to_fetch_failed(self) -> None:
         def failing_opener(*_args, **_kwargs):
             raise RemoteDisconnected("Remote end closed connection without response")
@@ -445,6 +472,7 @@ class RSSSourcePluginTestCase(unittest.TestCase):
         self.assertEqual(properties["feeds"]["maxItems"], 20)
         self.assertIn("max_response_bytes", properties)
         self.assertIn("max_content_chars", properties)
+        self.assertIn("keywords", properties)
 
         readme = (PLUGIN_ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn("不负责 `RawEvent` 入库", readme)

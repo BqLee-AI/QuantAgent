@@ -1,0 +1,11 @@
+{
+  "title": "Semiconductor Industry Package Config",
+  "type": "object",
+  "properties": {
+    "watchlist_name": {
+      "type": "string",
+      "description": "半导体 / 内存行业包的人类可读 watchlist 名称。"
+    }
+  },
+  "additionalProperties": false
+}
