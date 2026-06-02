@@ -9,6 +9,7 @@ from quantagent.api.http.middleware import get_request_id
 from quantagent.api.config.settings import Settings
 from quantagent.api.http.errors import BadRequestError, NotFoundError, ServiceUnavailableError
 from quantagent.api.services import plugin_registry as plugin_registry_service
+from quantagent.core.notifications.handoff import NotificationApprovalHandoffPort
 from quantagent.core.notifications.ingress import NotificationIngressService, NotificationIngressServiceUnavailableError
 from quantagent.core.registry import PluginRegistry
 from quantagent.core.runtime import PluginRuntimeService
@@ -25,9 +26,22 @@ class NotificationIngressHostHttpResult:
 class NotificationIngressHostService:
     """通用 notification ingress HTTP host。"""
 
-    def __init__(self, *, settings: Settings, registry: PluginRegistry, runtime: PluginRuntimeService | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        settings: Settings,
+        registry: PluginRegistry,
+        runtime: PluginRuntimeService | None = None,
+        ingress_service: NotificationIngressService | None = None,
+        approval_handoff: NotificationApprovalHandoffPort | None = None,
+    ) -> None:
         self._settings = settings
-        self._ingress = NotificationIngressService(registry=registry, runtime=runtime or PluginRuntimeService())
+        # 组合边界：API host 只接入已配置 ingress / handoff，不解析 Discord 审批语义。
+        self._ingress = ingress_service or NotificationIngressService(
+            registry=registry,
+            runtime=runtime or PluginRuntimeService(),
+            approval_handoff=approval_handoff,
+        )
 
     async def receive_request(
         self,
@@ -75,10 +89,14 @@ class NotificationIngressHostService:
 def get_notification_ingress_service(request: Request) -> NotificationIngressHostService:
     service = getattr(request.app.state, "notification_ingress_service", None)
     if service is None:
+        approval_handoff = getattr(request.app.state, "notification_approval_handoff", None)
+        ingress_service = getattr(request.app.state, "notification_core_ingress_service", None)
         service = NotificationIngressHostService(
             settings=request.app.state.settings,
             registry=plugin_registry_service.get_plugin_registry(request),
             runtime=PluginRuntimeService(),
+            ingress_service=ingress_service,
+            approval_handoff=approval_handoff,
         )
         request.app.state.notification_ingress_service = service
     return service

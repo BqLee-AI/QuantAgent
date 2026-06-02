@@ -34,7 +34,7 @@ API 默认监听 `127.0.0.1:8000`。`APP_ENV=development` 或 `APP_ENV=local` �
 
 ```bash
 NOTIFICATION_INGRESS_ENABLED=true
-NOTIFICATION_INGRESS_PLUGIN_ID=quantagent.official.notification.example
+NOTIFICATION_INGRESS_PLUGIN_ID=quantagent.official.notification.discord
 NOTIFICATION_INGRESS_PLUGIN_CONFIG='{
   "provider_specific_field": "provider-specific-value"
 }'
@@ -49,6 +49,21 @@ POST /api/v1/integrations/notifications/ingress
 这个 endpoint 是通用 notification ingress HTTP host。它直接返回目标 notification 插件给出的原生 response，不走项目统一 `code/data/msg/error` envelope。
 
 当前实现只落地第一版 HTTP host adapter，但模型设计需要兼容 webhook、websocket、polling 三类 transport。任何平台专属字段都通过 `NOTIFICATION_INGRESS_PLUGIN_CONFIG` 进入目标 notification 插件，API 层不再维护平台专属 env 名称。
+
+Discord approval loop 的发送侧 dispatcher 属于 core/worker/scheduler 可复用能力，入口配置建议保持为：
+
+```bash
+NOTIFICATION_DISPATCH_ENABLED=true
+NOTIFICATION_DISPATCH_PLUGIN_ID=quantagent.official.notification.discord
+NOTIFICATION_DISPATCH_PLUGIN_CONFIG='{
+  "webhook_secret_ref": "env:DISCORD_WEBHOOK_URL"
+}'
+NOTIFICATION_DISPATCH_CHANNEL=discord
+```
+
+`NOTIFICATION_INGRESS_PLUGIN_CONFIG` 与 `NOTIFICATION_DISPATCH_PLUGIN_CONFIG` 只放插件配置或 secret reference，不写真实 webhook URL、公钥私钥、token、完整 prompt、私有策略或 broker credential。API host 可以注入带 `ApprovalNotificationHandoffAdapter` 的 core ingress service；没有配置 approval runtime 时会保留 no-op handoff，表示 ingress fact 已记录但不代表真实审批 input 已进入 approval 编排。
+
+真实 Discord `smoke_send.py` / `smoke_receive.py` 仅作为显式 env-gated 补充验证，不属于默认验收；smoke 通过也不表示生产级重试、投递持久化、审批执行或 broker 执行已完成。
 
 ### 结构化文件日志
 

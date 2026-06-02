@@ -138,6 +138,50 @@ class ApprovalOrchestrationTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(gate.calls), 0)
         self.assertEqual(len(executor.calls), 0)
 
+    async def test_discord_prefixed_approval_text_is_parsed_but_still_weak_confirmation(self) -> None:
+        service, gate, executor, _ = self._service()
+        approval = (await service.submit_action(_approval_required_action())).approval
+
+        result = await service.submit_input(
+            ApprovalInput(
+                id="input-discord-prefixed",
+                approval_id=approval.id,
+                channel="discord",
+                actor_ref="discord:user",
+                raw_text=f"approval_id: {approval.id} approve",
+            )
+        )
+
+        self.assertEqual(result.evaluation.interpreted_intent.value, "escalate")
+        self.assertTrue(result.evaluation.requires_stronger_confirmation)
+        self.assertEqual(result.decision.status, ApprovalDecisionStatus.ESCALATED)
+        self.assertEqual(len(gate.calls), 0)
+        self.assertEqual(len(executor.calls), 0)
+
+    async def test_prefixed_reject_and_reanalysis_text_are_parsed(self) -> None:
+        cases = [
+            ("reject", ApprovalDecisionStatus.REJECTED),
+            ("reanalysis", ApprovalDecisionStatus.REANALYSIS_REQUESTED),
+        ]
+        for command, expected_status in cases:
+            with self.subTest(command=command):
+                service, gate, executor, _ = self._service()
+                approval = (await service.submit_action(_approval_required_action())).approval
+
+                result = await service.submit_input(
+                    ApprovalInput(
+                        id=f"input-discord-{command}",
+                        approval_id=approval.id,
+                        channel="discord",
+                        actor_ref="discord:user",
+                        raw_text=f"approval_id: {approval.id} {command}",
+                    )
+                )
+
+                self.assertEqual(result.decision.status, expected_status)
+                self.assertEqual(len(gate.calls), 0)
+                self.assertEqual(len(executor.calls), 0)
+
     async def test_manual_only_weak_channel_escalates(self) -> None:
         service, gate, executor, _ = self._service()
         approval = (

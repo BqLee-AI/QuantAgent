@@ -111,6 +111,8 @@ runtime.failed
 `action.requested` 与 `approval.input_received` 属于 HITL approval 编排入口 topic；handler 只能做 envelope
 适配并调用 core approval service，不能直接创建 approved 状态或绕过 Policy Gate。
 
+`notification.requested` 只表示平台请求发送通知。`notification.completed` 只表示 notification dispatcher 调用插件后的发送尝试摘要，payload 不得包含审批 decision、broker 执行结果、secret、token、完整 prompt 或私有策略。
+
 ### `EventBusSettings`
 
 当前配置项：

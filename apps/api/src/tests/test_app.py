@@ -2795,6 +2795,46 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"type": 4, "data": {"content": "ok", "flags": 64}})
 
+    def test_notification_ingress_endpoint_uses_injected_core_ingress_service(self) -> None:
+        class _InjectedIngress:
+            def __init__(self) -> None:
+                self.calls = []
+
+            async def receive(self, **kwargs):
+                self.calls.append(kwargs)
+                return SimpleNamespace(
+                    receive_result=SimpleNamespace(
+                        accepted=True,
+                        response_status_code=200,
+                        response={"type": 4, "data": {"content": "handoff queued", "flags": 64}},
+                    )
+                )
+
+        injected = _InjectedIngress()
+        app = create_app(
+            self._settings(
+                NOTIFICATION_INGRESS_ENABLED=True,
+                NOTIFICATION_INGRESS_PLUGIN_ID="quantagent.official.notification.discord",
+                NOTIFICATION_INGRESS_PLUGIN_CONFIG={"public_key": "a" * 64, "webhook_url": "https://discord.example/secret-token"},
+            )
+        )
+        app.state.notification_core_ingress_service = injected
+
+        with TestClient(app) as client:
+            response = client.post(
+                "/api/v1/integrations/notifications/ingress",
+                content=b'{"type":2}',
+                headers={"X-Request-ID": "req-injected"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["content"], "handoff queued")
+        self.assertEqual(len(injected.calls), 1)
+        self.assertEqual(injected.calls[0]["plugin_id"], "quantagent.official.notification.discord")
+        self.assertEqual(injected.calls[0]["request_id"], "req-injected")
+        rendered = str(response.json())
+        self.assertNotIn("secret-token", rendered)
+
     def test_missing_capability_is_forbidden(self) -> None:
         reduced_capabilities = frozenset({"plugin.configure"})
         issued_session = issue_session("local_admin", self.settings, capabilities=reduced_capabilities)

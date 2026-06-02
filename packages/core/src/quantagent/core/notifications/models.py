@@ -1,8 +1,150 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from typing import Any
 
-from quantagent.plugin_sdk.io import JsonObject, freeze_json_mapping
+from quantagent.plugin_sdk.io import JsonObject, freeze_json_mapping, to_json_value
+
+
+@dataclass(frozen=True)
+class NotificationDispatchRequest:
+    request_id: str
+    plugin_id: str
+    correlation_id: str
+    causation_id: str
+    approval_id: str
+    action_request_id: str
+    channel: str
+    text: str
+    metadata: JsonObject = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "request_id",
+            "plugin_id",
+            "correlation_id",
+            "causation_id",
+            "approval_id",
+            "action_request_id",
+            "channel",
+            "text",
+        ):
+            _require_non_empty(field_name, getattr(self, field_name))
+        object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata, stage="invoke"))
+
+
+@dataclass(frozen=True)
+class NotificationDispatchResult:
+    request_id: str
+    plugin_id: str
+    accepted: bool
+    retryable: bool
+    code: str
+    message: str
+    correlation_id: str
+    causation_id: str
+    approval_id: str
+    action_request_id: str
+    channel: str
+    metadata: JsonObject = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "request_id",
+            "plugin_id",
+            "code",
+            "message",
+            "correlation_id",
+            "causation_id",
+            "approval_id",
+            "action_request_id",
+            "channel",
+        ):
+            _require_non_empty(field_name, getattr(self, field_name))
+        if not isinstance(self.accepted, bool):
+            raise ValueError("accepted must be a bool.")
+        if not isinstance(self.retryable, bool):
+            raise ValueError("retryable must be a bool.")
+        object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata, stage="invoke"))
+
+    def to_delivery_summary(self) -> "NotificationDeliverySummary":
+        return NotificationDeliverySummary(
+            notification_request_id=self.request_id,
+            plugin_id=self.plugin_id,
+            accepted=self.accepted,
+            retryable=self.retryable,
+            code=self.code,
+            message=self.message,
+            approval_id=self.approval_id,
+            action_request_id=self.action_request_id,
+            channel=self.channel,
+            metadata=self.metadata,
+        )
+
+
+@dataclass(frozen=True)
+class NotificationDeliverySummary:
+    notification_request_id: str
+    plugin_id: str
+    accepted: bool
+    retryable: bool
+    code: str
+    message: str
+    approval_id: str
+    action_request_id: str
+    channel: str
+    metadata: JsonObject = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "notification_request_id",
+            "plugin_id",
+            "code",
+            "message",
+            "approval_id",
+            "action_request_id",
+            "channel",
+        ):
+            _require_non_empty(field_name, getattr(self, field_name))
+        if not isinstance(self.accepted, bool):
+            raise ValueError("accepted must be a bool.")
+        if not isinstance(self.retryable, bool):
+            raise ValueError("retryable must be a bool.")
+        object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata, stage="publish"))
+
+    def to_mapping(self) -> dict[str, Any]:
+        return {
+            "notification_request_id": self.notification_request_id,
+            "plugin_id": self.plugin_id,
+            "accepted": self.accepted,
+            "retryable": self.retryable,
+            "code": self.code,
+            "message": self.message,
+            "approval_id": self.approval_id,
+            "action_request_id": self.action_request_id,
+            "channel": self.channel,
+            "metadata": to_json_value(self.metadata),
+        }
+
+    @classmethod
+    def from_dispatch_result(cls, result: NotificationDispatchResult) -> "NotificationDeliverySummary":
+        return result.to_delivery_summary()
+
+    @classmethod
+    def from_mapping(cls, payload: Mapping[str, Any]) -> "NotificationDeliverySummary":
+        return cls(
+            notification_request_id=_required_string(payload, "notification_request_id"),
+            plugin_id=_required_string(payload, "plugin_id"),
+            accepted=_required_bool(payload, "accepted"),
+            retryable=_required_bool(payload, "retryable"),
+            code=_required_string(payload, "code"),
+            message=_required_string(payload, "message"),
+            approval_id=_required_string(payload, "approval_id"),
+            action_request_id=_required_string(payload, "action_request_id"),
+            channel=_required_string(payload, "channel"),
+            metadata=freeze_json_mapping(_optional_mapping(payload.get("metadata")), stage="publish"),
+        )
 
 
 @dataclass(frozen=True)
@@ -104,3 +246,25 @@ class NotificationApprovalHandoffResult:
 def _require_non_empty(field_name: str, value: str) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field_name} must be a non-empty string.")
+
+
+def _required_string(payload: Mapping[str, Any], field_name: str) -> str:
+    value = payload.get(field_name)
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{field_name} must be a non-empty string.")
+    return value
+
+
+def _required_bool(payload: Mapping[str, Any], field_name: str) -> bool:
+    value = payload.get(field_name)
+    if not isinstance(value, bool):
+        raise ValueError(f"{field_name} must be a bool.")
+    return value
+
+
+def _optional_mapping(value: Any) -> Mapping[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, Mapping):
+        raise ValueError("metadata must be a JSON object.")
+    return value
