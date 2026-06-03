@@ -79,6 +79,7 @@ class RuntimeAuditNewsQueryService:
             for item in response_items
             if _matches_computed_filters(item, status=normalized.status, current_stage=normalized.current_stage)
         ]
+        response_items.sort(key=_news_activity_sort_key, reverse=True)
         return RuntimeAuditNewsListResponse(
             items=response_items,
             next_cursor=next_cursor,
@@ -510,6 +511,15 @@ def _matches_computed_filters(
     if current_stage and item.current_stage != current_stage and item.focus_stage != current_stage:
         return False
     return True
+
+
+def _news_activity_sort_key(item: RuntimeAuditNewsItemResponse) -> datetime:
+    # 列表服务“新闻审计流”，最新 Router 输出也应浮到顶部，而不是只按 RSS 捕获时间排序。
+    latest_agent_time = max(
+        (step.occurred_at for step in item.timeline if step.step_id in {"ai_intake_routed", "route_decided"} and step.occurred_at),
+        default=None,
+    )
+    return latest_agent_time or item.last_captured_at
 
 
 def _first_scheduler_run(

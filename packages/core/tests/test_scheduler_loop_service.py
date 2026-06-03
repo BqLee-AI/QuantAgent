@@ -283,6 +283,96 @@ class SourceBindingSchedulerLoopServiceTestCase(unittest.IsolatedAsyncioTestCase
         self.assertEqual(runs[0].status, "failed")
         self.assertEqual(runs[0].failure_code, "PLUGIN_DTO_VALIDATION_FAILED")
 
+    async def test_run_once_publishes_one_source_event_per_captured_item(self) -> None:
+        class SourcePlugin(BasePlugin):
+            async def invoke(self, request):
+                return PluginInvokeResult(
+                    output={
+                        "items": [
+                            {"external_id": "evt-batch-1", "title": "First"},
+                            {"external_id": "evt-batch-2", "title": "Second"},
+                        ],
+                        "metadata": {"source": "rss"},
+                    }
+                )
+
+        plugin_path = Path(__file__).resolve()
+        module = type(sys)(self.module_name)
+        module.plugin = SourcePlugin
+        sys.modules[self.module_name] = module
+        registry = PluginRegistry(
+            StaticScanner(
+                [
+                    PluginRecord(
+                        id="quantagent.official.source.batch",
+                        source=PluginSource.OFFICIAL,
+                        path=plugin_path,
+                        status=PluginStatus.VALID,
+                        manifest=PluginManifest(
+                            id="quantagent.official.source.batch",
+                            name="Batch Source",
+                            type=PluginType.SOURCE,
+                            version="1.0.0",
+                            entrypoint=f"{self.module_name}:plugin",
+                            capabilities=("source.fetch",),
+                            config_schema="config.schema.json",
+                        ),
+                        config_schema_path=plugin_path,
+                    )
+                ]
+            )
+        )
+        self.binding_service.create_binding(
+            CreateSourceBindingInput(
+                binding_id="binding-batch",
+                owner_type="industry",
+                owner_id="semiconductor",
+                source_plugin_id="quantagent.official.source.batch",
+                source_plugin_version="1.0.0",
+                effective_config_snapshot={
+                    "source_plugin_id": "quantagent.official.source.batch",
+                    "config": {},
+                    "config_fingerprint": "fingerprint-batch",
+                    "template_refs": {"layers": ["override"]},
+                    "validated_at": "2026-06-01T08:00:00+00:00",
+                },
+                schedule_policy={"interval_seconds": 60},
+                retry_policy={"max_attempts": 1},
+                rate_limit_policy={"requests_per_window": 10, "window_seconds": 60},
+                next_run_at=self.clock.now() - timedelta(seconds=10),
+                created_by="test",
+            )
+        )
+        service = SourceBindingSchedulerLoopService(
+            registry=registry,
+            runtime=PluginRuntimeService(),
+            binding_service=self.binding_service,
+            run_service=self.run_service,
+            raw_event_service=RawEventService(
+                raw_event_repository=self.raw_event_repository,
+                raw_event_capture_repository=self.raw_event_capture_repository,
+                source_binding_repository=self.binding_repository,
+                scheduler_run_repository=self.run_repository,
+            ),
+            clock=self.clock,
+            commit=self.session.commit,
+            rollback=self.session.rollback,
+            publisher=SourceEventPublisher(self.event_bus),
+            default_timeout_ms=30_000,
+        )
+
+        result = await service.run_once()
+
+        self.assertEqual(result.binding_results[0].captured_count, 2)
+        self.assertEqual(result.emitted_events, 2)
+        self.assertEqual(result.binding_results[0].event_published_count, 2)
+        self.assertEqual(len(self.event_handler.seen), 2)
+        self.assertEqual([len(envelope.payload["items"]) for envelope in self.event_handler.seen], [1, 1])
+        self.assertEqual(
+            [envelope.payload["items"][0]["external_id"] for envelope in self.event_handler.seen],
+            ["evt-batch-1", "evt-batch-2"],
+        )
+
     async def test_run_once_without_due_bindings_reports_cooling_down_summary(self) -> None:
         registry = PluginRegistry(StaticScanner([]))
         self.binding_service.create_binding(

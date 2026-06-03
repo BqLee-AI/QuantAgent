@@ -47,6 +47,9 @@ def build_event_bus_runtime(settings: EventBusSettings) -> EventBusRuntime:
                 bootstrap_servers=settings.kafka_bootstrap_servers or "",
                 client_id=settings.kafka_client_id,
                 topic_bootstrapper=topic_bootstrapper,
+                session_timeout_ms=settings.kafka_session_timeout_ms,
+                heartbeat_interval_ms=settings.kafka_heartbeat_interval_ms,
+                max_poll_interval_ms=settings.kafka_max_poll_interval_ms,
             ),
             backend="kafka",
         )

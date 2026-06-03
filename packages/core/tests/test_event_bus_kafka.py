@@ -107,6 +107,16 @@ class FakeConsumer:
         self.commit_count += 1
 
 
+class SequencedConsumerFactory:
+    def __init__(self, consumers: list[FakeConsumer]) -> None:
+        self.consumers = consumers
+        self.calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
+
+    def __call__(self, *topics, **kwargs):
+        self.calls.append((tuple(topics), dict(kwargs)))
+        return self.consumers[len(self.calls) - 1]
+
+
 class RecordingHandler:
     def __init__(self) -> None:
         self.envelopes: list[EventEnvelope] = []
@@ -184,10 +194,11 @@ class KafkaEventBusTestCase(unittest.IsolatedAsyncioTestCase):
         encoded = codec_publisher._codec.encode(envelope)
         fake_consumer = FakeConsumer("event.routed", group_id="group-a")
         fake_consumer.messages.append(FakeMessage(encoded))
+        factory = SequencedConsumerFactory([fake_consumer])
         consumer = KafkaEventBusConsumer(
             bootstrap_servers="localhost:9092",
             client_id="quantagent-test",
-            consumer_factory=lambda *topics, **kwargs: fake_consumer,
+            consumer_factory=factory,
             topic_bootstrapper=bootstrapper,
         )
         handler = RecordingHandler()
@@ -200,10 +211,67 @@ class KafkaEventBusTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(handler.envelopes), 1)
         self.assertEqual(handler.envelopes[0].payload["event_id"], "e-1")
+        self.assertEqual(factory.calls[0][1]["session_timeout_ms"], 120000)
+        self.assertEqual(factory.calls[0][1]["heartbeat_interval_ms"], 3000)
+        self.assertEqual(factory.calls[0][1]["max_poll_interval_ms"], 900000)
         self.assertIn("event.routed", FakeAdmin.created_topic_names)
         self.assertTrue(fake_consumer.committed)
         await consumer.close()
         self.assertTrue(consumer._consumer is None)
+
+    async def test_kafka_consumer_recreates_when_topic_set_changes(self) -> None:
+        bootstrapper = KafkaTopicBootstrapper(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            topics=("source.event.captured", "industry.analysis.requested"),
+            admin_factory=FakeAdmin,
+            topic_factory=FakeTopic,
+        )
+        codec_publisher = KafkaEventBusPublisher(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            producer_factory=FakeProducer,
+            topic_bootstrapper=bootstrapper,
+        )
+        first_envelope = EventEnvelope(
+            id="evt-1",
+            topic="source.event.captured",
+            payload={"event_id": "e-1"},
+            producer="scheduler-loop",
+            created_at="2026-05-30T00:00:00Z",
+        )
+        second_envelope = EventEnvelope(
+            id="evt-2",
+            topic="industry.analysis.requested",
+            payload={"event_id": "e-2"},
+            producer="worker-router",
+            created_at="2026-05-30T00:00:00Z",
+        )
+        first_consumer = FakeConsumer("source.event.captured", group_id="group-a")
+        second_consumer = FakeConsumer("source.event.captured", "industry.analysis.requested", group_id="group-a")
+        first_consumer.messages.append(FakeMessage(codec_publisher._codec.encode(first_envelope)))
+        second_consumer.messages.append(FakeMessage(codec_publisher._codec.encode(second_envelope)))
+        factory = SequencedConsumerFactory([first_consumer, second_consumer])
+        consumer = KafkaEventBusConsumer(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            consumer_factory=factory,
+            topic_bootstrapper=bootstrapper,
+        )
+        handler = RecordingHandler()
+
+        await consumer.subscribe(topics=("source.event.captured",), group_id="group-a", handler=handler)
+        await consumer.subscribe(
+            topics=("source.event.captured", "industry.analysis.requested"),
+            group_id="group-a",
+            handler=handler,
+        )
+
+        self.assertTrue(first_consumer.stopped)
+        self.assertEqual(factory.calls[0][0], ("source.event.captured",))
+        self.assertEqual(factory.calls[1][0], ("source.event.captured", "industry.analysis.requested"))
+        self.assertEqual([item.topic for item in handler.envelopes], ["source.event.captured", "industry.analysis.requested"])
+        await consumer.close()
 
     async def test_kafka_topic_bootstrap_is_idempotent(self) -> None:
         bootstrapper = KafkaTopicBootstrapper(

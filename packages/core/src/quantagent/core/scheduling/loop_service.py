@@ -45,6 +45,7 @@ class SourceBindingLoopRunResult:
     next_run_at: datetime | None
     captured_count: int
     event_published: bool
+    event_published_count: int = 0
     persistence_failed: bool = False
     skipped: bool = False
     error_code: str | None = None
@@ -147,7 +148,7 @@ class SourceBindingSchedulerLoopService:
         )
         skipped_bindings = sum(1 for item in binding_results if item.skipped)
         persistence_failures = sum(1 for item in binding_results if item.persistence_failed)
-        emitted_events = sum(1 for item in binding_results if item.event_published)
+        emitted_events = sum(item.event_published_count for item in binding_results)
         schedule_summary = self._build_schedule_summary(now=finished_at)
 
         return SchedulerLoopTickResult(
@@ -247,6 +248,7 @@ class SourceBindingSchedulerLoopService:
                     next_run_at=None,
                     captured_count=0,
                     event_published=False,
+                    event_published_count=0,
                     skipped=True,
                 )
             run = self._run_service.create_run(
@@ -270,6 +272,7 @@ class SourceBindingSchedulerLoopService:
                     next_run_at=None,
                     captured_count=0,
                     event_published=False,
+                    event_published_count=0,
                     persistence_failed=True,
                     error_code="SCHEDULER_PERSISTENCE_FAILED",
                 )
@@ -374,6 +377,7 @@ class SourceBindingSchedulerLoopService:
                     next_run_at=next_run_at if binding_updated is not None else None,
                     captured_count=captured_count,
                     event_published=False,
+                    event_published_count=0,
                     persistence_failed=True,
                     error_code="SCHEDULER_PERSISTENCE_FAILED",
                 )
@@ -392,14 +396,15 @@ class SourceBindingSchedulerLoopService:
                     next_run_at=next_run_at if binding_updated is not None else None,
                     captured_count=captured_count,
                     event_published=False,
+                    event_published_count=0,
                     persistence_failed=True,
                     error_code="RAW_EVENT_PERSIST_FAILED",
                 )
 
-            event_published = False
+            event_published_count = 0
             # terminal run 要落库，但只有 binding 仍 active 才允许回写下一次调度并向下游发成功事件。
             if binding_updated is not None:
-                event_published = await self._publish_source_event(
+                event_published_count = await self._publish_source_event(
                     binding=claimed_binding,
                     source_result=_source_result_with_raw_event_trace(source_result, raw_event_summary),
                     request_id=request_id,
@@ -416,7 +421,7 @@ class SourceBindingSchedulerLoopService:
                 captured_count,
                 raw_event_summary.created_count if raw_event_summary is not True else 0,
                 raw_event_summary.duplicate_count if raw_event_summary is not True else 0,
-                event_published,
+                event_published_count > 0,
                 next_run_at if binding_updated is not None else None,
                 extra={
                     "binding_id": binding.binding_id,
@@ -425,7 +430,8 @@ class SourceBindingSchedulerLoopService:
                     "captured_count": captured_count,
                     "raw_event_created": raw_event_summary.created_count if raw_event_summary is not True else 0,
                     "raw_event_duplicate": raw_event_summary.duplicate_count if raw_event_summary is not True else 0,
-                    "event_published": event_published,
+                    "event_published": event_published_count > 0,
+                    "event_published_count": event_published_count,
                     "next_run_at": next_run_at.isoformat() if next_run_at is not None else None,
                 },
             )
@@ -436,7 +442,8 @@ class SourceBindingSchedulerLoopService:
                 request_id=request_id,
                 next_run_at=next_run_at if binding_updated is not None else None,
                 captured_count=captured_count,
-                event_published=event_published,
+                event_published=event_published_count > 0,
+                event_published_count=event_published_count,
                 error_code=error_summary["code"] if error_summary is not None else None,
             )
         except Exception as exc:
@@ -453,6 +460,7 @@ class SourceBindingSchedulerLoopService:
                 next_run_at=next_run_at,
                 captured_count=captured_count,
                 event_published=False,
+                event_published_count=0,
                 persistence_failed=True,
                 error_code="SCHEDULER_LOOP_UNHANDLED_ERROR",
             )
@@ -554,34 +562,40 @@ class SourceBindingSchedulerLoopService:
         source_result: SourceFetchResult | None,
         request_id: str,
         run_id: str,
-    ) -> bool:
+    ) -> int:
         if self._publisher is None or source_result is None or not source_result.items:
-            return False
+            return 0
+        published_count = 0
         try:
-            await self._publisher.publish_source_fetch_result(
-                source_result,
-                producer="scheduler-loop",
-                request_id=request_id,
-                plugin_id=binding.source_plugin_id,
-                binding_id=binding.binding_id,
-                causation_id=run_id,
-                correlation_id=request_id,
-            )
+            for item in source_result.items:
+                # worker 每次只处理一篇新闻，避免一个大 RSS 批次把 Kafka consumer heartbeat 拖到过期。
+                await self._publisher.publish_source_fetch_result(
+                    SourceFetchResult(items=(item,), next_cursor=None, metadata=source_result.metadata),
+                    producer="scheduler-loop",
+                    request_id=request_id,
+                    plugin_id=binding.source_plugin_id,
+                    binding_id=binding.binding_id,
+                    causation_id=run_id,
+                    correlation_id=request_id,
+                )
+                published_count += 1
             logger.info(
-                "Scheduler published source.event.captured: binding_id=%s run_id=%s request_id=%s item_count=%s",
+                "Scheduler published source.event.captured: binding_id=%s run_id=%s request_id=%s item_count=%s message_count=%s",
                 binding.binding_id,
                 run_id,
                 request_id,
                 len(source_result.items),
+                published_count,
                 extra={
                     "topic": "source.event.captured",
                     "binding_id": binding.binding_id,
                     "run_id": run_id,
                     "request_id": request_id,
                     "item_count": len(source_result.items),
+                    "message_count": published_count,
                 },
             )
-            return True
+            return published_count
         except Exception as exc:
             logger.warning(
                 "Scheduler published a successful run but failed to emit source.event.captured.",
@@ -592,7 +606,7 @@ class SourceBindingSchedulerLoopService:
                     "error_message": str(exc),
                 },
             )
-            return False
+            return published_count
 
     def _persist_raw_events(
         self,

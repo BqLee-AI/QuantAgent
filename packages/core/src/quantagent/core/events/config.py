@@ -12,6 +12,9 @@ class EventBusSettings:
     kafka_bootstrap_servers: str | None
     kafka_client_id: str
     kafka_default_group_id: str
+    kafka_session_timeout_ms: int
+    kafka_heartbeat_interval_ms: int
+    kafka_max_poll_interval_ms: int
     topic_prefix: str
 
     @classmethod
@@ -21,6 +24,9 @@ class EventBusSettings:
             kafka_bootstrap_servers=app_settings.EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS,
             kafka_client_id=app_settings.EVENT_BUS_KAFKA_CLIENT_ID,
             kafka_default_group_id=app_settings.EVENT_BUS_KAFKA_DEFAULT_GROUP_ID,
+            kafka_session_timeout_ms=app_settings.EVENT_BUS_KAFKA_SESSION_TIMEOUT_MS,
+            kafka_heartbeat_interval_ms=app_settings.EVENT_BUS_KAFKA_HEARTBEAT_INTERVAL_MS,
+            kafka_max_poll_interval_ms=app_settings.EVENT_BUS_KAFKA_MAX_POLL_INTERVAL_MS,
             topic_prefix=app_settings.EVENT_BUS_TOPIC_PREFIX,
         )
         resolved.validate()

@@ -172,6 +172,9 @@ class KafkaEventBusConsumer(EventBusConsumer):
         codec: EventBusCodec | None = None,
         consumer_factory: Any | None = None,
         topic_bootstrapper: KafkaTopicBootstrapper | None = None,
+        session_timeout_ms: int = 120000,
+        heartbeat_interval_ms: int = 3000,
+        max_poll_interval_ms: int = 900000,
     ) -> None:
         self._topic_policy = topic_policy or EventTopicPolicy()
         self._codec = codec or EventBusCodec()
@@ -184,6 +187,11 @@ class KafkaEventBusConsumer(EventBusConsumer):
         self._bootstrap_servers = bootstrap_servers
         self._client_id = client_id
         self._consumer = None
+        self._consumer_topics: tuple[str, ...] | None = None
+        self._consumer_group_id: str | None = None
+        self._session_timeout_ms = session_timeout_ms
+        self._heartbeat_interval_ms = heartbeat_interval_ms
+        self._max_poll_interval_ms = max_poll_interval_ms
 
     async def subscribe(
         self,
@@ -254,6 +262,8 @@ class KafkaEventBusConsumer(EventBusConsumer):
         if self._consumer is not None:
             await self._consumer.stop()
             self._consumer = None
+            self._consumer_topics = None
+            self._consumer_group_id = None
 
     async def _dispatch_message(self, *, message: Any, handler: EventBusHandler, consumer: Any) -> None:
         envelope = self._codec.decode(getattr(message, "value", message))
@@ -273,7 +283,10 @@ class KafkaEventBusConsumer(EventBusConsumer):
 
     async def _get_consumer(self, topics: tuple[str, ...], *, group_id: str) -> Any:
         if self._consumer is not None:
-            return self._consumer
+            if self._consumer_topics == topics and self._consumer_group_id == group_id:
+                return self._consumer
+            # aiokafka 的构造期 topic 是订阅真源；复用旧实例会导致新增 topic 永远不被消费。
+            await self.close()
         if self._consumer_factory is None:
             raise EventBusError(
                 code="EVENT_KAFKA_DEPENDENCY_MISSING",
@@ -286,8 +299,13 @@ class KafkaEventBusConsumer(EventBusConsumer):
             client_id=self._client_id,
             group_id=group_id,
             enable_auto_commit=False,
+            session_timeout_ms=self._session_timeout_ms,
+            heartbeat_interval_ms=self._heartbeat_interval_ms,
+            max_poll_interval_ms=self._max_poll_interval_ms,
         )
         await self._topic_bootstrapper.ensure_topics(topics)
         await consumer.start()
         self._consumer = consumer
+        self._consumer_topics = topics
+        self._consumer_group_id = group_id
         return consumer

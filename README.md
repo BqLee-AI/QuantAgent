@@ -228,6 +228,41 @@ with engine.connect() as conn:
 PY
 ```
 
+### 事件链路诊断与回放
+
+如果 `/runtime` 没看到新的 Router Agent 输出，先区分是没有新抓取、没有入队、worker 没消费，还是 AI intake 没落库：
+
+```bash
+uv run quantagent-source-event-replay diagnose --limit 10
+```
+
+该命令会输出运行配置、DB 计数、最近已 capture 但没有 routed read model 的新闻、最近 routed 输出摘要，以及本地 Kafka topic / consumer group 诊断信息。
+
+回测时可以把已入库的 RawEvent/Capture 重新推回 `source.event.captured`，让 worker 重新走 Readability 和 Router Agent：
+
+```bash
+# 只预览会重放哪些新闻，不发 Kafka
+uv run quantagent-source-event-replay replay --raw-event-id rawevt_xxx --dry-run
+
+# 重放指定 RawEvent
+uv run quantagent-source-event-replay replay --raw-event-id rawevt_xxx
+
+# 重放指定 capture
+uv run quantagent-source-event-replay replay --capture-id rawevtcap_xxx
+
+# 重放某个 binding 最近 20 条 capture
+uv run quantagent-source-event-replay replay --binding-id binding-semiconductor-rss-baseline --limit 20
+
+# 清掉这些 RawEvent 已有的 routed read model，再重新入队，方便 UI 观察重新处理结果
+uv run quantagent-source-event-replay replay --raw-event-id rawevt_xxx --clear-routed
+```
+
+注意：
+
+- 回放不会删除 `raw_events` / `raw_event_captures`，只会重新发布 `source.event.captured`。
+- `--clear-routed` 只删除所选 RawEvent 对应的 `event_intake_routed_events` read model，用于回测重新观察；不要在生产环境随意使用。
+- worker 必须运行：`uv run quantagent-worker`。如果 worker 没启动，回放消息只会留在 Kafka 等待消费。
+
 ### AI intake 模型兼容要求
 
 当前 `industry.analysis.requested -> event.routed` 的单次 AI intake 走受控结构化输出路径。用于该链路的 provider / model 需要同时满足：
