@@ -143,6 +143,6 @@ class FakeActionExecutor:
         if self.fail:
             raise RuntimeError("fake executor failure")
         return ActionExecutionResult(
-            execution_status=self.execution_status.value,
+            execution_status=self.execution_status,
             reason_summary="fake executor recorded request; no real broker execution happened.",
         )

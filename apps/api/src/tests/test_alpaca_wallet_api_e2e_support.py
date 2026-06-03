@@ -11,8 +11,16 @@ from .alpaca_wallet_api_e2e_support import (
     AlpacaPaperConfig,
     AlpacaPaperRequestError,
     AlpacaHttpResponse,
+    APCA_API_KEY_ID_ENV,
+    APCA_API_SECRET_KEY_ENV,
+    QUANTAGENT_ALPACA_WALLET_API_E2E_RUN_TOKEN_ENV,
+    QUANTAGENT_ALPACA_WALLET_API_E2E_RUN_TOKEN_VALUE,
+    QUANTAGENT_ALPACA_WALLET_API_E2E_SMOKE_ENV,
+    QUANTAGENT_ALPACA_PAPER_SMOKE_ENV,
     UrllibAlpacaTransport,
     fetch_read_only_snapshot,
+    get_wallet_api_external_smoke_skip_reason,
+    load_alpaca_paper_config,
     map_alpaca_order,
 )
 
@@ -66,6 +74,36 @@ class StubSnapshotClient:
 
 
 class AlpacaWalletApiE2ESupportTestCase(unittest.TestCase):
+    def test_external_wallet_smoke_requires_per_run_confirmation_token(self) -> None:
+        env = {
+            QUANTAGENT_ALPACA_WALLET_API_E2E_SMOKE_ENV: "1",
+            QUANTAGENT_ALPACA_PAPER_SMOKE_ENV: "1",
+            APCA_API_KEY_ID_ENV: "key",
+            APCA_API_SECRET_KEY_ENV: "secret",
+        }
+        config = load_alpaca_paper_config(env)
+
+        reason = get_wallet_api_external_smoke_skip_reason(config, env)
+
+        self.assertEqual(
+            reason,
+            f"{QUANTAGENT_ALPACA_WALLET_API_E2E_RUN_TOKEN_ENV} is not confirmed for this run.",
+        )
+
+    def test_external_wallet_smoke_accepts_per_run_confirmation_token(self) -> None:
+        env = {
+            QUANTAGENT_ALPACA_WALLET_API_E2E_SMOKE_ENV: "1",
+            QUANTAGENT_ALPACA_WALLET_API_E2E_RUN_TOKEN_ENV: QUANTAGENT_ALPACA_WALLET_API_E2E_RUN_TOKEN_VALUE,
+            QUANTAGENT_ALPACA_PAPER_SMOKE_ENV: "1",
+            APCA_API_KEY_ID_ENV: "key",
+            APCA_API_SECRET_KEY_ENV: "secret",
+        }
+        config = load_alpaca_paper_config(env)
+
+        reason = get_wallet_api_external_smoke_skip_reason(config, env)
+
+        self.assertIsNone(reason)
+
     def test_get_positions_requires_list_of_mappings(self) -> None:
         client = AlpacaPaperClient(
             AlpacaPaperConfig(

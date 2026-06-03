@@ -285,6 +285,66 @@ class NotificationIngressServiceTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(audit_entries[0].details["fact_id"], result.receive_fact.fact_id)
         self.assertEqual(audit_entries[1].details["handoff_status"], "queued")
 
+    async def test_receive_maps_real_approval_handoff_adapter(self) -> None:
+        from quantagent.core.approval import ApprovalNotificationHandoffAdapter
+
+        class _RecordingPublisher:
+            def __init__(self) -> None:
+                self.envelopes = []
+
+            async def publish(self, envelope):
+                self.envelopes.append(envelope)
+                return envelope
+
+        publisher = _RecordingPublisher()
+        runtime = _StubRuntime(
+            result=type(
+                "PluginResult",
+                (),
+                {
+                    "output": NotificationReceiveResult(
+                        accepted=True,
+                        code="RECEIVED",
+                        message="ok",
+                        response_status_code=200,
+                        response={"type": 4},
+                        item=NotificationReceiveItem(
+                            interaction_id="int-approval",
+                            source_id="discord.interaction:app-1",
+                            text="approval_id: approval-123 approve",
+                            payload_summary={},
+                            author_id="user-1",
+                            metadata={},
+                        ),
+                        retryable=False,
+                    ).to_mapping()
+                },
+            )()
+        )
+        service = NotificationIngressService(
+            registry=_StubRegistry(_valid_record()),
+            runtime=runtime,
+            approval_handoff=ApprovalNotificationHandoffAdapter(publisher=publisher),
+        )
+
+        result = await service.receive(
+            plugin_id="quantagent.official.notification.discord",
+            request_id="req-approval",
+            config={},
+            receive_input=NotificationReceiveInput(
+                transport="discord",
+                request_metadata={"correlation_id": "corr-approval"},
+            ),
+        )
+
+        assert result.approval_handoff is not None
+        self.assertEqual(result.approval_handoff.status, "queued")
+        self.assertEqual(len(publisher.envelopes), 1)
+        envelope = publisher.envelopes[0]
+        self.assertEqual(envelope.topic, "approval.input_received")
+        self.assertEqual(envelope.payload["approval_id"], "approval-123")
+        self.assertEqual(envelope.correlation_id, "corr-approval")
+
     async def test_receive_does_not_record_fact_or_handoff_when_not_accepted(self) -> None:
         repository = InMemoryNotificationReceiveFactRepository()
         audit_sink = InMemoryNotificationIngressAuditSink()

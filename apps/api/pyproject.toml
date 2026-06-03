@@ -16,6 +16,7 @@ dependencies = [
 api = "quantagent.api.main:run"
 api-stop = "quantagent.api.main:stop"
 api-reset = "quantagent.api.main:reset"
+api-discord-approval-smoke = "quantagent.api.demo.discord_approval_smoke:main"
 
 [tool.uv.sources]
 quantagent-core = { workspace = true }

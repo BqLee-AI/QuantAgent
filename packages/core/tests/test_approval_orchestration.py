@@ -4,11 +4,16 @@ import unittest
 
 from quantagent.core.approval import (
     ActionRequest,
+    ActionExecutionResult,
     ApprovalDecisionStatus,
     ApprovalEventPublisher,
     ApprovalInput,
     ApprovalOrchestrationService,
+    ApprovalRequest,
+    ApprovalRequestStatus,
+    ConfirmationLevel,
     ExecutionStatus,
+    ExpirationAction,
     FakeActionExecutor,
     FakePolicyGate,
     InMemoryApprovalRepository,
@@ -137,6 +142,68 @@ class ApprovalOrchestrationTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.decision.status, ApprovalDecisionStatus.ESCALATED)
         self.assertEqual(len(gate.calls), 0)
         self.assertEqual(len(executor.calls), 0)
+
+    async def test_discord_prefixed_approval_text_is_parsed_but_still_weak_confirmation(self) -> None:
+        service, gate, executor, _ = self._service()
+        approval = (await service.submit_action(_approval_required_action())).approval
+
+        result = await service.submit_input(
+            ApprovalInput(
+                id="input-discord-prefixed",
+                approval_id=approval.id,
+                channel="discord",
+                actor_ref="discord:user",
+                raw_text=f"approval_id: {approval.id} approve",
+            )
+        )
+
+        self.assertEqual(result.evaluation.interpreted_intent.value, "escalate")
+        self.assertTrue(result.evaluation.requires_stronger_confirmation)
+        self.assertEqual(result.decision.status, ApprovalDecisionStatus.ESCALATED)
+        self.assertEqual(len(gate.calls), 0)
+        self.assertEqual(len(executor.calls), 0)
+
+    async def test_structured_intent_is_normalized(self) -> None:
+        service, gate, executor, _ = self._service()
+        approval = (await service.submit_action(_approval_required_action())).approval
+
+        result = await service.submit_input(
+            ApprovalInput(
+                id="input-structured-normalized",
+                approval_id=approval.id,
+                channel="web",
+                actor_ref="user:test",
+                structured_payload={"intent": " APPROVE "},
+            )
+        )
+
+        self.assertEqual(result.decision.status, ApprovalDecisionStatus.EXECUTION_REQUESTED)
+        self.assertEqual(len(gate.calls), 1)
+        self.assertEqual(len(executor.calls), 1)
+
+    async def test_prefixed_reject_and_reanalysis_text_are_parsed(self) -> None:
+        cases = [
+            ("reject", ApprovalDecisionStatus.REJECTED),
+            ("reanalysis", ApprovalDecisionStatus.REANALYSIS_REQUESTED),
+        ]
+        for command, expected_status in cases:
+            with self.subTest(command=command):
+                service, gate, executor, _ = self._service()
+                approval = (await service.submit_action(_approval_required_action())).approval
+
+                result = await service.submit_input(
+                    ApprovalInput(
+                        id=f"input-discord-{command}",
+                        approval_id=approval.id,
+                        channel="discord",
+                        actor_ref="discord:user",
+                        raw_text=f"approval_id: {approval.id} {command}",
+                    )
+                )
+
+                self.assertEqual(result.decision.status, expected_status)
+                self.assertEqual(len(gate.calls), 0)
+                self.assertEqual(len(executor.calls), 0)
 
     async def test_manual_only_weak_channel_escalates(self) -> None:
         service, gate, executor, _ = self._service()
@@ -331,6 +398,72 @@ class ApprovalOrchestrationTestCase(unittest.IsolatedAsyncioTestCase):
                 ).approval
                 result = await service.expire_approval(approval.id)
                 self.assertEqual(result.decision.status, expected_status)
+
+    async def test_missing_action_input_persists_blocked_and_publishes_completed(self) -> None:
+        service, _, _, repository = self._service()
+        approval = ApprovalRequest(
+            id="approval-orphan",
+            action_request_id="missing-action",
+            target_type="strategy",
+            target_id="strategy-1",
+            action_type="adjust_strategy",
+            action_side="increase_risk",
+            risk_level="high",
+            urgency="normal",
+            summary="orphan approval",
+            required_confirmation_level=ConfirmationLevel.SOFT_CONFIRM,
+            expiration_action=ExpirationAction.EXPIRE_REJECT,
+            status=ApprovalRequestStatus.PENDING,
+            allowed_channels=("web",),
+        )
+        repository.save_approval_request(approval)
+
+        result = await service.submit_input(
+            ApprovalInput(
+                id="input-orphan",
+                approval_id=approval.id,
+                channel="web",
+                actor_ref="user:test",
+                structured_payload={"intent": "approve"},
+            )
+        )
+
+        self.assertEqual(result.approval.status, ApprovalRequestStatus.BLOCKED)
+        self.assertEqual(result.decision.status, ApprovalDecisionStatus.BLOCKED)
+        self.assertEqual(repository.get_approval_request(approval.id).status, ApprovalRequestStatus.BLOCKED)
+        self.assertEqual(len(self.completed.seen), 1)
+        self.assertEqual(self.completed.seen[0].payload["status"], "blocked")
+
+    async def test_missing_action_expiration_persists_blocked_and_publishes_completed(self) -> None:
+        service, _, _, repository = self._service()
+        approval = ApprovalRequest(
+            id="approval-expire-orphan",
+            action_request_id="missing-action",
+            target_type="strategy",
+            target_id="strategy-1",
+            action_type="adjust_strategy",
+            action_side="increase_risk",
+            risk_level="high",
+            urgency="time_sensitive",
+            summary="orphan approval",
+            required_confirmation_level=ConfirmationLevel.SOFT_CONFIRM,
+            expiration_action=ExpirationAction.EXPIRE_REJECT,
+            status=ApprovalRequestStatus.PENDING,
+            allowed_channels=("web",),
+        )
+        repository.save_approval_request(approval)
+
+        result = await service.expire_approval(approval.id)
+
+        self.assertEqual(result.approval.status, ApprovalRequestStatus.BLOCKED)
+        self.assertEqual(result.decision.status, ApprovalDecisionStatus.BLOCKED)
+        self.assertEqual(repository.get_approval_request(approval.id).status, ApprovalRequestStatus.BLOCKED)
+        self.assertEqual(len(self.completed.seen), 1)
+        self.assertEqual(self.completed.seen[0].payload["status"], "blocked")
+
+    async def test_action_execution_result_rejects_unknown_status(self) -> None:
+        with self.assertRaisesRegex(ValueError, "execution_status must be one of"):
+            ActionExecutionResult(execution_status="live_order_sent", reason_summary="invalid status")
 
     def _service(
         self,

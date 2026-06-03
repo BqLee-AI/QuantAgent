@@ -34,7 +34,7 @@ API 默认监听 `127.0.0.1:8000`。`APP_ENV=development` 或 `APP_ENV=local` �
 
 ```bash
 NOTIFICATION_INGRESS_ENABLED=true
-NOTIFICATION_INGRESS_PLUGIN_ID=quantagent.official.notification.example
+NOTIFICATION_INGRESS_PLUGIN_ID=quantagent.official.notification.discord
 NOTIFICATION_INGRESS_PLUGIN_CONFIG='{
   "provider_specific_field": "provider-specific-value"
 }'
@@ -49,6 +49,21 @@ POST /api/v1/integrations/notifications/ingress
 这个 endpoint 是通用 notification ingress HTTP host。它直接返回目标 notification 插件给出的原生 response，不走项目统一 `code/data/msg/error` envelope。
 
 当前实现只落地第一版 HTTP host adapter，但模型设计需要兼容 webhook、websocket、polling 三类 transport。任何平台专属字段都通过 `NOTIFICATION_INGRESS_PLUGIN_CONFIG` 进入目标 notification 插件，API 层不再维护平台专属 env 名称。
+
+Discord approval loop 的发送侧 dispatcher 属于 core/worker/scheduler 可复用能力；当前仓库没有在 API 进程内自动读取这些变量并启动 dispatcher 的默认入口。下面仅给出推荐的环境变量命名，实际需要在 worker/consumer 组装 `NotificationDispatchService` 时读取并接线：
+
+```bash
+NOTIFICATION_DISPATCH_ENABLED=true
+NOTIFICATION_DISPATCH_PLUGIN_ID=quantagent.official.notification.discord
+NOTIFICATION_DISPATCH_PLUGIN_CONFIG='{
+  "webhook_secret_ref": "env:DISCORD_WEBHOOK_URL"
+}'
+NOTIFICATION_DISPATCH_CHANNEL=discord
+```
+
+`NOTIFICATION_INGRESS_PLUGIN_CONFIG` 与 `NOTIFICATION_DISPATCH_PLUGIN_CONFIG` 只放插件配置或 secret reference，不写真实 webhook URL、公钥私钥、token、完整 prompt、私有策略或 broker credential。API host 可以注入带 `ApprovalNotificationHandoffAdapter` 的 core ingress service；没有配置 approval runtime 时会保留 no-op handoff，表示 ingress fact 已记录但不代表真实审批 input 已进入 approval 编排。
+
+真实 Discord `smoke_send.py` / `smoke_receive.py` 仅作为显式 env-gated 补充验证，不属于默认验收；smoke 通过也不表示生产级重试、投递持久化、审批执行或 broker 执行已完成。
 
 ### 结构化文件日志
 
@@ -113,7 +128,7 @@ cd apps/api && uv run python -m unittest discover -s src
 Alpaca wallet API E2E validation 也落在 `apps/api/src/tests/`，只做测试链路验证，不新增任何 Alpaca route 或 runtime adapter：
 
 - 默认离线 E2E：使用 `apps/api/src/tests/alpaca_wallet_api_e2e_support.py` 中抽出的最小 Alpaca-shaped mapping helper，与 `WalletService.ingest_paper_execution()`、既有 `/api/v1/wallet/**` 只读 endpoints 组成受控读回链路。
-- 可选外部 smoke：只有同时满足 `QUANTAGENT_ALPACA_WALLET_API_E2E_SMOKE=1`、`QUANTAGENT_ALPACA_PAPER_SMOKE=1`、paper credentials 与 `https://paper-api.alpaca.markets` URL guard 时才运行。
+- 可选外部 smoke：只有同时满足 `QUANTAGENT_ALPACA_WALLET_API_E2E_SMOKE=1`、本次命令确认 token、`QUANTAGENT_ALPACA_PAPER_SMOKE=1`、paper credentials 与 `https://paper-api.alpaca.markets` URL guard 时才运行。确认 token 用来避免本机常驻 `.env` 变量让默认 `unittest discover` 误访问外部网络。
 - 外部 smoke 只读取 Alpaca paper account、positions、orders；本地 wallet state 使用 `acct_alpaca_e2e_redacted`、`order_redacted_*`、`client_redacted_*`、`activity_redacted_*` 等脱敏 identifier，不提交 paper order。
 
 窄验证命令：
@@ -127,6 +142,7 @@ cd apps/api && uv run python -m unittest src/tests/test_alpaca_wallet_api_e2e.py
 ```bash
 cd apps/api && \
 QUANTAGENT_ALPACA_WALLET_API_E2E_SMOKE=1 \
+QUANTAGENT_ALPACA_WALLET_API_E2E_RUN_TOKEN=run-external-alpaca-smoke \
 QUANTAGENT_ALPACA_PAPER_SMOKE=1 \
 APCA_API_KEY_ID=redacted \
 APCA_API_SECRET_KEY=redacted \

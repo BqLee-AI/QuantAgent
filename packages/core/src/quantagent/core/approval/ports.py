@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from quantagent.core.approval.models import ActionRequest, ApprovalRequest
+from quantagent.core.approval.models import ActionRequest, ApprovalRequest, ExecutionStatus
 from quantagent.plugin_sdk.io import JsonObject, freeze_json_mapping, to_json_value
 
 
@@ -30,20 +30,23 @@ class PolicyGateResult:
 
 @dataclass(frozen=True)
 class ActionExecutionResult:
-    execution_status: str
+    execution_status: ExecutionStatus
     reason_summary: str
     metadata: JsonObject | None = None
 
     def __post_init__(self) -> None:
-        if not isinstance(self.execution_status, str) or not self.execution_status.strip():
-            raise ValueError("execution_status must be a non-empty string.")
+        try:
+            object.__setattr__(self, "execution_status", ExecutionStatus(self.execution_status))
+        except ValueError as exc:
+            allowed = ", ".join(status.value for status in ExecutionStatus)
+            raise ValueError(f"execution_status must be one of: {allowed}.") from exc
         if not isinstance(self.reason_summary, str) or not self.reason_summary.strip():
             raise ValueError("reason_summary must be a non-empty string.")
         object.__setattr__(self, "metadata", freeze_json_mapping(self.metadata or {}, stage="action_execution"))
 
     def to_mapping(self) -> dict[str, object]:
         return {
-            "execution_status": self.execution_status,
+            "execution_status": self.execution_status.value,
             "reason_summary": self.reason_summary,
             "metadata": to_json_value(self.metadata or {}),
         }
