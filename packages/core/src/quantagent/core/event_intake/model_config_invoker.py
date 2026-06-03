@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from quantagent.core.event_intake.context import IndustryEventContextV1
@@ -33,8 +34,10 @@ The routing object must contain target_industries, target_topics, priority, requ
 
 @dataclass
 class ModelConfigStructuredModelInvoker(StructuredModelInvoker):
-    service: ModelConfigService
+    service: ModelConfigService | None = None
     preset_key: ModelPresetKey = ModelPresetKey.ECONOMY_TEXT
+    service_factory: Callable[[], ModelConfigService] | None = None
+    close_service: Callable[[ModelConfigService], None] | None = None
 
     async def invoke(
         self,
@@ -45,12 +48,10 @@ class ModelConfigStructuredModelInvoker(StructuredModelInvoker):
         request_id = context.trace.request_id
         trace_id = context.trace.correlation_id or context.trace.request_id
         user_prompt = _build_user_prompt(context=context, output_schema=output_schema)
-        # provider 请求当前仍走同步 HTTP client，这里切到线程执行，避免 worker event loop 被单次模型调用阻塞。
         call_result, invocation = await asyncio.to_thread(
-            self.service.invoke_structured_json,
-            preset_key=self.preset_key,
-            system_prompt=_SYSTEM_PROMPT,
+            self._invoke_in_thread,
             user_prompt=user_prompt,
+            output_schema=output_schema,
             request_id=request_id,
             trace_id=trace_id,
         )
@@ -72,6 +73,42 @@ class ModelConfigStructuredModelInvoker(StructuredModelInvoker):
                 },
             },
         )
+
+    def _invoke_in_thread(
+        self,
+        *,
+        user_prompt: str,
+        output_schema: str,
+        request_id: str | None,
+        trace_id: str | None,
+    ):
+        if self.service_factory is None:
+            if self.service is None:
+                raise ModelConfigServiceError(
+                    "ModelConfigStructuredModelInvoker requires service or service_factory",
+                    code="MODEL_INVOKER_SERVICE_MISSING",
+                )
+            # 兼容旧单元测试和同步调用方；生产 worker 使用 service_factory，避免 Session 跨线程迁移。
+            return self.service.invoke_structured_json(
+                preset_key=self.preset_key,
+                system_prompt=_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                request_id=request_id,
+                trace_id=trace_id,
+            )
+
+        service = self.service_factory()
+        try:
+            return service.invoke_structured_json(
+                preset_key=self.preset_key,
+                system_prompt=_SYSTEM_PROMPT,
+                user_prompt=user_prompt,
+                request_id=request_id,
+                trace_id=trace_id,
+            )
+        finally:
+            if self.close_service is not None:
+                self.close_service(service)
 
 
 def _build_user_prompt(*, context: IndustryEventContextV1, output_schema: str) -> str:

@@ -5,7 +5,14 @@ from unittest.mock import patch
 
 from quantagent.core.events import InMemoryEventBus
 from quantagent.core.event_intake import ModelConfigStructuredModelInvoker, ReviewOnlyStructuredModelInvoker
-from quantagent.worker.main import create_worker_app, create_worker_runtime, run, run_forever, run_once
+from quantagent.worker.main import (
+    _build_analysis_processing_scope_factory,
+    create_worker_app,
+    create_worker_runtime,
+    run,
+    run_forever,
+    run_once,
+)
 
 
 class WorkerMainTestCase(unittest.IsolatedAsyncioTestCase):
@@ -52,6 +59,33 @@ class WorkerMainTestCase(unittest.IsolatedAsyncioTestCase):
                     app = create_worker_app()
         self.assertIsInstance(app.analysis_request_handler.runner._invoker, ModelConfigStructuredModelInvoker)
         app.session.close()
+
+    def test_analysis_processing_scope_uses_separate_model_and_routed_sessions(self) -> None:
+        sessions: list[_FakeSession] = []
+
+        def session_factory() -> _FakeSession:
+            session = _FakeSession(name=f"session-{len(sessions)}")
+            sessions.append(session)
+            return session
+
+        with patch("quantagent.worker.main.settings.MODEL_CONFIG_ENCRYPTION_KEY", "test-key"):
+            scope = _build_analysis_processing_scope_factory(session_factory)()
+
+        invoker = scope.runner._invoker
+        self.assertIsInstance(invoker, ModelConfigStructuredModelInvoker)
+        self.assertEqual(len(sessions), 1)
+        routed_session = sessions[0]
+
+        service = invoker.service_factory()
+        self.assertEqual(len(sessions), 2)
+        model_session = sessions[1]
+        self.assertIsNot(model_session, routed_session)
+
+        invoker.close_service(service)
+        scope.close()
+
+        self.assertTrue(model_session.closed)
+        self.assertTrue(routed_session.closed)
 
     async def test_consume_once_subscribes_source_and_analysis_request_topics(self) -> None:
         app = _SubscribingWorkerApp()
@@ -116,6 +150,21 @@ class _FakeWorkerApp:
 
     async def close(self) -> None:
         self.closed += 1
+
+
+class _FakeSession:
+    def __init__(self, *, name: str) -> None:
+        self.name = name
+        self.closed = False
+
+    def commit(self) -> None:
+        pass
+
+    def rollback(self) -> None:
+        pass
+
+    def close(self) -> None:
+        self.closed = True
 
 
 class _RecordingConsumer:

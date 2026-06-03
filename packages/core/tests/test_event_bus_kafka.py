@@ -155,6 +155,22 @@ class DelayedRecordingHandler:
             self.active -= 1
 
 
+class FailingOffsetHandler:
+    def __init__(self) -> None:
+        self.seen: list[str] = []
+        self.cancelled: list[str] = []
+
+    async def handle(self, envelope: EventEnvelope) -> None:
+        self.seen.append(envelope.id)
+        if envelope.id == "evt-fails":
+            raise RuntimeError("boom")
+        try:
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            self.cancelled.append(envelope.id)
+            raise
+
+
 class KafkaEventBusTestCase(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         FakeAdmin.created_topic_names = []
@@ -551,6 +567,65 @@ class KafkaEventBusTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(handler.max_active, 2)
         self.assertGreaterEqual(fake_consumer.commit_count, 1)
         self.assertIn(2, _committed_offset_values(fake_consumer.committed_offsets))
+
+    async def test_kafka_consume_forever_cleans_in_flight_tasks_when_handler_fails(self) -> None:
+        bootstrapper = KafkaTopicBootstrapper(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            topics=("source.event.captured",),
+            admin_factory=FakeAdmin,
+            topic_factory=FakeTopic,
+        )
+        codec_publisher = KafkaEventBusPublisher(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            producer_factory=FakeProducer,
+            topic_bootstrapper=bootstrapper,
+        )
+        first = codec_publisher._codec.encode(
+            EventEnvelope(
+                id="evt-fails",
+                topic="source.event.captured",
+                payload={"external_id": "news-1"},
+                producer="scheduler",
+                created_at="2026-05-30T00:00:00Z",
+            )
+        )
+        second = codec_publisher._codec.encode(
+            EventEnvelope(
+                id="evt-cancelled",
+                topic="source.event.captured",
+                payload={"external_id": "news-2"},
+                producer="scheduler",
+                created_at="2026-05-30T00:00:00Z",
+            )
+        )
+        fake_consumer = FakeConsumer("source.event.captured", group_id="group-a")
+        fake_consumer.messages.extend(
+            [
+                FakeMessage(first, topic="source.event.captured", partition=0, offset=0),
+                FakeMessage(second, topic="source.event.captured", partition=0, offset=1),
+            ]
+        )
+        consumer = KafkaEventBusConsumer(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            consumer_factory=lambda *topics, **kwargs: fake_consumer,
+            topic_bootstrapper=bootstrapper,
+            consumer_concurrency=2,
+        )
+        handler = FailingOffsetHandler()
+
+        with self.assertRaises(EventBusError):
+            await consumer.consume_forever(
+                topics=("source.event.captured",),
+                group_id="group-a",
+                handler=handler,
+            )
+
+        self.assertIn("evt-fails", handler.seen)
+        self.assertIn("evt-cancelled", handler.cancelled)
+        self.assertNotIn(2, _committed_offset_values(fake_consumer.committed_offsets))
 
 
 def _committed_offset_values(committed_offsets: list[object]) -> set[int]:

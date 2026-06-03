@@ -177,17 +177,35 @@ def _build_intake_invoker(session: object):
 
 
 def _build_analysis_processing_scope_factory(session_factory):
+    def model_service_factory() -> ModelConfigService:
+        encryption_key = settings.MODEL_CONFIG_ENCRYPTION_KEY
+        if not encryption_key:
+            raise ValueError("MODEL_CONFIG_ENCRYPTION_KEY must be configured for model service factory.")
+        return ModelConfigService(session_factory(), encryption_key=encryption_key)
+
+    def close_model_service(service: ModelConfigService) -> None:
+        session = getattr(service, "_session", None)
+        close = getattr(session, "close", None)
+        if callable(close):
+            close()
+
     def create_scope() -> AnalysisRequestProcessingScope:
-        session = session_factory()
-        # 每篇 AI intake 使用独立 session；ModelConfigService 会在线程里记录 invocation，不能共享 worker 主 session。
+        routed_session = session_factory()
+        if settings.MODEL_CONFIG_ENCRYPTION_KEY:
+            invoker = ModelConfigStructuredModelInvoker(
+                service_factory=model_service_factory,
+                close_service=close_model_service,
+            )
+        else:
+            invoker = ReviewOnlyStructuredModelInvoker()
         return AnalysisRequestProcessingScope(
-            runner=SingleCallEventIntakeRunner(invoker=_build_intake_invoker(session)),
+            runner=SingleCallEventIntakeRunner(invoker=invoker),
             routed_event_store=SqlAlchemyEventIntakeRoutedEventStore(
-                EventIntakeRoutedEventRepository(session)
+                EventIntakeRoutedEventRepository(routed_session)
             ),
-            commit=session.commit,
-            rollback=session.rollback,
-            close=session.close,
+            commit=routed_session.commit,
+            rollback=routed_session.rollback,
+            close=routed_session.close,
         )
 
     return create_scope

@@ -386,6 +386,12 @@ class KafkaEventBusConsumer(EventBusConsumer):
             if in_flight:
                 await asyncio.gather(*in_flight, return_exceptions=True)
             raise
+        except Exception:
+            for task in in_flight:
+                task.cancel()
+            if in_flight:
+                await asyncio.gather(*in_flight, return_exceptions=True)
+            raise
 
     async def _handle_message_task(self, *, message: Any, handler: EventBusHandler) -> "_HandledMessage":
         await self._dispatch_message(message=message, handler=handler)
