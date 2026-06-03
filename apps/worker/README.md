@@ -74,21 +74,21 @@ worker 使用和 core 一致的 event bus 配置：
 
 默认本地行为：
 
-- `memory`
-  不依赖 Kafka broker，适合最小启动和单元测试
 - `kafka`
-  需要显式配置 Kafka bootstrap servers
+  是运行态默认 backend；宿主机直跑默认连接 `127.0.0.1:19092`，Compose 内部默认连接 `kafka:9092`
+- `memory`
+  只适合单元测试或单进程 smoke，需要显式覆盖 `EVENT_BUS_BACKEND=memory`
 
 关键限制：
 
 - `memory` backend 只在当前进程内有效
 - 如果 `scheduler` 和 `worker` 分开进程运行，`memory` backend 不会把 `source.event.captured` 从 scheduler 传给 worker
-- 需要跨进程验证时，必须改用 `kafka`
+- 需要跨进程验证时，必须使用 `kafka`
 
-如果需要启用 Kafka backend，安装时要带上 Kafka extra：
+worker 包已经依赖 `quantagent-core[kafka]`，本地同步依赖时会默认带上 Kafka client：
 
 ```bash
-uv sync --extra kafka --package quantagent-worker --package quantagent-core
+uv sync --package quantagent-worker
 ```
 
 ## 本地验证
@@ -99,14 +99,14 @@ uv sync --extra kafka --package quantagent-worker --package quantagent-core
 uv run --package quantagent-worker python -m unittest discover -s apps/worker/src/tests
 ```
 
-当前测试验证 composition root 默认走 `memory` backend，`run_once()` 保持单次 smoke 语义，`run()` 默认进入常驻消费并在关闭时回收 runtime。
+当前测试验证 composition root 可显式覆盖到 `memory` backend，`run_once()` 保持单次 smoke 语义，`run()` 默认进入常驻消费并在关闭时回收 runtime。
 
 当前主链路约束：
 
 - worker 在消费 `source.event.captured` 后，可以通过受控 seam 调用 Readability 做正文增强
 - 正文增强失败时允许 degraded 为 RSS 摘要，但必须保留结构化失败标记
 - 半导体 owner 的成功 handoff 通过 `industry.analysis.requested` topic 表达，而不是在 worker 入口直接执行业务分析
-- worker 在消费 `industry.analysis.requested` 后，会通过 `quantagent.core.event_intake` 的 single-call runner 产出 `event.routed`
+- worker 在消费 `industry.analysis.requested` 后，会通过 `quantagent.core.event_intake` 的 single-call runner 产出 `event.routed`，并把安全结构化输出持久化到 routed-event read model，供 `/runtime` 按新闻查看 Router output
 - 默认本地 provider 是 review-only，不会裸连真实模型；要验证真实路由行为，优先在测试中注入 fake provider harness
 - 若要让 AI intake 走真实模型，所选 provider / model 必须兼容 OpenAI-style `response_format={\"type\":\"json_object\"}` 结构化输出；不兼容时应预期只能看到连接成功，但 intake 运行阶段会失败或退回 review
 
@@ -129,7 +129,13 @@ uv run python -c 'import asyncio; from quantagent.worker.main import run_once; a
 跨进程消费：
 
 ```bash
+uv run quantagent-worker
+```
+
+如果需要显式覆盖 Kafka 地址：
+
+```bash
 EVENT_BUS_BACKEND=kafka \
-EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
+EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:19092 \
 uv run quantagent-worker
 ```

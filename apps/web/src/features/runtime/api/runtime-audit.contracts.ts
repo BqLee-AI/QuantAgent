@@ -1,13 +1,13 @@
 import type {
-  RuntimeAuditMessagesResponse,
+  RuntimeAuditNewsListResponse,
   RuntimeAuditQueryParams,
 } from '../types';
 
 export interface RuntimeAuditApiContract {
-  listAuditMessages(params?: RuntimeAuditQueryParams): Promise<RuntimeAuditMessagesResponse>;
+  listAuditNews(params?: RuntimeAuditQueryParams): Promise<RuntimeAuditNewsListResponse>;
 }
 
 export type {
-  RuntimeAuditMessagesResponse,
+  RuntimeAuditNewsListResponse,
   RuntimeAuditQueryParams,
 };

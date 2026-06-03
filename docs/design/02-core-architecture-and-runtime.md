@@ -145,14 +145,14 @@ EventEnvelope
 
 - 支持追踪事件因果关系。
 - 支持失败重试。
-- 支持默认内存 fake 与 Kafka 可选运行时共用同一 wire contract。
+- 支持 Kafka 运行时与 memory 测试 fake 共用同一 wire contract。
 - 支持多个插件订阅同一个事件。
 - `payload` 允许承载 source captured、routing、decision 和 runtime failure 等不同阶段消息，而不强行把裸 `Event` 作为唯一根对象。
 
 当前运行约定：
 
-- 普通本地开发和单元测试默认使用内存 fake，不依赖 Kafka broker。
-- 真实 Kafka 通过显式配置启用，作为 worker / scheduler / future runtime 的跨进程分发 backend。
+- 普通本地开发和运行态默认使用 Kafka，作为 worker / scheduler / future runtime 的跨进程分发 backend。
+- 单元测试和单进程 smoke 可显式覆盖为内存 fake，避免测试依赖 broker。
 - Event Bus 不替代数据库与审计真源；RawEvent / Event 持久化、outbox、replay 和 DLQ 另行演进。
 
 ## Topic 设计
@@ -417,8 +417,8 @@ RuntimeError
 
 - Event 模型。
 - Event Envelope。
-- 默认内存 fake Event Bus。
-- Kafka 可选运行时适配。
+- Kafka 运行默认 Event Bus。
+- Memory 测试 fake 适配。
 - PostgreSQL 连接与 SQLAlchemy ORM 基础结构。
 - Alembic 迁移基础结构。
 - Router Agent 输出结构。

@@ -1,7 +1,7 @@
-import type { RuntimeAuditTrace } from '../../types';
+import type { RuntimeAuditNewsTrace } from '../../types';
 
 interface RuntimeAuditTracePanelProps {
-  trace: RuntimeAuditTrace;
+  trace: RuntimeAuditNewsTrace;
 }
 
 export function RuntimeAuditTracePanel({ trace }: RuntimeAuditTracePanelProps) {

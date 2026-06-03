@@ -1,10 +1,22 @@
 from __future__ import annotations
 
 import unittest
+from datetime import UTC, datetime
+from pathlib import Path
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from quantagent.core.db.base import Base
+from quantagent.core.db.repositories.source_binding_repository import SourceBindingRepository
+from quantagent.core.registry import PluginRegistry, RegistryScanner
 from quantagent.core.source_binding import (
+    DEFAULT_BASELINE_BINDING_ID,
+    DEFAULT_EXPANSION_BINDING_ID,
     EffectiveSourceConfigComposer,
     SecretValueRef,
+    SemiconductorSourceBindingInstaller,
+    SemiconductorSourceBindingInstallOptions,
     SourceBindingTemplate,
     SourceBindingTemplateLoader,
     build_runtime_source_config,
@@ -256,3 +268,98 @@ class SourceBindingContractTestCase(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "rate_limit_policy contains unsupported fields"):
             RateLimitPolicyHint.from_mapping({"requests_per_window": 10, "window_seconds": 60, "burst": 1})
+
+
+class SemiconductorSourceBindingInstallerTestCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(self.engine)
+        self.session = sessionmaker(bind=self.engine, autoflush=False, expire_on_commit=False)()
+        repo_root = Path(__file__).resolve().parents[3]
+        self.registry = PluginRegistry(
+            RegistryScanner(
+                official_root=repo_root / "plugins",
+                runtime_root=repo_root / "runtime" / "plugins",
+            )
+        )
+        self.repository = SourceBindingRepository(self.session)
+        self.now = datetime(2026, 6, 3, 12, 0, tzinfo=UTC)
+
+    def tearDown(self) -> None:
+        self.session.close()
+        self.engine.dispose()
+
+    def test_installs_semiconductor_baseline_and_expansion_as_due_bindings(self) -> None:
+        installer = SemiconductorSourceBindingInstaller(
+            registry=self.registry,
+            repository=self.repository,
+            now=self.now,
+        )
+
+        result = installer.install_defaults()
+
+        self.assertEqual([item.binding_id for item in result.installed], [DEFAULT_BASELINE_BINDING_ID, DEFAULT_EXPANSION_BINDING_ID])
+        baseline = self.repository.get(DEFAULT_BASELINE_BINDING_ID)
+        expansion = self.repository.get(DEFAULT_EXPANSION_BINDING_ID)
+        self.assertIsNotNone(baseline)
+        self.assertIsNotNone(expansion)
+        assert baseline is not None
+        assert expansion is not None
+        self.assertEqual(baseline.status, "active")
+        self.assertEqual(expansion.status, "active")
+        self.assertEqual(baseline.next_run_at, self.now.replace(tzinfo=None))
+        self.assertEqual(expansion.next_run_at, self.now.replace(tzinfo=None))
+        self.assertEqual(baseline.owner_type, "industry")
+        self.assertEqual(baseline.owner_id, "semiconductor")
+        self.assertEqual(baseline.source_plugin_id, "quantagent.official.source.rss")
+        self.assertEqual(len(baseline.effective_config_snapshot["config"]["feeds"]), 4)
+        self.assertEqual(len(expansion.effective_config_snapshot["config"]["feeds"]), 9)
+        self.assertEqual(baseline.effective_config_snapshot["config"]["max_items_per_feed"], 20)
+        self.assertEqual(expansion.effective_config_snapshot["config"]["max_response_bytes"], 1_048_576)
+        self.assertEqual(baseline.schedule_policy["interval_seconds"], 300)
+        self.assertEqual(expansion.schedule_policy["interval_seconds"], 900)
+
+    def test_reinstall_updates_existing_bindings_without_creating_duplicates(self) -> None:
+        installer = SemiconductorSourceBindingInstaller(
+            registry=self.registry,
+            repository=self.repository,
+            now=self.now,
+        )
+        installer.install_defaults()
+
+        result = installer.install_defaults(
+            SemiconductorSourceBindingInstallOptions(
+                baseline_interval_seconds=600,
+                expansion_interval_seconds=1200,
+                max_items_per_feed=10,
+            )
+        )
+
+        self.assertEqual([item.action for item in result.installed], ["updated", "updated"])
+        rows = self.repository.list_by_owner(owner_type="industry", owner_id="semiconductor", limit=10)
+        self.assertEqual(
+            sorted(item.binding_id for item in rows),
+            [DEFAULT_BASELINE_BINDING_ID, DEFAULT_EXPANSION_BINDING_ID],
+        )
+        baseline = self.repository.get(DEFAULT_BASELINE_BINDING_ID)
+        assert baseline is not None
+        self.assertEqual(baseline.schedule_policy["interval_seconds"], 600)
+        self.assertEqual(baseline.effective_config_snapshot["config"]["max_items_per_feed"], 10)
+
+    def test_expansion_can_be_installed_paused(self) -> None:
+        installer = SemiconductorSourceBindingInstaller(
+            registry=self.registry,
+            repository=self.repository,
+            now=self.now,
+        )
+
+        installer.install_defaults(SemiconductorSourceBindingInstallOptions(activate_expansion=False))
+
+        baseline = self.repository.get(DEFAULT_BASELINE_BINDING_ID)
+        expansion = self.repository.get(DEFAULT_EXPANSION_BINDING_ID)
+        assert baseline is not None
+        assert expansion is not None
+        self.assertEqual(baseline.status, "active")
+        self.assertEqual(expansion.status, "paused")
+        self.assertEqual(baseline.next_run_at, self.now.replace(tzinfo=None))
+        self.assertIsNone(expansion.next_run_at)

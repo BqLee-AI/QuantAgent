@@ -22,17 +22,16 @@ export function RuntimeAuditPage({ search }: RuntimeAuditPageProps) {
           <p className="page-kicker">Runtime</p>
           <h1 className="page-title">Runtime 审计</h1>
           <p className="page-description">
-            以 Router Agent 为首个样例，按消息流回放一次事件从 source request、AI intake 到 event.routed 的判断过程。
+            按新闻 RawEvent 审计采集、入库、调度关联与当前缺失的 AI/路由持久化事实。
           </p>
         </div>
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-body-sm text-amber-700">
-          受控 fixture 样例；生产审计 read model 尚未在本 change 中声明完成。
+        <div className="rounded-lg border border-hairline bg-surface-soft px-3 py-2 text-body-sm text-muted">
+          列表和默认详情不返回完整正文或 raw payload；需要正文时从 RawEvent 详情按 ID 获取。
         </div>
       </section>
 
       <RuntimeCompactHealthStrip
         health={page.health}
-        isFixtureMode={page.isFixtureMode}
         isRefreshing={page.auditQuery.isFetching}
         onRefresh={() => {
           void page.auditQuery.refetch();
@@ -60,16 +59,14 @@ export function RuntimeAuditPage({ search }: RuntimeAuditPageProps) {
       ) : null}
 
       {!page.auditQuery.isLoading && !page.auditQuery.isError ? (
-        <section className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
+        <section className="grid gap-4 xl:grid-cols-[minmax(300px,360px)_minmax(0,1fr)]">
           <RuntimeAuditConversation
-            groups={page.groups}
-            messages={page.messages}
-            selectedMessageId={page.selection.selectedMessageId}
-            onSelectMessage={page.selection.setSelectedMessageId}
+            items={page.items}
+            selectedRawEventId={page.selection.selectedRawEventId}
+            onSelectNews={page.selection.setSelectedRawEventId}
           />
           <RuntimeAuditDetailDrawer
-            group={page.selection.selectedGroup}
-            message={page.selection.selectedMessage}
+            item={page.selection.selectedNews}
           />
         </section>
       ) : null}

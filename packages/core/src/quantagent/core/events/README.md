@@ -2,7 +2,7 @@
 
 `quantagent.core.events` 是 QuantAgent Event Bus V1 的共享基础设施边界。它的目标不是把业务流程塞进一个“总线工具箱”，而是统一消息 envelope、topic、backend、发布/订阅入口和平台侧转换边界，让 API、worker、scheduler 和后续 runtime service 能用同一套 contract 工作。
 
-如果你只使用默认 `memory` backend，不需要 Kafka 客户端依赖；只有在启用 Kafka backend 时才需要安装 `quantagent-core[kafka]` 或等价 workspace extra。
+运行态默认使用 Kafka backend，保证 `scheduler`、`worker` 等独立进程之间可以真实传递事件。`memory` backend 只用于单元测试或单进程 smoke；如果显式覆盖为 `memory`，不需要 Kafka broker。
 
 ## 职责
 
@@ -55,7 +55,7 @@ events/
 - `codec.py`
   定义 encode / decode、敏感字段脱敏和错误摘要转换。
 - `memory.py`
-  提供本地默认 backend 和 contract test backend。
+  提供单元测试和单进程 smoke backend。
 - `kafka.py`
   提供 Kafka producer / consumer adapter。
 - `config.py`
@@ -114,9 +114,9 @@ runtime.failed
 当前配置项：
 
 - `EVENT_BUS_BACKEND`
-  可选 `memory` 或 `kafka`，默认 `memory`
+  可选 `memory` 或 `kafka`，默认 `kafka`
 - `EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS`
-  Kafka broker 地址，只有 backend=`kafka` 时需要
+  Kafka broker 地址，默认宿主机直跑使用 `127.0.0.1:19092`
 - `EVENT_BUS_KAFKA_CLIENT_ID`
   Kafka client id
 - `EVENT_BUS_KAFKA_DEFAULT_GROUP_ID`
@@ -141,10 +141,10 @@ consumer = runtime.consumer
 
 语义：
 
-- `memory`
-  适合本地开发、单元测试、无 Kafka 环境
 - `kafka`
-  适合跨进程 worker / scheduler / future runtime
+  默认运行态 backend，适合跨进程 worker / scheduler / future runtime
+- `memory`
+  只适合单元测试、单进程 smoke 或没有跨进程消息需求的临时诊断
 
 Kafka backend 依赖说明：
 

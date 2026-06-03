@@ -31,14 +31,15 @@ class Settings(BaseSettings):
     RUNTIME_DIR: Path = Field(default_factory=_default_runtime_dir)
     LOG_LEVEL: str = "INFO"
     MODEL_CONFIG_ENCRYPTION_KEY: str | None = None
-    EVENT_BUS_BACKEND: str = "memory"
-    EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS: str | None = None
+    EVENT_BUS_BACKEND: str = "kafka"
+    EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS: str | None = "127.0.0.1:19092"
     EVENT_BUS_KAFKA_CLIENT_ID: str = "quantagent-local"
     EVENT_BUS_KAFKA_DEFAULT_GROUP_ID: str = "quantagent-worker"
     EVENT_BUS_TOPIC_PREFIX: str = ""
     SCHEDULER_POLL_INTERVAL_SECONDS: float = 5.0
     SCHEDULER_DUE_LIMIT: int = 100
     SCHEDULER_RUN_TIMEOUT_MS: int | None = 30000
+    SCHEDULER_IDLE_LOG_INTERVAL_SECONDS: float = 60.0
 
     @field_validator("RUNTIME_DIR", mode="before")
     @classmethod

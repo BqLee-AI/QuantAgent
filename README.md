@@ -93,7 +93,7 @@ uv run quantagent-db check
 - `uv run api`
   只启动 FastAPI HTTP 服务
 - `uv run quantagent-worker`
-  启动后台消费入口，常驻消费 `source.event.captured`、做后置 Readability 正文增强，继续消费 `industry.analysis.requested`，并发布 `industry.analysis.requested` / `event.routed`
+  启动后台消费入口，常驻消费 `source.event.captured`、做后置 Readability 正文增强，继续消费 `industry.analysis.requested`，发布 `industry.analysis.requested` / `event.routed`，并把 Router Agent 结构化输出写入 runtime audit read model
 - `uv run quantagent-scheduler`
   启动调度入口，负责扫描 due `SourceBinding`、触发 `source.fetch`、写 `SchedulerRun` 并发布 `source.event.captured`
 
@@ -101,7 +101,7 @@ uv run quantagent-db check
 
 - 只执行 `uv run api` 不会自动带起 `worker` 和 `scheduler`
 - 如果要验证 `RSS -> source.event.captured -> worker -> industry.analysis.requested` 主链路，需要至少同时运行数据库、scheduler 和 worker
-- 默认 `EVENT_BUS_BACKEND=memory` 只适合单进程测试或单测；`scheduler` 和 `worker` 分开进程运行时，`memory` backend 不能跨进程传消息
+- 默认 `EVENT_BUS_BACKEND=kafka`；`memory` 只适合显式覆盖后的单进程测试或单测，不能跨进程传消息
 
 ### 本地最小启动建议
 
@@ -155,27 +155,78 @@ docker compose up -d db
 uv run quantagent-db upgrade
 ```
 
-3. 如果要跑跨进程 event bus，启用 Kafka profile：
+3. 安装半导体默认 RSS SourceBinding：
 
 ```bash
-docker compose --profile kafka up -d kafka
+uv run quantagent-source-bindings install-semiconductor-defaults
 ```
 
-4. 分别启动 scheduler 和 worker：
+这个命令会从官方半导体行业包模板生成两个可调度绑定：
+
+- `binding-semiconductor-rss-baseline`：4 个 baseline feed，默认每 300 秒抓一次。
+- `binding-semiconductor-rss-expansion`：9 个 expansion feed，默认每 900 秒抓一次。
+
+两者默认都会设为 `active` 并把 `next_run_at` 设为当前时间，方便下一次 scheduler tick 立刻抓取。只想先跑稳定源时可用：
 
 ```bash
-EVENT_BUS_BACKEND=kafka \
-EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
+uv run quantagent-source-bindings install-semiconductor-defaults --no-expansion
+```
+
+如果跳过这一步，scheduler 只会扫描数据库里已经存在的绑定；本地库可能只有旧的 `binding-semiconductor-rss-smoke`，它只抓 Micron 单一 RSS，重复 URL 会被 RawEvent 去重，因此 `/runtime` 不会持续新增新闻。
+
+4. 启动 Kafka，供默认 Event Bus 使用：
+
+```bash
+docker compose up -d kafka
+```
+
+默认 Compose 镜像说明：
+
+- `db` 默认使用 `postgres:17-alpine`，可用 `.env` 中的 `POSTGRES_IMAGE` 覆盖。
+- `kafka` 默认使用 `apache/kafka-native:4.0.0`，可用 `.env` 中的 `KAFKA_IMAGE` 覆盖。当前未使用 Kafka Alpine tag，因为 Docker Hub 上没有确认可拉取的 `apache/kafka:4.0.0-alpine`。
+
+5. 分别启动 scheduler 和 worker。默认 env 已经指向 `127.0.0.1:19092`：
+
+```bash
 uv run quantagent-scheduler
 ```
 
 ```bash
-EVENT_BUS_BACKEND=kafka \
-EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
 uv run quantagent-worker
 ```
 
 如果只想验证调度能否真实抓到 RSS，可以只跑数据库 + scheduler，不必带 worker。
+
+### 抓取是否真的在发生
+
+观察 scheduler stdout 中这些字段：
+
+- `Scheduler tick started: due_bindings=...`
+- `Scheduler source fetch succeeded: binding_id=... captured_count=...`
+- `Scheduler persisted raw events: total=... created=... duplicate=...`
+- `Scheduler published source.event.captured: binding_id=... item_count=...`
+
+如果 `captured_count > 0` 但 `created=0 duplicate>0`，说明 RSS 抓到了条目，但 URL 去重后都是已有新闻；这是正常去重，不是 worker 或 `/runtime` 没工作。
+
+也可以直接查 DB：
+
+```bash
+uv run python - <<'PY'
+from sqlalchemy import create_engine, text
+from quantagent.core.config import settings
+
+engine = create_engine(settings.DATABASE_URL)
+with engine.connect() as conn:
+    for name, sql in [
+        ("source_bindings", "select count(*) from source_bindings"),
+        ("scheduler_runs", "select count(*) from scheduler_runs"),
+        ("raw_events", "select count(*) from raw_events"),
+        ("raw_event_captures", "select count(*) from raw_event_captures"),
+        ("event_intake_routed_events", "select count(*) from event_intake_routed_events"),
+    ]:
+        print(name, conn.execute(text(sql)).scalar())
+PY
+```
 
 ### AI intake 模型兼容要求
 
@@ -204,8 +255,8 @@ docker compose up --build api
 如果要跑完整跨进程链路，再加上 Kafka、scheduler 和 worker：
 
 ```bash
-docker compose --profile kafka up -d kafka
-EVENT_BUS_BACKEND=kafka docker compose up --build scheduler worker
+docker compose up -d kafka
+docker compose up --build scheduler worker
 ```
 
 说明：
@@ -216,12 +267,13 @@ EVENT_BUS_BACKEND=kafka docker compose up --build scheduler worker
 
 ## 半导体 RSS 主链路现状
 
-截至 2026-06-02，这条主链路已经具备以下可运行结论：
+截至 2026-06-03，这条主链路已经具备以下可运行结论：
 
 - `uv run api` 只启动 HTTP 服务，不会自动抓 RSS，也不会自动消费 `source.event.captured`
 - `scheduler` 需要单独启动，负责抓 RSS、写 `SchedulerRun`、发布 `source.event.captured`
-- `worker` 需要单独启动，负责消费 `source.event.captured`、尝试 Readability、再发布 `industry.analysis.requested`
-- `EVENT_BUS_BACKEND=memory` 只能证明单进程内链路；`scheduler` 和 `worker` 分开进程时，必须改用 Kafka
+- `worker` 需要单独启动，负责消费 `source.event.captured`、尝试 Readability、再发布 `industry.analysis.requested`；后续 AI intake 发布 `event.routed` 后会写入 `event_intake_routed_events`，供 `/runtime` 展示真实 Router output
+- `EVENT_BUS_BACKEND=memory` 只能证明单进程内链路；默认跨进程运行必须使用 Kafka
+- `uv run quantagent-source-bindings install-semiconductor-defaults` 负责把行业包模板安装成真实 DB `SourceBinding`；只提交模板文件不会自动让 scheduler 开始抓取
 
 ### 已验证的实际运行结果
 
@@ -259,6 +311,11 @@ EVENT_BUS_BACKEND=kafka docker compose up --build scheduler worker
 | `https://blogs.nvidia.com/feed/` | 官方 feed，但响应体偏大；需要 `max_response_bytes=1048576` |
 | `https://www.tomshardware.com/feeds/all` | 真 RSS，但噪音高于 baseline |
 | `https://www.eetimes.com/feed/` | 行业媒体 feed，适合作为扩展覆盖 |
+| `https://www.digitimes.com/rss/daily.xml` | 供应链与制造链信号更强，条目量更大，作为 optional expansion |
+| `https://www.electronicsweekly.com/feed/` | 电子行业媒体 feed，适合补充欧洲产业动态 |
+| `https://www.servethehome.com/feed/` | 数据中心与服务器硬件 feed，适合补充 AI 基础设施信号 |
+| `https://news.google.com/rss/search?q=semiconductor%20OR%20memory%20OR%20HBM&hl=en-US&gl=US&ceid=US:en` | Google News 聚合源，覆盖广但噪音和重复更高 |
+| `https://news.google.com/rss/search?q=NVIDIA%20OR%20Micron%20OR%20SK%20hynix%20OR%20TSMC&hl=en-US&gl=US&ceid=US:en` | Google News 厂商舆情聚合源 |
 | `https://export.arxiv.org/rss/cs.AR` | 研究向 RSS，适合补充技术前沿 |
 
 当前不建议直接放进默认模板的候选：
@@ -266,6 +323,5 @@ EVENT_BUS_BACKEND=kafka docker compose up --build scheduler worker
 | Feed | 原因 |
 | --- | --- |
 | `https://export.arxiv.org/rss/cs.LG` | 当前环境是真 RSS，但响应体约 1.9MiB，超过插件 schema 上限 |
-| `https://www.digitimes.com/rss/daily.xml` | 当前环境可访问，但条目量更大，V1 先不放进默认 optional 模板 |
 | `https://www.anandtech.com/rss/` | 当前环境返回 HTML 页面，不是真 feed |
 | `https://investor.amd.com/rss/news-releases.xml` | 当前环境 TLS 握手不稳定 |

@@ -21,6 +21,7 @@ kafka = [
 [project.scripts]
 quantagent-db = "quantagent.core.db.cli:main"
 quantagent-demo = "quantagent.core.demo:main"
+quantagent-source-bindings = "quantagent.core.source_binding.cli:main"
 
 [tool.uv.sources]
 quantagent-plugin-sdk = { workspace = true }

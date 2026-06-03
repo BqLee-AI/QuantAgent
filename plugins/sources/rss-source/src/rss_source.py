@@ -74,14 +74,34 @@ class RSSSourcePlugin(BasePlugin):
 
             items: list[SourceItemDraft] = []
             feed_summaries: list[dict[str, Any]] = []
-            for feed_url in feeds:
-                parsed_feed = await asyncio.to_thread(
-                    self._fetch_and_parse_feed,
-                    feed_url,
-                    headers,
-                    timeout_seconds,
-                    max_response_bytes,
-                )
+            feed_failures: list[dict[str, Any]] = []
+            parsed_results = await asyncio.gather(
+                *(
+                    asyncio.to_thread(
+                        self._fetch_and_parse_feed,
+                        feed_url,
+                        headers,
+                        timeout_seconds,
+                        max_response_bytes,
+                    )
+                    for feed_url in feeds
+                ),
+                return_exceptions=True,
+            )
+            for feed_url, parsed_result in zip(feeds, parsed_results, strict=False):
+                if isinstance(parsed_result, PluginRuntimeError):
+                    feed_failures.append(_feed_failure_summary(feed_url=feed_url, error=parsed_result))
+                    self.logger.warning(
+                        "RSS feed fetch failed: feed_url=%s code=%s retryable=%s",
+                        feed_url,
+                        parsed_result.code,
+                        parsed_result.retryable,
+                    )
+                    continue
+                if isinstance(parsed_result, Exception):
+                    self.logger.error("Unexpected error in RSS feed fetch: %s: %s", type(parsed_result).__name__, parsed_result)
+                    raise parsed_result
+                parsed_feed = parsed_result
                 feed_summaries.append(
                     {
                         "feed_url": parsed_feed.feed_url,
@@ -101,14 +121,38 @@ class RSSSourcePlugin(BasePlugin):
                     )
                 )
 
+            if not feed_summaries and feed_failures:
+                first_failure = feed_failures[0]
+                if len(feeds) == 1:
+                    raise PluginRuntimeError(
+                        code=str(first_failure["code"]),
+                        message=str(first_failure["message"]),
+                        stage=str(first_failure["stage"]),
+                        retryable=bool(first_failure["retryable"]),
+                        details={
+                            "feed_url": first_failure["feed_url"],
+                            "feed_failures": tuple(feed_failures),
+                        },
+                    )
+                raise PluginRuntimeError(
+                    code=str(first_failure["code"]),
+                    message="All configured RSS feeds failed to fetch or parse.",
+                    stage="invoke",
+                    retryable=any(bool(item.get("retryable")) for item in feed_failures),
+                    details={"feed_failures": tuple(feed_failures)},
+                )
+
             output = SourceFetchResult(
                 items=tuple(items),
                 metadata={
                     "source": "rss",
                     "plugin_id": PLUGIN_ID,
                     "feed_count": len(feeds),
+                    "feed_success_count": len(feed_summaries),
+                    "feed_failure_count": len(feed_failures),
                     "item_count": len(items),
                     "feeds": tuple(feed_summaries),
+                    "feed_failures": tuple(feed_failures),
                 },
             )
             return PluginInvokeResult(output=output.to_mapping())
@@ -331,6 +375,17 @@ def _coerce_headers(value: Any, *, user_agent: Any) -> dict[str, str]:
         raise ValueError("user_agent must be a non-empty string")
     headers.setdefault("User-Agent", resolved_user_agent.strip())
     return headers
+
+
+def _feed_failure_summary(*, feed_url: str, error: PluginRuntimeError) -> dict[str, Any]:
+    # 多 feed RSS 绑定允许部分失败，但必须把失败结构化暴露给 scheduler/run metadata，不能静默吞掉。
+    return {
+        "feed_url": feed_url,
+        "code": error.code,
+        "message": error.message,
+        "stage": error.stage,
+        "retryable": error.retryable,
+    }
 
 
 def _decode_text(body: bytes, charset: str) -> str:

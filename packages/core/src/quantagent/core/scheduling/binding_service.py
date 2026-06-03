@@ -46,6 +46,20 @@ class SourceBindingService:
         due_at = now or self._clock.now()
         return [_to_record(item) for item in self._repository.list_due_bindings(now=due_at, limit=limit)]
 
+    def count_active_bindings(self) -> int:
+        return self._repository.count_active_bindings()
+
+    def count_active_scheduled_bindings(self) -> int:
+        return self._repository.count_active_scheduled_bindings()
+
+    def count_cooling_down_bindings(self, *, now: datetime | None = None) -> int:
+        reference_time = now or self._clock.now()
+        return self._repository.count_cooling_down_bindings(now=reference_time)
+
+    def list_next_scheduled_bindings(self, *, now: datetime | None = None, limit: int = 3) -> list[SourceBindingRecord]:
+        reference_time = now or self._clock.now()
+        return [_to_record(item) for item in self._repository.list_next_scheduled_bindings(now=reference_time, limit=limit)]
+
     def get_binding(self, binding_id: str) -> SourceBindingRecord | None:
         binding = self._repository.get(binding_id)
         if binding is None:

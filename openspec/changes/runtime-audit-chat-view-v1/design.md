@@ -1,260 +1,193 @@
-## 背景与取舍
+## 背景与修订取舍
 
-本 change 承接 #270。它不是重新定义 Runtime Inspect API，也不实现后端审计持久化；它只把 `/runtime` 的首版页面行为从 PR #257 的多面板 Runtime Dashboard 收敛为可审计的 Chat App 风格运行流。
+本 change 承接 #270，并在 PR #271 的初版实现后继续修订。初版 `/runtime` 已把多面板 dashboard 改成审计流，但数据仍来自前端 fixture；用户明确指出这不满足“运行态页面接真实后端”的目标。
 
-已有真源之间存在一个产品形态冲突：
+本轮锁定新的 V1 边界：
 
-- `docs/prd/pages/07-runtime-dashboard.md` 与 `runtime-inspect-api-v1` 倾向于 health + 多资源列表，适合排障。
-- #270 和产品反馈要求首屏更纯粹，像 chat / timeline 一样解释一次 Agent 判断，减少占位内容和技术对象堆叠。
+- `/runtime` 的左侧主单位是“一篇新闻 / RawEvent”，不是 Event topic、analysis request 或 trace session。
+- 后端新增真实只读 read model：`GET /api/v1/runtime/audit/news`。
+- V1 新增 Router Agent 结构化输出的安全 read model，用于把 `event.routed` / `EventIntakeDecisionV1` 关联回 RawEvent；如果没有真实持久化事实，页面必须显示 `pending` 或 `unavailable`，不能用 fixture 伪造 `route/review/discard`。
+- 完整正文和 raw payload 仍只能通过 RawEvent detail 类接口按 ID 获取；runtime audit news 列表和右侧默认详情不返回完整内容。
 
-本设计采用后者作为新的 `/runtime` 首屏方向，同时保留前者作为数据资源和后续诊断展开能力。也就是说，Runtime Inspect 资源仍然有价值，但页面首屏不再把它们全部铺成表格。
+## 后端 API 蓝图
 
-## 用户任务
-
-Runtime audit chat V1 只服务三个任务：
-
-- 从 event_id / trace_id / 最近运行中找到一次 Agent 判断过程。
-- 顺着审计消息流理解系统为什么 discard、review 或 route。
-- 在不暴露敏感 raw payload 的前提下查看关键结构化字段、错误和降级状态。
-
-首个样例固定为 Router Agent / AI intake：
+新增 API：
 
 ```text
-industry.analysis.requested
-  -> IndustryEventContextV1 built
-  -> single-call structured model intake
-  -> EventIntakeDecisionV1 validated
-  -> decision: discard | review | route
-  -> event.routed published
+GET /api/v1/runtime/audit/news
 ```
 
-## 页面信息架构
+职责：
 
-### 首屏结构
+- 按 RawEvent 聚合返回新闻维度的运行态审计摘要。
+- 只读，不触发 worker、scheduler、AI 或 route 重放。
+- 使用 `runtime.inspect` capability。
+- 返回统一 `ApiResponse[RuntimeAuditNewsListResponse]` envelope。
+
+查询参数：
+
+- `keyword`: 匹配 title、canonical_url 或 content preview 的轻量筛选。
+- `binding_id`: 使用 `raw_events.first_binding_id` 或 capture 归属筛选。
+- `source_plugin_id`: 使用 `raw_events.source_plugin_id` 筛选。
+- `status`: 当前新闻审计状态，例如 `captured`、`linked`、`pending`、`unavailable`。
+- `current_stage`: 当前阶段，例如 `captured`、`persisted`、`scheduler_linked`、`ai_intake_unavailable`。
+- `trace_id` / `request_id`: 从 RawEvent metadata 或 capture request_id 中筛选。
+- `time_from` / `time_to`: 按 `published_at` 退化到 `last_captured_at` 的有效时间筛选。
+- `cursor` / `limit`: 游标分页，limit 上限不超过 100。
+
+响应模型：
 
 ```text
-/runtime
-  Header
-    title: Runtime 审计
-    compact health/status strip
-    manual refresh
-  FilterBar
-    event_id
-    trace_id
-    decision
-    status
-    industry
-    time range
-  AuditConversation
-    AuditMessageGroup[]
-      source/request message
-      context-build message
-      model-intake message
-      decision message
-      publish / failure message
-  DetailDrawer or InlineDisclosure
-    selected message details
-    trace context
-    sanitized payload summary
+RuntimeAuditNewsListResponse
+  items: RuntimeAuditNewsItem[]
+  next_cursor: string | null
+  generated_at: datetime
+
+RuntimeAuditNewsItem
+  raw_event_id
+  title
+  canonical_url
+  url_host
+  source_plugin_id
+  source_name
+  author
+  published_at
+  first_captured_at
+  last_captured_at
+  content_preview
+  status
+  current_stage
+  focus_stage
+  trace
+  timeline
+  agent_stages
+  safe_details
+
+RuntimeAuditNewsTimelineStep
+  step_id
+  label
+  status
+  occurred_at
+  summary
+  refs
+
+RuntimeAuditAgentStage
+  stage_id
+  agent_name
+  agent_type
+  status
+  summary
+  key_fields
+  output_json
+  refs
+  unavailable_reason
 ```
 
-首屏不再默认展示 AgentRun、ToolInvocation、SchedulerRun、RuntimeError 四张资源表。需要保留这些对象时，作为消息详情里的关联引用、折叠区或后续诊断入口。
-
-### 审计消息类型
+Router Agent 持久化 read model：
 
 ```text
-RuntimeAuditMessage
-  id: string
-  group_id: string
-  occurred_at: datetime | null
-  actor_type: "source" | "worker" | "agent" | "model" | "event_bus" | "system"
-  stage:
-    "analysis_requested"
-    "context_built"
-    "model_invoked"
-    "decision_validated"
-    "event_routed_published"
-    "discarded"
-    "review_requested"
-    "failed"
-  status: "success" | "warning" | "error" | "pending" | "unavailable"
-  title: string
-  summary: string
-  trace:
-    event_id?: string
-    trace_id?: string
-    request_id?: string
-    correlation_id?: string
-    source_message_id?: string
-    analysis_request_id?: string
-    routed_event_id?: string
-  decision?: "discard" | "route" | "review"
-  priority?: "low" | "normal" | "high" | "urgent"
-  badges[]:
-    "degraded"
-    "rss_summary_only"
-    "schema_invalid"
-    "provider_failed"
-    "partial_unavailable"
-  evidence_refs[]:
-    field_path: string
-    label: string
-  safe_details: object | null
-  related_refs[]:
-    kind: "agent_run" | "tool_invocation" | "scheduler_run" | "runtime_error" | "event_topic"
-    id: string
-    label: string
+event_intake_routed_events
+  event_id
+  schema_version
+  raw_event_id
+  source_message_id
+  analysis_request_id
+  binding_id
+  owner_type / owner_id
+  request_id / correlation_id
+  decision / discard_reason / status
+  summary
+  output_json
+  key_fields
+  provider_invocation_count
+  invocation_metadata
+  created_at
 ```
 
-`safe_details` 只能接收已脱敏摘要或结构化字段，不接收完整 API envelope、ORM object、provider raw response、完整 prompt、完整文章正文或 plugin instance。
+职责边界：
 
-### Router Agent 样例字段
+- `packages/core` 只提供 ORM、repository 和 store port；不依赖 API、worker 或前端。
+- worker 在发布 `event.routed` 后通过 store 写入安全结构化输出，并使用 `event_id` 幂等避免重复写入。
+- scheduler 在发布 `source.event.captured` 前，把 RawEvent trace 字段补到 item metadata，使 worker 构建 context 时能带上 `raw_event_id`。
+- `/runtime` API 查询最新的 `event_intake_routed_events.raw_event_id` 记录，把它映射为 Router Agent stage 和 timeline 成功/失败节点。
 
-Router Agent 消息必须能展示：
+安全边界：
 
-- 输入 topic：`industry.analysis.requested`
-- 输出 topic：`event.routed`
-- `decision`: `discard | review | route`
-- `discard_reason`: spam、irrelevant、duplicate_hint、low_information、unsupported_language、malformed、not_discarded
-- `industry_relevance[]`: industry_id、relationship、relevance_score、reason_summary
-- `structured_news`: canonical_title、short_summary、entities、companies、technologies、products、source_facts、uncertainties
-- `routing`: target_industries、target_topics、priority、requires_deep_analysis、requires_human_review
-- `quality`: enrichment_status、content_completeness、confidence、noise_flags
-- trace：message_id、source_message_id、binding_id、raw_event_id、correlation_id、causation_id
+- 列表和默认详情不返回 `content`、`raw_payload`、provider raw response、prompt、CoT、secret、ORM object 或 plugin instance。
+- `safe_details` 只返回 allowlisted metadata 摘要，例如 `feed`、`source`、`provider`、`payload_truncated`、`dedupe_strategy`、`duplicate_capture_count`。
+- AI / route 阶段没有真实持久化事实时，timeline step 必须是 `unavailable`，summary 说明“暂无持久化 read model”，不得伪造路由结果。
+- Agent 输出使用 `agent_stages` 表达；Router Agent / MainAgent 均以阶段形式出现。Router Agent 持久化存在时，允许展示 `event.routed` 结构化 `output_json` 与 allowlisted `key_fields`；不存在时 `output_json` 为 `null` 并写明 `unavailable_reason`。
+- `output_json` 不能包含 provider raw response、CoT、secret 或 unbounded article content。`event.routed` payload 本身只保留结构化 decision、source/article 状态、quality、routing、audit 摘要。
 
-这些字段来自 `EventIntakeDecisionV1` / `IndustryEventContextV1` 语义，不从自然语言日志中反向解析。
-
-## 数据来源与 API 取舍
-
-### V1 可接受数据来源
-
-后续实现可以二选一：
-
-- 使用已有 Runtime Inspect / events / model invocation 只读资源组合出审计消息。
-- 在生产 API 尚未稳定时，使用 `features/runtime` 内受控 fixture 或 mock read model 先验证页面形态。
-
-如果采用 fixture，必须满足：
-
-- UI 明确为 fixture / mock harness，不声称生产审计链路已完整可查。
-- fixture 覆盖 route、discard、review、degraded、schema validation failure。
-- fixture 不包含真实 secret、真实 raw prompt 或生产 payload。
-
-### 不新增后端写入或控制
-
-本 change 不新增后端 endpoint。若后续实现需要新增专用 read endpoint，例如：
+文件规划：
 
 ```text
-GET /api/v1/runtime/audit-messages
-GET /api/v1/runtime/audit-messages/{group_id}
+apps/api/src/quantagent/api/
+  routers/v1/runtime_audit.py
+  schemas/runtime_audit.py
+  services/runtime_audit.py
 ```
 
-必须单独补 API/OpenSpec change，定义 router/service/repository、DTO、分页、脱敏、权限和 audit read model。前端实现不得先硬编码生产 endpoint。
+`routers/v1/runtime_audit.py` 只处理 HTTP 参数、依赖注入和 `ApiResponse` 包装。`services/runtime_audit.py` 负责查询 RawEvent / capture / scheduler run / Router output 可确认事实并映射 DTO。RawEvent 聚合查询保留在 API 私有 service；Router output 持久化使用 core repository/store，因为它由 worker 写入、API 读取，是跨 app 共享审计 read model。
 
-## 前端目录蓝图
+## 前端蓝图
 
-后续实现建议写入：
+`features/runtime` 继续保留分层，但从 message/topic 模型改为 news audit 模型：
+
+- `api/`: `RuntimeAuditApi` 改为 `BaseApi` endpoint，调用 `/runtime/audit/news`。
+- `types/`: 定义 `RuntimeAuditNewsItem`、`RuntimeAuditNewsTimelineStep`、filters、safe details。
+- `queries/`: query key 以 news filters 为资源边界。
+- `hooks/`: 页面 hook 组合筛选、selected raw_event_id、refresh 和错误状态。
+- `components/filters`: 顶部筛选支持 keyword、binding、plugin、stage/status、trace/request、time range。
+- `components/conversation`: 改名语义仍可保留，但渲染左侧新闻列表；每条新闻显示标题、副信息和压缩 timeline。
+- `components/details`: 右侧按新闻组织为新闻摘要、当前进度、Timeline、Trace、安全详情。
+- `components/agent`: 复用型 Agent 处理详情组件。右侧详情只展示摘要和入口，Router Agent / 行业 MainAgent 等重内容通过独立弹窗承载。
+
+Agent 详情组件边界：
+
+- `RuntimeAuditAgentStagePanel`: 展示每个 Agent stage 的状态摘要、关键字段和详情入口。
+- `RuntimeAuditAgentDetailModal`: 展示新闻标题、URL、content preview，可折叠展开的列表级内容预览、Agent 重要字段和完整结构化 output JSON。
+- V1 不引入 ChatApp 渲染依赖；但组件模型预留 `agent_type=industry_main_agent`，后续可在同一弹窗族中加入 Markdown、消息流、toolcall 和 artifact 渲染，不改左侧新闻列表主单位。
+- 详细弹窗不能展示未脱敏正文、provider raw response、CoT、secret 或 raw payload。完整正文仍需后端 RawEvent detail 类接口另行按 ID 拉取。
+
+首屏结构：
 
 ```text
-apps/web/src/routes/_app/(workspace)/runtime/index.tsx
-
-apps/web/src/features/runtime/
-  README.md
-  api/
-    runtime-audit.api.ts
-    runtime-audit.contracts.ts
-    runtime-inspect.api.ts              # 可复用 PR #257 已有方向
-    runtime-inspect.contracts.ts
-  queries/
-    runtime-audit.keys.ts
-    use-runtime-audit-groups.ts
-    use-runtime-audit-messages.ts
-    use-runtime-health.ts               # 仅 compact status strip
-  hooks/
-    use-runtime-audit-page.ts
-    use-runtime-audit-filters.ts
-    use-runtime-audit-selection.ts
-  components/
-    page/
-      RuntimeAuditPage.tsx
-    filters/
-      RuntimeAuditFilterBar.tsx
-    conversation/
-      RuntimeAuditConversation.tsx
-      RuntimeAuditMessageGroup.tsx
-      RuntimeAuditMessage.tsx
-    details/
-      RuntimeAuditDetailDrawer.tsx
-      RuntimeAuditTracePanel.tsx
-      RuntimeAuditSafeDetails.tsx
-    states/
-      RuntimeAuditEmptyState.tsx
-      RuntimeAuditErrorState.tsx
-      RuntimeAuditLoadingState.tsx
-      RuntimeAuditPermissionState.tsx
-    health/
-      RuntimeCompactHealthStrip.tsx
-  types/
-    runtime-audit.types.ts
-  utils/
-    runtime-audit-format.ts
-    runtime-audit-sanitize.ts
-    runtime-audit-fixtures.ts            # 仅 fixture harness 使用
+Header + compact status
+FilterBar
+Main
+  Left: News audit list
+    title
+    source / published_at / host
+    current_stage + focus_stage badge
+    compressed timeline
+  Right: selected news detail
+    新闻摘要
+    当前进度
+    Timeline
+    Trace
+    Agent 处理
+      Router Agent: 重要字段 + 完整 output JSON / unavailable
+      MainAgent: 预留阶段 / unavailable
+    安全详情
 ```
-
-职责要求：
-
-- route 只做 search params 校验和页面挂载，不创建 API、不写 query、不写 JSX 主体。
-- `api/` 只封装 endpoint、params、response contracts；如果首版是 fixture，不得伪造生产 endpoint 名称。
-- `queries/` 只封装 TanStack Query 和 query key，通过 runtime `apis` 访问业务 API。
-- `hooks/` 组合筛选、选中消息、刷新和派生状态，不处理底层 HTTP。
-- `components/` 只接收稳定 props，不能透传完整 API envelope。
-- `utils/` 只做纯格式化、脱敏和 fixture 转换。
-- `README.md` 必须说明 Runtime audit chat 负责什么、不负责什么、哪些组件不能展示 raw payload。
-
-## PR #257 处理策略
-
-实现前必须先审核 #257，并形成明确结论：
-
-- 可复用：Runtime Inspect API contracts、query keys、query hooks、error / unavailable / permission state、REST snapshot 和脱敏字段。
-- 需要替换：`RuntimeDashboardPage` 的多面板首屏、AgentRun / ToolInvocation / SchedulerRun / RuntimeError 四表首屏展示、长说明式占位文案。
-- 可降级保留：health 摘要只能作为 compact status strip 或详情折叠，不作为首屏主体。
-
-后续 PR 不能在主线上同时保留两个 `/runtime` 首屏方向。若继续使用 #257 分支，PR body 必须更新并说明页面层如何按本 change 改造；若另起 PR，应说明如何处理 #257。
-
-## 安全与脱敏
-
-Runtime audit chat 只能展示结构化摘要和证据引用：
-
-- 允许：decision、confidence、reason summary、source facts、safe error summary、token/cost summary、trace id、request id、topic name、safe field refs。
-- 禁止：完整 prompt、完整 chain-of-thought、provider raw response、secret、cookie、token、连接串、SQLAlchemy/ORM object、plugin instance、完整原始文章正文、未脱敏工具输入输出。
-
-详情抽屉中如需要展示 payload-like 内容，必须经 `runtime-audit-sanitize.ts` 或后端等价脱敏结果处理。安全边界需要中文注释说明为什么不能直接展示 raw details。
 
 ## 状态与失败路径
 
-- `loading`: 显示正在读取审计流，不用全局大 spinner 阻断筛选区。
-- `empty`: 区分没有运行数据、当前筛选无结果、fixture 未启用。
-- `permission denied`: 显示 capability / auth 失败和 request id。
-- `partial unavailable`: 消息流仍可展示已有节点，并在缺失阶段显示 unavailable message。
-- `provider/model failure`: 展示 safe error summary，不展示 provider raw exception。
-- `schema validation failure`: 展示 validation failure 节点，并明确该 item 没有静默进入 route。
-- `degraded input`: 对 RSS-summary-only / Readability failure 输入显示 degraded badge。
+- `loading`: 只遮蔽列表区域，筛选区保持可见。
+- `empty`: 区分无 RawEvent、当前筛选无结果。
+- `permission denied`: 展示 request id / trace id。
+- `partial unavailable`: RawEvent 可展示，AI/route 阶段显示 unavailable step。
+- `backend unavailable`: 使用统一错误态，不回退到前端 fixture。
+- `route decision unavailable`: 显示真实缺口，不渲染 `route/review/discard` mock。
+- `route decision available`: 显示 `ai_intake_routed` / `route_decided` timeline step、Router Agent 重要字段和完整结构化 JSON viewer。
+- `agent output unavailable`: Agent 卡片仍展示阶段、状态和缺口；只有后端返回 `output_json` 时才展示完整 JSON viewer。
 
 ## 验证策略
 
-OpenSpec 阶段：
-
-- `openspec validate runtime-audit-chat-view-v1 --type change --strict --json`
-
-实现阶段最小验证：
-
-- `bun run --cwd apps/web test:unit -- runtime-audit`
-- 覆盖 `runtime-audit-format`、`runtime-audit-sanitize`、filter params、Router Agent 三类 fixture。
-- `bun run --cwd apps/web lint`
-- 如果 route 或 runtime factory 有变化，跑 `bun run --cwd apps/web build`，并说明是否存在 main 上既有 build 阻断。
-
-人工验收：
-
-- Router Agent fixture 中 route、discard、review、degraded、schema invalid 五类结果能在同一审计流中区分。
-- 首屏不能退回四张资源表格。
-- 详情抽屉不能展示 raw prompt、CoT、provider raw response 或 secret。
+- API tests 覆盖真实 RawEvent 列表、无正文泄露、AI/route unavailable step、真实 Router Agent output_json、筛选和权限。
+- Core/worker tests 覆盖 `event_intake_routed_events` ORM metadata、store 幂等写入、worker 发布 `event.routed` 后写入、scheduler 发布的 item metadata 带 RawEvent trace。
+- Web unit tests 覆盖 API contracts、query params、timeline label、safe detail。
+- Web unit tests 覆盖 Agent stage label、Router 重要字段、完整 JSON viewer 和 unavailable 状态。
+- Playwright e2e 使用真实 `uv run api` 和 seeded RawEvent 验证 `/runtime` 左侧按新闻显示、筛选生效、右侧不展示完整正文/raw payload。
+- Regression 继续运行 OpenSpec、Web unit、lint、build。

@@ -21,6 +21,15 @@ class _RecordingHandler:
         self.seen.append(envelope)
 
 
+class _RecordingRoutedEventStore:
+    def __init__(self) -> None:
+        self.records: list[tuple[EventEnvelope, object]] = []
+
+    def record(self, *, envelope: EventEnvelope, result) -> object:
+        self.records.append((envelope, result))
+        return object()
+
+
 class AnalysisRequestHandlerTestCase(unittest.IsolatedAsyncioTestCase):
     async def test_handler_publishes_event_routed_for_analysis_request(self) -> None:
         bus = InMemoryEventBus()
@@ -28,11 +37,15 @@ class AnalysisRequestHandlerTestCase(unittest.IsolatedAsyncioTestCase):
         await bus.subscribe(topics=("event.routed",), group_id="test", handler=recorder)
         invoker = FakeStructuredModelInvoker([self._route_output()])
         audit_sink = InMemoryAnalysisRequestIntakeAuditSink()
+        routed_store = _RecordingRoutedEventStore()
+        commits: list[str] = []
         handler = IndustryAnalysisRequestHandler(
             context_builder=IndustryEventContextBuilder(),
             runner=SingleCallEventIntakeRunner(invoker=invoker),
             routed_publisher=EventIntakeRoutedPublisher(bus, id_factory=lambda: "evt-routed-1"),
             audit_sink=audit_sink,
+            routed_event_store=routed_store,
+            commit=lambda: commits.append("commit"),
         )
 
         await handler.handle(self._analysis_request_envelope())
@@ -47,6 +60,11 @@ class AnalysisRequestHandlerTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(routed.headers["owner_id"], "semiconductor")
         self.assertEqual(len(audit_sink.entries), 1)
         self.assertEqual(audit_sink.entries[0]["provider_invocation_count"], 1)
+        self.assertEqual(len(routed_store.records), 1)
+        self.assertEqual(commits, ["commit"])
+        _, stored_result = routed_store.records[0]
+        self.assertEqual(stored_result.context.trace.raw_event_id, "rawevt-worker-001")
+        self.assertEqual(stored_result.context.trace.source_event_id, "entry-worker-001")
 
     async def test_handler_publishes_discard_for_malformed_analysis_request(self) -> None:
         bus = InMemoryEventBus()
@@ -54,11 +72,15 @@ class AnalysisRequestHandlerTestCase(unittest.IsolatedAsyncioTestCase):
         await bus.subscribe(topics=("event.routed",), group_id="test", handler=recorder)
         invoker = FakeStructuredModelInvoker([self._route_output()])
         audit_sink = InMemoryAnalysisRequestIntakeAuditSink()
+        routed_store = _RecordingRoutedEventStore()
+        commits: list[str] = []
         handler = IndustryAnalysisRequestHandler(
             context_builder=IndustryEventContextBuilder(),
             runner=SingleCallEventIntakeRunner(invoker=invoker),
             routed_publisher=EventIntakeRoutedPublisher(bus, id_factory=lambda: "evt-routed-malformed"),
             audit_sink=audit_sink,
+            routed_event_store=routed_store,
+            commit=lambda: commits.append("commit"),
         )
 
         await handler.handle(
@@ -87,6 +109,8 @@ class AnalysisRequestHandlerTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(routed.payload["discard_reason"], "malformed")
         self.assertEqual(len(audit_sink.entries), 1)
         self.assertEqual(audit_sink.entries[0]["discard_reason"], "malformed")
+        self.assertEqual(len(routed_store.records), 1)
+        self.assertEqual(commits, ["commit"])
 
     def _analysis_request_envelope(self) -> EventEnvelope:
         return EventEnvelope(
@@ -108,7 +132,12 @@ class AnalysisRequestHandlerTestCase(unittest.IsolatedAsyncioTestCase):
                         "title": "HBM demand update",
                         "summary_or_content": "HBM demand and advanced packaging capacity tighten.",
                         "enrichment_status": "succeeded",
-                        "source_metadata": {"source": "rss", "language": "en"},
+                        "source_metadata": {
+                            "raw_event_id": "rawevt-worker-001",
+                            "source_event_id": "entry-worker-001",
+                            "source": "rss",
+                            "language": "en",
+                        },
                     }
                 ],
             },

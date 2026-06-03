@@ -61,6 +61,7 @@ class CorePackageTestCase(unittest.TestCase):
         self.assertIn("model_providers", Base.metadata.tables)
         self.assertIn("model_invocations", Base.metadata.tables)
         self.assertIn("raw_events", Base.metadata.tables)
+        self.assertIn("event_intake_routed_events", Base.metadata.tables)
         self.assertIn("ix_model_invocations_created_at", {index.name for index in Base.metadata.tables["model_invocations"].indexes})
 
     def test_database_url_is_required_for_default_engine(self) -> None:

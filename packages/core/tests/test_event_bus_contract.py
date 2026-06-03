@@ -137,17 +137,17 @@ class EventBusContractTestCase(unittest.TestCase):
         self.assertEqual(summary["details"]["api_key"], "[REDACTED]")
         self.assertEqual(summary["details"]["safe"], "visible")
 
-    def test_event_bus_settings_defaults_to_memory(self) -> None:
+    def test_event_bus_settings_defaults_to_kafka(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             app_settings = Settings(_env_file=None)
             event_settings = EventBusSettings.from_settings(app_settings)
 
-            self.assertEqual(event_settings.backend, "memory")
-            self.assertIsNone(event_settings.kafka_bootstrap_servers)
+            self.assertEqual(event_settings.backend, "kafka")
+            self.assertEqual(event_settings.kafka_bootstrap_servers, "127.0.0.1:19092")
 
     def test_event_bus_settings_require_bootstrap_servers_for_kafka(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
-            app_settings = Settings(_env_file=None, EVENT_BUS_BACKEND="kafka")
+            app_settings = Settings(_env_file=None, EVENT_BUS_BACKEND="kafka", EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=None)
 
             with self.assertRaises(EventBusError) as raised:
                 EventBusSettings.from_settings(app_settings)

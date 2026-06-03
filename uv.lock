@@ -1065,8 +1065,8 @@ source = { editable = "apps/api" }
 dependencies = [
     { name = "fastapi", extra = ["standard"] },
     { name = "pydantic-settings" },
-    { name = "python-dotenv" },
     { name = "pynacl" },
+    { name = "python-dotenv" },
     { name = "quantagent-core" },
 ]
 
@@ -1074,8 +1074,8 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", extras = ["standard"], specifier = ">=0.136.1" },
     { name = "pydantic-settings", specifier = ">=2.14.1" },
-    { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "pynacl", specifier = ">=1.5.0" },
+    { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "quantagent-core", editable = "packages/core" },
 ]
 
@@ -1121,22 +1121,22 @@ name = "quantagent-scheduler"
 version = "0.1.0"
 source = { editable = "apps/scheduler" }
 dependencies = [
-    { name = "quantagent-core" },
+    { name = "quantagent-core", extra = ["kafka"] },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "quantagent-core", editable = "packages/core" }]
+requires-dist = [{ name = "quantagent-core", extras = ["kafka"], editable = "packages/core" }]
 
 [[package]]
 name = "quantagent-worker"
 version = "0.1.0"
 source = { editable = "apps/worker" }
 dependencies = [
-    { name = "quantagent-core" },
+    { name = "quantagent-core", extra = ["kafka"] },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "quantagent-core", editable = "packages/core" }]
+requires-dist = [{ name = "quantagent-core", extras = ["kafka"], editable = "packages/core" }]
 
 [[package]]
 name = "rich"

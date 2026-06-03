@@ -9,7 +9,7 @@ from quantagent.worker.main import create_worker_app, create_worker_runtime, run
 
 
 class WorkerMainTestCase(unittest.IsolatedAsyncioTestCase):
-    def test_worker_runtime_uses_memory_backend_by_default(self) -> None:
+    def test_worker_runtime_uses_memory_backend_when_explicitly_overridden(self) -> None:
         with patch("quantagent.worker.main.settings.EVENT_BUS_BACKEND", "memory"):
             runtime = create_worker_runtime()
         self.assertEqual(runtime.backend, "memory")

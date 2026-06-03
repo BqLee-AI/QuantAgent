@@ -9,6 +9,54 @@ from quantagent.core.events import (
     KafkaEventBusConsumer,
     KafkaEventBusPublisher,
 )
+from quantagent.core.events.kafka import KafkaTopicBootstrapper
+
+
+class FakeTopic:
+    def __init__(self, *, name: str, num_partitions: int, replication_factor: int) -> None:
+        self.name = name
+        self.num_partitions = num_partitions
+        self.replication_factor = replication_factor
+
+
+class FakeAdmin:
+    created_topic_names: list[str] = []
+    start_count = 0
+    close_count = 0
+
+    def __init__(self, **kwargs) -> None:
+        self.kwargs = kwargs
+
+    async def start(self) -> None:
+        type(self).start_count += 1
+
+    async def close(self) -> None:
+        type(self).close_count += 1
+
+    async def list_topics(self) -> set[str]:
+        return set()
+
+    async def create_topics(self, topics) -> None:
+        type(self).created_topic_names.extend(topic.name for topic in topics)
+
+
+class TopicAlreadyExistsError(Exception):
+    pass
+
+
+class AlreadyExistsAdmin(FakeAdmin):
+    async def create_topics(self, topics) -> None:
+        raise TopicAlreadyExistsError("topic already exists")
+
+
+class PartiallyExistingAdmin(FakeAdmin):
+    async def list_topics(self) -> set[str]:
+        return {"source.event.captured"}
+
+
+class FailingAdmin(FakeAdmin):
+    async def create_topics(self, topics) -> None:
+        raise RuntimeError("broker unavailable")
 
 
 class FakeProducer:
@@ -76,11 +124,24 @@ class DispatchingHandler:
 
 
 class KafkaEventBusTestCase(unittest.IsolatedAsyncioTestCase):
+    def setUp(self) -> None:
+        FakeAdmin.created_topic_names = []
+        FakeAdmin.start_count = 0
+        FakeAdmin.close_count = 0
+
     async def test_kafka_publisher_uses_factory_and_topic_policy(self) -> None:
+        bootstrapper = KafkaTopicBootstrapper(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            topics=("source.event.captured",),
+            admin_factory=FakeAdmin,
+            topic_factory=FakeTopic,
+        )
         publisher = KafkaEventBusPublisher(
             bootstrap_servers="localhost:9092",
             client_id="quantagent-test",
             producer_factory=FakeProducer,
+            topic_bootstrapper=bootstrapper,
         )
         envelope = EventEnvelope(
             id="evt-1",
@@ -93,16 +154,25 @@ class KafkaEventBusTestCase(unittest.IsolatedAsyncioTestCase):
         published = await publisher.publish(envelope)
 
         self.assertEqual(published.id, "evt-1")
+        self.assertIn("source.event.captured", FakeAdmin.created_topic_names)
         self.assertTrue(publisher._producer.started)
         self.assertEqual(publisher._producer.sent[0][0], "source.event.captured")
         await publisher.close()
         self.assertTrue(publisher._producer is None)
 
     async def test_kafka_consumer_decodes_message_and_commits(self) -> None:
+        bootstrapper = KafkaTopicBootstrapper(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            topics=("event.routed",),
+            admin_factory=FakeAdmin,
+            topic_factory=FakeTopic,
+        )
         codec_publisher = KafkaEventBusPublisher(
             bootstrap_servers="localhost:9092",
             client_id="quantagent-test",
             producer_factory=FakeProducer,
+            topic_bootstrapper=bootstrapper,
         )
         envelope = EventEnvelope(
             id="evt-1",
@@ -118,6 +188,7 @@ class KafkaEventBusTestCase(unittest.IsolatedAsyncioTestCase):
             bootstrap_servers="localhost:9092",
             client_id="quantagent-test",
             consumer_factory=lambda *topics, **kwargs: fake_consumer,
+            topic_bootstrapper=bootstrapper,
         )
         handler = RecordingHandler()
 
@@ -129,9 +200,64 @@ class KafkaEventBusTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(len(handler.envelopes), 1)
         self.assertEqual(handler.envelopes[0].payload["event_id"], "e-1")
+        self.assertIn("event.routed", FakeAdmin.created_topic_names)
         self.assertTrue(fake_consumer.committed)
         await consumer.close()
         self.assertTrue(consumer._consumer is None)
+
+    async def test_kafka_topic_bootstrap_is_idempotent(self) -> None:
+        bootstrapper = KafkaTopicBootstrapper(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            topics=("source.event.captured",),
+            admin_factory=FakeAdmin,
+            topic_factory=FakeTopic,
+        )
+
+        await bootstrapper.ensure_topics(("source.event.captured",))
+        await bootstrapper.ensure_topics(("source.event.captured",))
+
+        self.assertEqual(FakeAdmin.start_count, 1)
+        self.assertEqual(FakeAdmin.close_count, 1)
+
+    async def test_kafka_topic_bootstrap_ignores_existing_topics(self) -> None:
+        bootstrapper = KafkaTopicBootstrapper(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            topics=("source.event.captured",),
+            admin_factory=AlreadyExistsAdmin,
+            topic_factory=FakeTopic,
+        )
+
+        await bootstrapper.ensure_topics(("source.event.captured",))
+
+    async def test_kafka_topic_bootstrap_creates_only_missing_topics(self) -> None:
+        bootstrapper = KafkaTopicBootstrapper(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            topics=("source.event.captured", "industry.analysis.requested"),
+            admin_factory=PartiallyExistingAdmin,
+            topic_factory=FakeTopic,
+        )
+
+        await bootstrapper.ensure_topics(("source.event.captured", "industry.analysis.requested"))
+
+        self.assertNotIn("source.event.captured", FakeAdmin.created_topic_names)
+        self.assertIn("industry.analysis.requested", FakeAdmin.created_topic_names)
+
+    async def test_kafka_topic_bootstrap_wraps_admin_failure(self) -> None:
+        bootstrapper = KafkaTopicBootstrapper(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            topics=("source.event.captured",),
+            admin_factory=FailingAdmin,
+            topic_factory=FakeTopic,
+        )
+
+        with self.assertRaises(EventBusError) as raised:
+            await bootstrapper.ensure_topics(("source.event.captured",))
+
+        self.assertEqual(raised.exception.code, "EVENT_KAFKA_TOPIC_BOOTSTRAP_FAILED")
 
     async def test_kafka_backend_missing_dependency_raises_config_error(self) -> None:
         publisher = KafkaEventBusPublisher(
@@ -154,10 +280,18 @@ class KafkaEventBusTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raised.exception.code, "EVENT_KAFKA_DEPENDENCY_MISSING")
 
     async def test_kafka_consumer_reuses_single_subscription_for_multiple_topics(self) -> None:
+        bootstrapper = KafkaTopicBootstrapper(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            topics=("source.event.captured", "industry.analysis.requested"),
+            admin_factory=FakeAdmin,
+            topic_factory=FakeTopic,
+        )
         codec_publisher = KafkaEventBusPublisher(
             bootstrap_servers="localhost:9092",
             client_id="quantagent-test",
             producer_factory=FakeProducer,
+            topic_bootstrapper=bootstrapper,
         )
         first = codec_publisher._codec.encode(
             EventEnvelope(
@@ -183,6 +317,7 @@ class KafkaEventBusTestCase(unittest.IsolatedAsyncioTestCase):
             bootstrap_servers="localhost:9092",
             client_id="quantagent-test",
             consumer_factory=lambda *topics, **kwargs: fake_consumer,
+            topic_bootstrapper=bootstrapper,
         )
         handler = DispatchingHandler()
 
@@ -200,10 +335,18 @@ class KafkaEventBusTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(handler.seen, ["source.event.captured", "industry.analysis.requested"])
 
     async def test_kafka_consumer_can_consume_forever_until_cancelled(self) -> None:
+        bootstrapper = KafkaTopicBootstrapper(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            topics=("source.event.captured", "industry.analysis.requested"),
+            admin_factory=FakeAdmin,
+            topic_factory=FakeTopic,
+        )
         codec_publisher = KafkaEventBusPublisher(
             bootstrap_servers="localhost:9092",
             client_id="quantagent-test",
             producer_factory=FakeProducer,
+            topic_bootstrapper=bootstrapper,
         )
         first = codec_publisher._codec.encode(
             EventEnvelope(
@@ -229,6 +372,7 @@ class KafkaEventBusTestCase(unittest.IsolatedAsyncioTestCase):
             bootstrap_servers="localhost:9092",
             client_id="quantagent-test",
             consumer_factory=lambda *topics, **kwargs: fake_consumer,
+            topic_bootstrapper=bootstrapper,
         )
         handler = DispatchingHandler()
 

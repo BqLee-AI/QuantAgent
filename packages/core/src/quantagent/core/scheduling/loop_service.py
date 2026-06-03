@@ -9,6 +9,7 @@ from typing import Any
 from uuid import uuid4
 
 from quantagent.core.events.service import SourceEventPublisher
+from quantagent.core.raw_events.models import PersistSourceFetchResultSummary
 from quantagent.core.raw_events.service import RawEventService
 from quantagent.core.registry.models import PluginError
 from quantagent.core.registry.service import PluginRegistry
@@ -50,6 +51,25 @@ class SourceBindingLoopRunResult:
 
 
 @dataclass(frozen=True)
+class SourceBindingSchedulePreview:
+    binding_id: str
+    source_plugin_id: str
+    owner_type: str
+    owner_id: str
+    next_run_at: datetime
+    seconds_until_due: int
+
+
+@dataclass(frozen=True)
+class SchedulerLoopScheduleSummary:
+    active_bindings: int
+    active_scheduled_bindings: int
+    cooling_down_bindings: int
+    unscheduled_active_bindings: int
+    next_due_bindings: tuple[SourceBindingSchedulePreview, ...]
+
+
+@dataclass(frozen=True)
 class SchedulerLoopTickResult:
     started_at: datetime
     finished_at: datetime
@@ -62,6 +82,7 @@ class SchedulerLoopTickResult:
     persistence_failures: int
     emitted_events: int
     heartbeat_at: datetime
+    schedule_summary: SchedulerLoopScheduleSummary
     binding_results: tuple[SourceBindingLoopRunResult, ...]
 
 
@@ -99,6 +120,18 @@ class SourceBindingSchedulerLoopService:
         started_at = self._clock.now()
         started_monotonic = self._clock.monotonic()
         due_bindings = self._binding_service.list_due_bindings(now=started_at, limit=due_limit)
+        if due_bindings:
+            logger.info(
+                "Scheduler tick started: due_bindings=%s due_limit=%s bindings=%s",
+                len(due_bindings),
+                due_limit,
+                ",".join(item.binding_id for item in due_bindings),
+                extra={
+                    "due_bindings": len(due_bindings),
+                    "due_limit": due_limit,
+                    "binding_ids": [item.binding_id for item in due_bindings],
+                },
+            )
         binding_results: list[SourceBindingLoopRunResult] = []
 
         for binding in due_bindings:
@@ -115,6 +148,7 @@ class SourceBindingSchedulerLoopService:
         skipped_bindings = sum(1 for item in binding_results if item.skipped)
         persistence_failures = sum(1 for item in binding_results if item.persistence_failed)
         emitted_events = sum(1 for item in binding_results if item.event_published)
+        schedule_summary = self._build_schedule_summary(now=finished_at)
 
         return SchedulerLoopTickResult(
             started_at=started_at,
@@ -128,6 +162,7 @@ class SourceBindingSchedulerLoopService:
             persistence_failures=persistence_failures,
             emitted_events=emitted_events,
             heartbeat_at=finished_at,
+            schedule_summary=schedule_summary,
             binding_results=tuple(binding_results),
         )
 
@@ -161,6 +196,21 @@ class SourceBindingSchedulerLoopService:
         started_at = self._clock.now()
         started_monotonic = self._clock.monotonic()
         request_id = f"scheduler-{uuid4().hex}"
+        logger.info(
+            "Scheduler binding started: binding_id=%s plugin_id=%s owner=%s:%s request_id=%s",
+            binding.binding_id,
+            binding.source_plugin_id,
+            binding.owner_type,
+            binding.owner_id,
+            request_id,
+            extra={
+                "binding_id": binding.binding_id,
+                "source_plugin_id": binding.source_plugin_id,
+                "owner_type": binding.owner_type,
+                "owner_id": binding.owner_id,
+                "request_id": request_id,
+            },
+        )
         metadata = freeze_json_mapping(
             {
                 "binding": {
@@ -250,6 +300,19 @@ class SourceBindingSchedulerLoopService:
                     run_status = PluginRunStatus.SUCCEEDED
                     captured_count = len(source_result.items)
                     output_summary = _summarize_source_fetch_result(source_result)
+                    logger.info(
+                        "Scheduler source fetch succeeded: binding_id=%s run_id=%s captured_count=%s request_id=%s",
+                        binding.binding_id,
+                        run.run_id,
+                        captured_count,
+                        request_id,
+                        extra={
+                            "binding_id": binding.binding_id,
+                            "run_id": run.run_id,
+                            "captured_count": captured_count,
+                            "request_id": request_id,
+                        },
+                    )
                 except asyncio.TimeoutError:
                     run_status = PluginRunStatus.TIMEOUT
                     error_summary = _error_to_summary(
@@ -263,6 +326,20 @@ class SourceBindingSchedulerLoopService:
                 except PluginRuntimeError as exc:
                     run_status = PluginRunStatus.FAILED
                     error_summary = _error_to_summary(exc)
+            if run_status != PluginRunStatus.SUCCEEDED:
+                logger.warning(
+                    "Scheduler source fetch did not succeed: binding_id=%s run_id=%s status=%s error_code=%s",
+                    binding.binding_id,
+                    run.run_id,
+                    run_status.value if run_status is not None else None,
+                    error_summary["code"] if error_summary is not None else None,
+                    extra={
+                        "binding_id": binding.binding_id,
+                        "run_id": run.run_id,
+                        "status": run_status.value if run_status is not None else None,
+                        "error_code": error_summary["code"] if error_summary is not None else None,
+                    },
+                )
 
             finished_at = self._clock.now()
             # schedule_policy 非法时清空 next_run_at，避免 active binding 因坏配置在每个 tick 被重复扫到。
@@ -301,12 +378,12 @@ class SourceBindingSchedulerLoopService:
                     error_code="SCHEDULER_PERSISTENCE_FAILED",
                 )
 
-            raw_event_persisted = self._persist_raw_events(
+            raw_event_summary = self._persist_raw_events(
                 binding=claimed_binding,
                 source_result=source_result,
                 run_id=finished.run_id,
             )
-            if not raw_event_persisted:
+            if raw_event_summary is False:
                 return SourceBindingLoopRunResult(
                     binding_id=binding.binding_id,
                     run_id=finished.run_id,
@@ -324,10 +401,34 @@ class SourceBindingSchedulerLoopService:
             if binding_updated is not None:
                 event_published = await self._publish_source_event(
                     binding=claimed_binding,
-                    source_result=source_result,
+                    source_result=_source_result_with_raw_event_trace(source_result, raw_event_summary),
                     request_id=request_id,
                     run_id=finished.run_id,
                 )
+            logger.info(
+                (
+                    "Scheduler binding completed: binding_id=%s run_id=%s status=%s "
+                    "captured_count=%s raw_event_created=%s raw_event_duplicate=%s event_published=%s next_run_at=%s"
+                ),
+                binding.binding_id,
+                finished.run_id,
+                run_status.value if run_status is not None else None,
+                captured_count,
+                raw_event_summary.created_count if raw_event_summary is not True else 0,
+                raw_event_summary.duplicate_count if raw_event_summary is not True else 0,
+                event_published,
+                next_run_at if binding_updated is not None else None,
+                extra={
+                    "binding_id": binding.binding_id,
+                    "run_id": finished.run_id,
+                    "status": run_status.value if run_status is not None else None,
+                    "captured_count": captured_count,
+                    "raw_event_created": raw_event_summary.created_count if raw_event_summary is not True else 0,
+                    "raw_event_duplicate": raw_event_summary.duplicate_count if raw_event_summary is not True else 0,
+                    "event_published": event_published,
+                    "next_run_at": next_run_at.isoformat() if next_run_at is not None else None,
+                },
+            )
             return SourceBindingLoopRunResult(
                 binding_id=binding.binding_id,
                 run_id=finished.run_id,
@@ -466,6 +567,20 @@ class SourceBindingSchedulerLoopService:
                 causation_id=run_id,
                 correlation_id=request_id,
             )
+            logger.info(
+                "Scheduler published source.event.captured: binding_id=%s run_id=%s request_id=%s item_count=%s",
+                binding.binding_id,
+                run_id,
+                request_id,
+                len(source_result.items),
+                extra={
+                    "topic": "source.event.captured",
+                    "binding_id": binding.binding_id,
+                    "run_id": run_id,
+                    "request_id": request_id,
+                    "item_count": len(source_result.items),
+                },
+            )
             return True
         except Exception as exc:
             logger.warning(
@@ -485,18 +600,33 @@ class SourceBindingSchedulerLoopService:
         binding: SourceBindingRecord,
         source_result: SourceFetchResult | None,
         run_id: str,
-    ) -> bool:
+    ) -> PersistSourceFetchResultSummary | bool:
         if self._raw_event_service is None or source_result is None or not source_result.items:
             return True
         try:
-            self._raw_event_service.persist_source_fetch_result(
+            summary = self._raw_event_service.persist_source_fetch_result(
                 source_plugin_id=binding.source_plugin_id,
                 result=source_result,
                 source_binding_id=binding.binding_id,
                 scheduler_run_id=run_id,
             )
             self._commit()
-            return True
+            logger.info(
+                "Scheduler persisted raw events: binding_id=%s run_id=%s total=%s created=%s duplicate=%s",
+                binding.binding_id,
+                run_id,
+                len(summary.items),
+                summary.created_count,
+                summary.duplicate_count,
+                extra={
+                    "binding_id": binding.binding_id,
+                    "run_id": run_id,
+                    "raw_event_total_count": len(summary.items),
+                    "raw_event_created_count": summary.created_count,
+                    "raw_event_duplicate_count": summary.duplicate_count,
+                },
+            )
+            return summary
         except Exception:
             self._rollback_safely(binding_id=binding.binding_id)
             logger.exception(
@@ -513,6 +643,31 @@ class SourceBindingSchedulerLoopService:
                 "Scheduler rollback failed after binding processing error.",
                 extra={"binding_id": binding_id},
             )
+
+    def _build_schedule_summary(self, *, now: datetime) -> SchedulerLoopScheduleSummary:
+        active_bindings = self._binding_service.count_active_bindings()
+        active_scheduled_bindings = self._binding_service.count_active_scheduled_bindings()
+        cooling_down_bindings = self._binding_service.count_cooling_down_bindings(now=now)
+        next_due_bindings = self._binding_service.list_next_scheduled_bindings(now=now, limit=3)
+        # 这个摘要只用于运行诊断，不改变 due 查询或调度状态机，避免可观测性代码影响抓取语义。
+        return SchedulerLoopScheduleSummary(
+            active_bindings=active_bindings,
+            active_scheduled_bindings=active_scheduled_bindings,
+            cooling_down_bindings=cooling_down_bindings,
+            unscheduled_active_bindings=max(0, active_bindings - active_scheduled_bindings),
+            next_due_bindings=tuple(
+                SourceBindingSchedulePreview(
+                    binding_id=item.binding_id,
+                    source_plugin_id=item.source_plugin_id,
+                    owner_type=item.owner_type,
+                    owner_id=item.owner_id,
+                    next_run_at=item.next_run_at,
+                    seconds_until_due=_seconds_until_due(item.next_run_at, now=now),
+                )
+                for item in next_due_bindings
+                if item.next_run_at is not None
+            ),
+        )
 
 
 @dataclass(frozen=True)
@@ -550,6 +705,51 @@ def _load_interval_policy(binding: SourceBindingRecord) -> IntervalSchedulePolic
         jitter_seconds=hint.jitter_seconds,
         enabled=hint.enabled,
         metadata=hint.metadata,
+    )
+
+
+def _seconds_until_due(next_run_at: datetime, *, now: datetime) -> int:
+    if next_run_at.tzinfo is None and now.tzinfo is not None:
+        next_run_at = next_run_at.replace(tzinfo=now.tzinfo)
+    if next_run_at.tzinfo is not None and now.tzinfo is None:
+        now = now.replace(tzinfo=next_run_at.tzinfo)
+    return max(0, int((next_run_at - now).total_seconds()))
+
+
+def _source_result_with_raw_event_trace(
+    source_result: SourceFetchResult | None,
+    raw_event_summary: PersistSourceFetchResultSummary | bool,
+) -> SourceFetchResult | None:
+    if source_result is None or raw_event_summary is True or raw_event_summary is False:
+        return source_result
+    traced_items = []
+    for item, persisted in zip(source_result.items, raw_event_summary.items, strict=False):
+        # worker 后续用这些 trace 字段把 Router Agent output 关联回 RawEvent；这里不改变插件原始 DTO，只补平台事实引用。
+        traced_items.append(
+            type(item)(
+                external_id=item.external_id,
+                url=item.url,
+                title=item.title,
+                content=item.content,
+                author=item.author,
+                published_at=item.published_at,
+                captured_at=item.captured_at,
+                raw_payload=item.raw_payload,
+                metadata={
+                    **dict(item.metadata),
+                    "raw_event_id": persisted.raw_event.raw_event_id,
+                    "source_event_id": persisted.raw_event.external_id,
+                    "capture_id": persisted.capture.capture_id,
+                    "source_binding_id": persisted.capture.source_binding_id,
+                    "scheduler_run_id": persisted.capture.scheduler_run_id,
+                    "request_id": persisted.capture.request_id,
+                },
+            )
+        )
+    return SourceFetchResult(
+        items=tuple(traced_items),
+        next_cursor=source_result.next_cursor,
+        metadata=source_result.metadata,
     )
 
 

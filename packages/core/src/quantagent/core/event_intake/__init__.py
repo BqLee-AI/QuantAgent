@@ -17,6 +17,7 @@ from quantagent.core.event_intake.decision import (
 )
 from quantagent.core.event_intake.model_config_invoker import ModelConfigStructuredModelInvoker
 from quantagent.core.event_intake.publisher import EventIntakeRoutedPublisher
+from quantagent.core.event_intake.persistence import EventIntakeRoutedEventStore, SqlAlchemyEventIntakeRoutedEventStore
 from quantagent.core.event_intake.runner import (
     EventIntakeRunResult,
     FakeStructuredModelInvoker,
@@ -35,6 +36,7 @@ __all__ = [
     "EventIntakeBudget",
     "EventIntakeDecisionV1",
     "EventIntakeRoutedPublisher",
+    "EventIntakeRoutedEventStore",
     "EventIntakeRunResult",
     "EventIntakeValidationError",
     "FakeStructuredModelInvoker",
@@ -45,6 +47,7 @@ __all__ = [
     "RelevanceRelationship",
     "ReviewOnlyStructuredModelInvoker",
     "SingleCallEventIntakeRunner",
+    "SqlAlchemyEventIntakeRoutedEventStore",
     "StructuredModelInvocation",
     "StructuredModelInvoker",
     "default_semiconductor_candidate",

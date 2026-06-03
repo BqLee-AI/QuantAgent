@@ -1,36 +1,30 @@
-import type {
-  RuntimeAuditMessage,
-  RuntimeAuditMessageGroup,
-} from '../../types';
+import type { RuntimeAuditNewsItem } from '../../types';
 import { RuntimeAuditEmptyState } from '../states/RuntimeAuditEmptyState';
-import { RuntimeAuditMessageGroup as RuntimeAuditMessageGroupItem } from './RuntimeAuditMessageGroup';
+import { RuntimeAuditMessage as RuntimeAuditNewsListItem } from './RuntimeAuditMessage';
 
 interface RuntimeAuditConversationProps {
-  groups: readonly RuntimeAuditMessageGroup[];
-  messages: readonly RuntimeAuditMessage[];
-  selectedMessageId: string | null;
-  onSelectMessage: (messageId: string) => void;
+  items: readonly RuntimeAuditNewsItem[];
+  selectedRawEventId: string | null;
+  onSelectNews: (rawEventId: string) => void;
 }
 
 export function RuntimeAuditConversation({
-  groups,
-  messages,
-  selectedMessageId,
-  onSelectMessage,
+  items,
+  selectedRawEventId,
+  onSelectNews,
 }: RuntimeAuditConversationProps) {
-  if (groups.length === 0) {
+  if (items.length === 0) {
     return <RuntimeAuditEmptyState />;
   }
 
   return (
-    <div className="grid gap-4">
-      {groups.map((group) => (
-        <RuntimeAuditMessageGroupItem
-          key={group.group_id}
-          group={group}
-          messages={messages.filter((message) => message.group_id === group.group_id)}
-          selectedMessageId={selectedMessageId}
-          onSelectMessage={onSelectMessage}
+    <div className="grid gap-3">
+      {items.map((item) => (
+        <RuntimeAuditNewsListItem
+          key={item.raw_event_id}
+          isSelected={selectedRawEventId === item.raw_event_id}
+          item={item}
+          onSelect={onSelectNews}
         />
       ))}
     </div>

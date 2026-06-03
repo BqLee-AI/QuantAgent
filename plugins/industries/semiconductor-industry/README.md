@@ -133,6 +133,7 @@ uv run python -m unittest packages/core/tests/test_registry.py
 ## 运行备注
 
 - 只启动 `uv run api` 不会触发这些 RSS 模板。
-- 要实际抓 RSS，需要单独启动 `scheduler`；要继续走 Readability 和 `industry.analysis.requested`，还需要单独启动 `worker`。
-- 默认 `EVENT_BUS_BACKEND=memory` 只适合单进程 smoke；`scheduler` 和 `worker` 分开进程验证时必须改用 Kafka。
+- 要实际抓 RSS，需要先运行 `uv run quantagent-source-bindings install-semiconductor-defaults` 把模板安装成 DB `SourceBinding`，再单独启动 `scheduler`。
+- 要继续走 Readability 和 `industry.analysis.requested`，还需要单独启动 `worker`。
+- 默认 `EVENT_BUS_BACKEND=kafka`；`memory` 只适合显式覆盖后的单进程 smoke，`scheduler` 和 `worker` 分开进程验证时必须使用 Kafka。
 - 2026-06-02 在当前开发环境里，`Micron`、`Marvell`、`SemiEngineering` 已通过真实 `scheduler.run_once()` smoke；`NVIDIA` 也已验证可抓，但需要把 `max_response_bytes` 提高到 `1048576`。

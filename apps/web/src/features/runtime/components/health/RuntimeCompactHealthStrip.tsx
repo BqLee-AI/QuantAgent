@@ -5,14 +5,12 @@ import { formatRuntimeAuditDate } from '../../utils';
 
 interface RuntimeCompactHealthStripProps {
   health: RuntimeAuditHealthSummary | null;
-  isFixtureMode: boolean;
   isRefreshing: boolean;
   onRefresh: () => void;
 }
 
 export function RuntimeCompactHealthStrip({
   health,
-  isFixtureMode,
   isRefreshing,
   onRefresh,
 }: RuntimeCompactHealthStripProps) {
@@ -23,13 +21,8 @@ export function RuntimeCompactHealthStrip({
           {health?.status ?? 'unknown'}
         </Chip>
         <span className="text-body-sm text-muted">
-          {health ? `${health.total_groups} 组审计样例 · ${formatRuntimeAuditDate(health.generated_at)}` : '尚未读取'}
+          {health ? `${health.total_items} 篇新闻 · ${formatRuntimeAuditDate(health.generated_at)}` : '尚未读取'}
         </span>
-        {isFixtureMode ? (
-          <Chip color="warning" size="sm" variant="soft">
-            fixture read model
-          </Chip>
-        ) : null}
       </div>
       <Button isDisabled={isRefreshing} size="sm" type="button" variant="outline" onPress={onRefresh}>
         {isRefreshing ? '刷新中...' : '刷新'}

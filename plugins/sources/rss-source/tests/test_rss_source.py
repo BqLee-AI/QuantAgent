@@ -394,6 +394,70 @@ class RSSSourcePluginTestCase(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, "PLUGIN_FETCH_FAILED")
 
+    def test_multiple_feeds_continue_when_one_feed_fails(self) -> None:
+        rss_xml = RSS_FIXTURE.read_text(encoding="utf-8")
+
+        def partial_opener(request, *_args, **_kwargs):
+            url = getattr(request, "full_url", None) or request.get_full_url()
+            if url == "https://feeds.example.com/ok.xml":
+                return _FakeHTTPResponse(rss_xml)
+            raise RemoteDisconnected("Remote end closed connection without response")
+
+        _set_plugin_config(
+            self.plugin,
+            {
+                "feeds": [
+                    "https://feeds.example.com/fail.xml",
+                    "https://feeds.example.com/ok.xml",
+                ]
+            },
+        )
+        with patch.object(type(self.plugin), "opener", staticmethod(partial_opener)):
+            result = asyncio.run(
+                self.plugin.invoke(
+                    PluginInvokeRequest(
+                        capability="source.fetch",
+                        request_id="req-rss-partial-feed-failure",
+                    )
+                )
+            )
+
+        output = SourceFetchResult.from_mapping(result.output)
+        self.assertEqual(len(output.items), 2)
+        self.assertEqual(output.metadata["feed_count"], 2)
+        self.assertEqual(output.metadata["feed_success_count"], 1)
+        self.assertEqual(output.metadata["feed_failure_count"], 1)
+        self.assertEqual(output.metadata["feed_failures"][0]["feed_url"], "https://feeds.example.com/fail.xml")
+        self.assertEqual(output.metadata["feed_failures"][0]["code"], "PLUGIN_FETCH_FAILED")
+
+    def test_all_feed_failures_still_fail_binding(self) -> None:
+        def failing_opener(*_args, **_kwargs):
+            raise RemoteDisconnected("Remote end closed connection without response")
+
+        _set_plugin_config(
+            self.plugin,
+            {
+                "feeds": [
+                    "https://feeds.example.com/fail-a.xml",
+                    "https://feeds.example.com/fail-b.xml",
+                ]
+            },
+        )
+        with patch.object(type(self.plugin), "opener", staticmethod(failing_opener)):
+            with self.assertRaises(PluginRuntimeError) as raised:
+                asyncio.run(
+                    self.plugin.invoke(
+                        PluginInvokeRequest(
+                            capability="source.fetch",
+                            request_id="req-rss-all-feed-failures",
+                        )
+                    )
+                )
+
+        self.assertEqual(raised.exception.code, "PLUGIN_FETCH_FAILED")
+        self.assertIn("All configured RSS feeds failed", raised.exception.message)
+        self.assertEqual(len(raised.exception.details["feed_failures"]), 2)
+
     def test_invoke_offloads_blocking_fetch_from_event_loop(self) -> None:
         rss_xml = RSS_FIXTURE.read_text(encoding="utf-8")
 

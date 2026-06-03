@@ -1,34 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import type { RuntimeAuditMessage, RuntimeAuditMessageGroup } from '../types';
+import type { RuntimeAuditNewsItem } from '../types';
 
-export function useRuntimeAuditSelection(
-  groups: readonly RuntimeAuditMessageGroup[],
-  messages: readonly RuntimeAuditMessage[],
-) {
-  const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null);
+export function useRuntimeAuditSelection(items: readonly RuntimeAuditNewsItem[]) {
+  const [selectedRawEventId, setSelectedRawEventId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (selectedMessageId && messages.some((message) => message.id === selectedMessageId)) {
+    if (selectedRawEventId && items.some((item) => item.raw_event_id === selectedRawEventId)) {
       return;
     }
-    setSelectedMessageId(messages[0]?.id ?? null);
-  }, [messages, selectedMessageId]);
+    setSelectedRawEventId(items[0]?.raw_event_id ?? null);
+  }, [items, selectedRawEventId]);
 
-  const selectedMessage = useMemo(
-    () => messages.find((message) => message.id === selectedMessageId) ?? null,
-    [messages, selectedMessageId],
-  );
-
-  const selectedGroup = useMemo(
-    () => groups.find((group) => group.group_id === selectedMessage?.group_id) ?? null,
-    [groups, selectedMessage?.group_id],
+  const selectedNews = useMemo(
+    () => items.find((item) => item.raw_event_id === selectedRawEventId) ?? null,
+    [items, selectedRawEventId],
   );
 
   return {
-    selectedGroup,
-    selectedMessage,
-    selectedMessageId,
-    setSelectedMessageId,
+    selectedNews,
+    selectedRawEventId,
+    setSelectedRawEventId,
   };
 }

@@ -31,7 +31,7 @@
 | 数据库迁移 | Alembic |
 | 插件 manifest | `plugin.yaml` |
 | 插件配置 schema | Zod authoring + JSON Schema runtime validation |
-| 初版 Event Bus | 内存 fake 默认 + Kafka 可选运行时 |
+| 初版 Event Bus | Kafka 运行默认 + memory 测试 fake |
 | 后续 Event Bus 演进 | Kafka 扩展 outbox / replay / DLQ |
 | 初版插件热重载 | 支持 |
 | 前端插件配置 | 仅支持 schema 驱动表单 |
@@ -431,9 +431,9 @@ Plugin Discovery
 
 ### 初版 Event Bus 选择
 
-初版默认使用内存 fake，并在显式配置时启用 Kafka runtime。这样做的原因是 0 到 1 阶段仍需保留最小本地启动和单元测试体验，但 worker / scheduler / future runtime 又需要一个可跨进程复用的正式消息总线契约。
+初版运行态默认使用 Kafka runtime，`memory` fake 只保留给单元测试和单进程 smoke。这样做的原因是 RSS 抓取、worker 路由和后续 runtime audit 都依赖跨进程事件传递，默认 memory 会让 `scheduler` 与 `worker` 看起来都启动了但实际无法通信。
 
-设计时需要保留消息总线接口，避免业务代码直接依赖某个 backend 细节。当前 baseline 是“内存 fake 默认 + Kafka 可选运行时”，后续如果需要 outbox、replay、DLQ 或更强恢复语义，应继续沿 Kafka 路线在新 OpenSpec 中演进，而不是回到进程内 / Redis 双轨叙述。
+设计时需要保留消息总线接口，避免业务代码直接依赖某个 backend 细节。当前 baseline 是“Kafka 运行默认 + memory 测试 fake”，后续如果需要 outbox、replay、DLQ 或更强恢复语义，应继续沿 Kafka 路线在新 OpenSpec 中演进，而不是回到进程内 / Redis 双轨叙述。
 
 ## 跨语言共享边界
 

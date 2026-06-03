@@ -180,12 +180,17 @@ class SourceBindingSchedulerLoopServiceTestCase(unittest.IsolatedAsyncioTestCase
         )
 
         self.clock.advance(seconds=2)
-        result = await service.run_once()
+        with self.assertLogs("quantagent.core.scheduling.loop_service", level="INFO") as logs:
+            result = await service.run_once()
 
         self.assertEqual(result.due_bindings, 1)
         self.assertEqual(result.succeeded_runs, 1)
         self.assertEqual(result.failed_runs, 0)
         self.assertEqual(result.emitted_events, 1)
+        self.assertTrue(
+            any("Scheduler persisted raw events" in item for item in logs.output),
+            logs.output,
+        )
         self.assertEqual(len(result.binding_results), 1)
         binding_result = result.binding_results[0]
         self.assertEqual(binding_result.binding_id, binding.binding_id)
@@ -218,6 +223,16 @@ class SourceBindingSchedulerLoopServiceTestCase(unittest.IsolatedAsyncioTestCase
         self.assertEqual(self.event_handler.seen[0].causation_id, runs[0].run_id)
         self.assertEqual(self.event_handler.seen[0].payload["binding_id"], binding.binding_id)
         self.assertEqual(self.event_handler.seen[0].headers["binding_id"], binding.binding_id)
+        source_item_metadata = self.event_handler.seen[0].payload["items"][0]["metadata"]
+        self.assertEqual(source_item_metadata["raw_event_id"], raw_events[0].raw_event_id)
+        self.assertEqual(source_item_metadata["source_event_id"], "evt-1")
+        self.assertEqual(source_item_metadata["source_binding_id"], binding.binding_id)
+        self.assertEqual(source_item_metadata["scheduler_run_id"], runs[0].run_id)
+        self.assertEqual(source_item_metadata["request_id"], runs[0].request_id)
+        capture = self.raw_event_capture_repository.get(source_item_metadata["capture_id"])
+        self.assertIsNotNone(capture)
+        assert capture is not None
+        self.assertEqual(capture.raw_event_id, raw_events[0].raw_event_id)
 
     async def test_invalid_schedule_policy_records_failed_run_and_clears_next_run(self) -> None:
         registry = PluginRegistry(StaticScanner([]))
@@ -267,6 +282,74 @@ class SourceBindingSchedulerLoopServiceTestCase(unittest.IsolatedAsyncioTestCase
         self.assertEqual(len(runs), 1)
         self.assertEqual(runs[0].status, "failed")
         self.assertEqual(runs[0].failure_code, "PLUGIN_DTO_VALIDATION_FAILED")
+
+    async def test_run_once_without_due_bindings_reports_cooling_down_summary(self) -> None:
+        registry = PluginRegistry(StaticScanner([]))
+        self.binding_service.create_binding(
+            CreateSourceBindingInput(
+                binding_id="binding-next-rss",
+                owner_type="industry",
+                owner_id="semiconductor",
+                source_plugin_id="quantagent.official.source.rss",
+                effective_config_snapshot={
+                    "source_plugin_id": "quantagent.official.source.rss",
+                    "config": {"feeds": [{"url": "https://example.com/rss.xml"}]},
+                    "config_fingerprint": "fingerprint-next-rss",
+                    "template_refs": {"layers": ["semiconductor"]},
+                    "validated_at": "2026-06-01T08:00:00+00:00",
+                },
+                schedule_policy={"interval_seconds": 300},
+                retry_policy={"max_attempts": 1},
+                rate_limit_policy={"requests_per_window": 10, "window_seconds": 60},
+                next_run_at=self.clock.now() + timedelta(seconds=90),
+                created_by="test",
+            )
+        )
+        self.binding_service.create_binding(
+            CreateSourceBindingInput(
+                binding_id="binding-active-unscheduled",
+                owner_type="industry",
+                owner_id="semiconductor",
+                source_plugin_id="quantagent.official.source.rss",
+                effective_config_snapshot={
+                    "source_plugin_id": "quantagent.official.source.rss",
+                    "config": {},
+                    "config_fingerprint": "fingerprint-unscheduled",
+                    "template_refs": {"layers": ["semiconductor"]},
+                    "validated_at": "2026-06-01T08:00:00+00:00",
+                },
+                schedule_policy={"interval_seconds": 300},
+                retry_policy={"max_attempts": 1},
+                rate_limit_policy={"requests_per_window": 10, "window_seconds": 60},
+                next_run_at=None,
+                created_by="test",
+            )
+        )
+        service = SourceBindingSchedulerLoopService(
+            registry=registry,
+            runtime=PluginRuntimeService(),
+            binding_service=self.binding_service,
+            run_service=self.run_service,
+            clock=self.clock,
+            commit=self.session.commit,
+            rollback=self.session.rollback,
+            publisher=SourceEventPublisher(self.event_bus),
+            default_timeout_ms=30_000,
+        )
+
+        result = await service.run_once()
+
+        self.assertEqual(result.due_bindings, 0)
+        self.assertEqual(result.schedule_summary.active_bindings, 2)
+        self.assertEqual(result.schedule_summary.active_scheduled_bindings, 1)
+        self.assertEqual(result.schedule_summary.cooling_down_bindings, 1)
+        self.assertEqual(result.schedule_summary.unscheduled_active_bindings, 1)
+        self.assertEqual(len(result.schedule_summary.next_due_bindings), 1)
+        next_due = result.schedule_summary.next_due_bindings[0]
+        self.assertEqual(next_due.binding_id, "binding-next-rss")
+        self.assertEqual(next_due.source_plugin_id, "quantagent.official.source.rss")
+        self.assertEqual(next_due.owner_id, "semiconductor")
+        self.assertEqual(next_due.seconds_until_due, 90)
 
     async def test_concurrent_binding_runs_only_create_one_run_after_claim(self) -> None:
         class SourcePlugin(BasePlugin):

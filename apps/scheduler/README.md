@@ -80,20 +80,20 @@ scheduler 使用和 core 一致的 event bus 配置：
 
 默认本地行为：
 
-- `memory`
-  适合最小本地开发和无 Kafka 环境
 - `kafka`
-  需要显式配置 Kafka bootstrap servers
+  是运行态默认 backend；宿主机直跑默认连接 `127.0.0.1:19092`，Compose 内部默认连接 `kafka:9092`
+- `memory`
+  只适合单元测试或单进程 smoke，需要显式覆盖 `EVENT_BUS_BACKEND=memory`
 
 关键限制：
 
 - `memory` backend 只适合当前进程内 smoke，不适合把事件跨进程传给 worker
 - 如果 `scheduler` 和 `worker` 要分开进程完成主链路，必须改用 `kafka`
 
-如果需要启用 Kafka backend，安装时要带上 Kafka extra：
+scheduler 包已经依赖 `quantagent-core[kafka]`，本地同步依赖时会默认带上 Kafka client：
 
 ```bash
-uv sync --extra kafka --package quantagent-scheduler --package quantagent-core
+uv sync --package quantagent-scheduler
 ```
 
 ## 本地验证
@@ -106,7 +106,7 @@ uv run --package quantagent-scheduler python -m unittest discover -s apps/schedu
 
 当前测试验证：
 
-- composition root 默认走 `memory` backend
+- composition root 可显式覆盖到 `memory` backend
 - `run_once()` 会按 `SourceBinding` 扫描 due bindings
 - 成功 run 会写 `SchedulerRun`、回写 `next_run_at` 并发布 `source.event.captured`
 
@@ -123,8 +123,14 @@ uv run python -c 'import asyncio; from quantagent.scheduler.main import run_once
 跨进程调度：
 
 ```bash
+uv run quantagent-scheduler
+```
+
+如果需要显式覆盖 Kafka 地址：
+
+```bash
 EVENT_BUS_BACKEND=kafka \
-EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=localhost:9092 \
+EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS=127.0.0.1:19092 \
 uv run quantagent-scheduler
 ```
 

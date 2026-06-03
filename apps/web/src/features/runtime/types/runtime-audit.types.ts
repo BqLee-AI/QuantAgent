@@ -1,57 +1,17 @@
-export type RuntimeAuditDecision = 'discard' | 'review' | 'route';
+export type RuntimeAuditNewsStatus = 'captured' | 'linked' | 'pending' | 'routed' | 'unavailable';
 
-export type RuntimeAuditStatus = 'error' | 'pending' | 'success' | 'unavailable' | 'warning';
+export type RuntimeAuditNewsStage =
+  | 'captured'
+  | 'persisted'
+  | 'scheduler_linked'
+  | 'ai_intake_unavailable'
+  | 'ai_intake_routed'
+  | 'route_decided'
+  | 'route_unavailable';
 
-export type RuntimeAuditStage =
-  | 'analysis_requested'
-  | 'context_built'
-  | 'decision_validated'
-  | 'discarded'
-  | 'event_routed_published'
-  | 'failed'
-  | 'model_invoked'
-  | 'review_requested';
-
-export type RuntimeAuditActorType = 'agent' | 'event_bus' | 'model' | 'source' | 'system' | 'worker';
-
-export type RuntimeAuditPriority = 'high' | 'low' | 'normal' | 'urgent';
-
-export type RuntimeAuditBadge =
-  | 'degraded'
-  | 'partial_unavailable'
-  | 'provider_failed'
-  | 'rss_summary_only'
-  | 'schema_invalid';
-
-export type RuntimeAuditRelatedRefKind =
-  | 'agent_run'
-  | 'event_topic'
-  | 'runtime_error'
-  | 'scheduler_run'
-  | 'tool_invocation';
-
-export interface RuntimeAuditTrace {
-  analysis_request_id?: string;
-  binding_id?: string;
-  correlation_id?: string;
-  event_id?: string;
-  raw_event_id?: string;
-  request_id?: string;
-  routed_event_id?: string;
-  source_message_id?: string;
-  trace_id?: string;
-}
-
-export interface RuntimeAuditEvidenceRef {
-  field_path: string;
-  label: string;
-}
-
-export interface RuntimeAuditRelatedRef {
-  id: string;
-  kind: RuntimeAuditRelatedRefKind;
-  label: string;
-}
+export type RuntimeAuditTimelineStatus = 'pending' | 'success' | 'unavailable' | 'warning';
+export type RuntimeAuditAgentStageStatus = 'failed' | 'pending' | 'success' | 'unavailable';
+export type RuntimeAuditAgentType = 'industry_main_agent' | 'router_agent';
 
 export type RuntimeAuditSafeValue =
   | RuntimeAuditSafeValue[]
@@ -61,34 +21,93 @@ export type RuntimeAuditSafeValue =
   | string
   | { [key: string]: RuntimeAuditSafeValue };
 
-export interface RuntimeAuditMessage {
-  actor_type: RuntimeAuditActorType;
-  badges: RuntimeAuditBadge[];
-  decision?: RuntimeAuditDecision;
-  evidence_refs: RuntimeAuditEvidenceRef[];
-  group_id: string;
-  id: string;
-  occurred_at: string | null;
-  priority?: RuntimeAuditPriority;
-  related_refs: RuntimeAuditRelatedRef[];
-  safe_details: Record<string, RuntimeAuditSafeValue> | null;
-  stage: RuntimeAuditStage;
-  status: RuntimeAuditStatus;
-  summary: string;
-  title: string;
-  trace: RuntimeAuditTrace;
+export interface RuntimeAuditNewsTrace {
+  binding_id: string | null;
+  correlation_id: string | null;
+  raw_event_id: string;
+  request_id: string | null;
+  run_id: string | null;
+  trace_id: string | null;
 }
 
-export interface RuntimeAuditMessageGroup {
-  decision?: RuntimeAuditDecision;
-  group_id: string;
-  industry: string;
-  message_ids: string[];
+export interface RuntimeAuditNewsRef {
+  id: string;
+  kind: string;
+  label: string;
+}
+
+export interface RuntimeAuditNewsTimelineStep {
+  label: string;
   occurred_at: string | null;
-  source_title: string;
-  status: RuntimeAuditStatus;
+  refs: RuntimeAuditNewsRef[];
+  status: RuntimeAuditTimelineStatus;
+  step_id: RuntimeAuditNewsStage;
   summary: string;
-  trace: RuntimeAuditTrace;
+}
+
+export interface RuntimeAuditAgentStage {
+  agent_name: string;
+  agent_type: RuntimeAuditAgentType;
+  key_fields: Record<string, RuntimeAuditSafeValue>;
+  output_json: Record<string, RuntimeAuditSafeValue> | null;
+  refs: RuntimeAuditNewsRef[];
+  stage_id: string;
+  status: RuntimeAuditAgentStageStatus;
+  summary: string;
+  unavailable_reason: string | null;
+}
+
+export interface RuntimeAuditNewsItem {
+  agent_stages: RuntimeAuditAgentStage[];
+  author: string | null;
+  canonical_url: string | null;
+  content_preview: string | null;
+  current_stage: RuntimeAuditNewsStage;
+  first_captured_at: string;
+  focus_stage: RuntimeAuditNewsStage;
+  last_captured_at: string;
+  published_at: string | null;
+  raw_event_id: string;
+  safe_details: Record<string, RuntimeAuditSafeValue>;
+  source_name: string | null;
+  source_plugin_id: string;
+  status: RuntimeAuditNewsStatus;
+  timeline: RuntimeAuditNewsTimelineStep[];
+  title: string | null;
+  trace: RuntimeAuditNewsTrace;
+  url_host: string | null;
+}
+
+export interface RuntimeAuditNewsListResponse {
+  generated_at: string;
+  items: RuntimeAuditNewsItem[];
+  next_cursor: string | null;
+}
+
+export interface RuntimeAuditFilters {
+  binding_id: string;
+  current_stage: RuntimeAuditNewsStage | 'all';
+  keyword: string;
+  request_id: string;
+  source_plugin_id: string;
+  status: RuntimeAuditNewsStatus | 'all';
+  time_from: string;
+  time_to: string;
+  trace_id: string;
+}
+
+export interface RuntimeAuditQueryParams {
+  binding_id?: string;
+  current_stage?: RuntimeAuditNewsStage;
+  cursor?: string;
+  keyword?: string;
+  limit?: number;
+  request_id?: string;
+  source_plugin_id?: string;
+  status?: RuntimeAuditNewsStatus;
+  time_from?: string;
+  time_to?: string;
+  trace_id?: string;
 }
 
 export interface RuntimeAuditHealthSummary {
@@ -96,33 +115,5 @@ export interface RuntimeAuditHealthSummary {
   label: string;
   partial_unavailable_count: number;
   status: 'degraded' | 'healthy' | 'unavailable';
-  total_groups: number;
-}
-
-export interface RuntimeAuditFilters {
-  decision: RuntimeAuditDecision | 'all';
-  event_id: string;
-  industry: string;
-  status: RuntimeAuditStatus | 'all';
-  time_from: string;
-  time_to: string;
-  trace_id: string;
-}
-
-export interface RuntimeAuditQueryParams {
-  decision?: RuntimeAuditDecision;
-  event_id?: string;
-  industry?: string;
-  status?: RuntimeAuditStatus;
-  time_from?: string;
-  time_to?: string;
-  trace_id?: string;
-}
-
-export interface RuntimeAuditMessagesResponse {
-  fixture_mode: boolean;
-  generated_at: string;
-  groups: RuntimeAuditMessageGroup[];
-  health: RuntimeAuditHealthSummary;
-  messages: RuntimeAuditMessage[];
+  total_items: number;
 }

@@ -1,19 +1,21 @@
 import { useEffect, useMemo, useState } from 'react';
 
-import { useRuntimeAuditMessagesQuery } from '../queries';
-import type { RuntimeAuditFilters } from '../types';
+import { useRuntimeAuditNewsQuery } from '../queries';
+import type { RuntimeAuditFilters, RuntimeAuditHealthSummary } from '../types';
+import { isRuntimeAuditPermissionDenied } from '../utils/runtime-audit-error';
 import {
   toRuntimeAuditFilters,
   toRuntimeAuditQueryParams,
 } from './use-runtime-audit-filters';
 import { useRuntimeAuditSelection } from './use-runtime-audit-selection';
-import { isRuntimeAuditPermissionDenied } from '../utils/runtime-audit-error';
 
 export function useRuntimeAuditPage(search: Partial<RuntimeAuditFilters> = {}) {
   const {
-    decision,
-    event_id: eventId,
-    industry,
+    binding_id: bindingId,
+    current_stage: currentStage,
+    keyword,
+    request_id: requestId,
+    source_plugin_id: sourcePluginId,
     status,
     time_from: timeFrom,
     time_to: timeTo,
@@ -22,15 +24,17 @@ export function useRuntimeAuditPage(search: Partial<RuntimeAuditFilters> = {}) {
   const [filters, setFilters] = useState<RuntimeAuditFilters>(() => toRuntimeAuditFilters(search));
   const normalizedSearchFilters = useMemo(
     () => toRuntimeAuditFilters({
-      decision,
-      event_id: eventId,
-      industry,
+      binding_id: bindingId,
+      current_stage: currentStage,
+      keyword,
+      request_id: requestId,
+      source_plugin_id: sourcePluginId,
       status,
       time_from: timeFrom,
       time_to: timeTo,
       trace_id: traceId,
     }),
-    [decision, eventId, industry, status, timeFrom, timeTo, traceId],
+    [bindingId, currentStage, keyword, requestId, sourcePluginId, status, timeFrom, timeTo, traceId],
   );
 
   useEffect(() => {
@@ -39,10 +43,20 @@ export function useRuntimeAuditPage(search: Partial<RuntimeAuditFilters> = {}) {
   }, [normalizedSearchFilters]);
 
   const queryParams = useMemo(() => toRuntimeAuditQueryParams(filters), [filters]);
-  const auditQuery = useRuntimeAuditMessagesQuery(queryParams);
-  const groups = auditQuery.data?.groups ?? [];
-  const messages = auditQuery.data?.messages ?? [];
-  const selection = useRuntimeAuditSelection(groups, messages);
+  const auditQuery = useRuntimeAuditNewsQuery(queryParams);
+  const items = useMemo(() => auditQuery.data?.items ?? [], [auditQuery.data?.items]);
+  const selection = useRuntimeAuditSelection(items);
+  const health = useMemo<RuntimeAuditHealthSummary | null>(() => {
+    if (!auditQuery.data) return null;
+    const unavailableCount = items.filter((item) => item.timeline.some((step) => step.status === 'unavailable')).length;
+    return {
+      generated_at: auditQuery.data.generated_at,
+      label: 'RawEvent news read model',
+      partial_unavailable_count: unavailableCount,
+      status: unavailableCount > 0 ? 'degraded' : 'healthy',
+      total_items: items.length,
+    };
+  }, [auditQuery.data, items]);
 
   function updateFilter<TKey extends keyof RuntimeAuditFilters>(
     key: TKey,
@@ -58,11 +72,9 @@ export function useRuntimeAuditPage(search: Partial<RuntimeAuditFilters> = {}) {
   return {
     auditQuery,
     filters,
-    groups,
-    health: auditQuery.data?.health ?? null,
+    health,
     isPermissionDenied: isRuntimeAuditPermissionDenied(auditQuery.error),
-    isFixtureMode: auditQuery.data?.fixture_mode ?? false,
-    messages,
+    items,
     queryParams,
     resetFilters,
     selection,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Protocol
@@ -13,6 +14,8 @@ from quantagent.core.worker_routing.models import (
     AnalysisRequestPayload,
     WorkerIndustryPublishResult,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class AnalysisRequestIdFactory(Protocol):
@@ -51,6 +54,26 @@ class IndustryAnalysisRequestedPublisher:
             retry_count=0,
         )
         await self.publisher.publish(envelope)
+        logger.info(
+            "Worker published industry.analysis.requested: message_id=%s source_message_id=%s binding_id=%s owner=%s:%s item_count=%s degraded=%s",
+            envelope.id,
+            payload.source_message_id,
+            payload.binding_id,
+            payload.owner_type,
+            payload.owner_id,
+            len(payload.items),
+            payload.degraded,
+            extra={
+                "topic": "industry.analysis.requested",
+                "message_id": envelope.id,
+                "source_message_id": payload.source_message_id,
+                "binding_id": payload.binding_id,
+                "owner_type": payload.owner_type,
+                "owner_id": payload.owner_id,
+                "item_count": len(payload.items),
+                "degraded": payload.degraded,
+            },
+        )
         return WorkerIndustryPublishResult(
             published=True,
             topic="industry.analysis.requested",

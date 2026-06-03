@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
 from quantagent.core.event_intake import (
+    EventIntakeRoutedEventStore,
     EventIntakeRoutedPublisher,
     EnrichmentStatus,
     ContentCompleteness,
@@ -12,6 +15,8 @@ from quantagent.core.event_intake import (
 )
 from quantagent.core.event_intake.decision import build_discard_decision, DiscardReason
 from quantagent.core.events import EventEnvelope
+
+logger = logging.getLogger(__name__)
 
 
 class AnalysisRequestIntakeAuditSink(Protocol):
@@ -35,12 +40,55 @@ class IndustryAnalysisRequestHandler:
     runner: SingleCallEventIntakeRunner
     routed_publisher: EventIntakeRoutedPublisher
     audit_sink: AnalysisRequestIntakeAuditSink
+    routed_event_store: EventIntakeRoutedEventStore | None = None
+    commit: Callable[[], None] | None = None
+    rollback: Callable[[], None] | None = None
 
     async def handle(self, envelope: EventEnvelope) -> None:
         contexts = self.context_builder.build_contexts(envelope)
+        logger.info(
+            "Worker AI intake started: analysis_request_id=%s binding_id=%s owner=%s:%s context_count=%s",
+            envelope.id,
+            envelope.headers.get("binding_id"),
+            envelope.payload.get("owner_type"),
+            envelope.payload.get("owner_id"),
+            len(contexts),
+            extra={
+                "analysis_request_id": envelope.id,
+                "binding_id": envelope.headers.get("binding_id"),
+                "owner_type": envelope.payload.get("owner_type"),
+                "owner_id": envelope.payload.get("owner_id"),
+                "context_count": len(contexts),
+            },
+        )
         for context in contexts:
             result = await self.runner.run(context)
             published = await self.routed_publisher.publish(result)
+            self._record_routed_event(envelope=published, result=result)
+            logger.info(
+                (
+                    "Worker AI intake routed: analysis_request_id=%s source_message_id=%s binding_id=%s "
+                    "item_index=%s decision=%s discard_reason=%s provider_calls=%s event_routed_message_id=%s"
+                ),
+                context.trace.analysis_request_id,
+                context.trace.source_message_id,
+                context.trace.binding_id,
+                context.trace.item_index,
+                result.decision.decision.value,
+                result.decision.discard_reason.value,
+                result.provider_invocation_count,
+                published.id,
+                extra={
+                    "analysis_request_id": context.trace.analysis_request_id,
+                    "source_message_id": context.trace.source_message_id,
+                    "binding_id": context.trace.binding_id,
+                    "item_index": context.trace.item_index,
+                    "decision": result.decision.decision.value,
+                    "discard_reason": result.decision.discard_reason.value,
+                    "provider_invocation_count": result.provider_invocation_count,
+                    "event_routed_message_id": published.id,
+                },
+            )
             self.audit_sink.record(
                 {
                     "analysis_request_id": context.trace.analysis_request_id,
@@ -109,13 +157,24 @@ class IndustryAnalysisRequestHandler:
                 ),
                 industry_candidates=(),
             )
-            published = await self.routed_publisher.publish(
-                EventIntakeRunResult(
-                    context=fallback_context,
-                    decision=decision,
-                    provider_invocation_count=0,
-                    invocation_metadata={"status": "malformed_analysis_request"},
-                )
+            fallback_result = EventIntakeRunResult(
+                context=fallback_context,
+                decision=decision,
+                provider_invocation_count=0,
+                invocation_metadata={"status": "malformed_analysis_request"},
+            )
+            published = await self.routed_publisher.publish(fallback_result)
+            self._record_routed_event(envelope=published, result=fallback_result)
+            logger.warning(
+                "Worker AI intake malformed request routed to discard: analysis_request_id=%s event_routed_message_id=%s",
+                envelope.id,
+                published.id,
+                extra={
+                    "analysis_request_id": envelope.id,
+                    "event_routed_message_id": published.id,
+                    "decision": decision.decision.value,
+                    "discard_reason": decision.discard_reason.value,
+                },
             )
             self.audit_sink.record(
                 {
@@ -130,3 +189,32 @@ class IndustryAnalysisRequestHandler:
                     "provider_invocation_count": 0,
                 }
             )
+
+    def _record_routed_event(self, *, envelope: EventEnvelope, result) -> None:
+        if self.routed_event_store is None:
+            return
+        try:
+            self.routed_event_store.record(envelope=envelope, result=result)
+            if self.commit is not None:
+                self.commit()
+            logger.info(
+                "Worker persisted event.routed read model: message_id=%s binding_id=%s decision=%s",
+                envelope.id,
+                envelope.headers.get("binding_id"),
+                envelope.headers.get("decision"),
+                extra={
+                    "message_id": envelope.id,
+                    "binding_id": envelope.headers.get("binding_id"),
+                    "decision": envelope.headers.get("decision"),
+                },
+            )
+        except Exception:
+            if self.rollback is not None:
+                self.rollback()
+            logger.exception(
+                "Worker failed to persist event.routed read model: message_id=%s binding_id=%s",
+                envelope.id,
+                envelope.headers.get("binding_id"),
+                extra={"message_id": envelope.id, "binding_id": envelope.headers.get("binding_id")},
+            )
+            raise

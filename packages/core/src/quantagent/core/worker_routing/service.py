@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 
 from quantagent.core.scheduling import SourceBindingRecord, SourceBindingService
@@ -13,6 +14,8 @@ from quantagent.core.worker_routing.models import (
     WorkerRouteStatus,
 )
 from quantagent.core.worker_routing.owner_resolver import OwnerRoutingResolutionError, SourceBindingOwnerResolver
+
+logger = logging.getLogger(__name__)
 
 
 class WorkerCapturedEventRoutingService:
@@ -64,6 +67,21 @@ class WorkerCapturedEventRoutingService:
             )
             self._record_if_terminal(result)
             return result
+        logger.info(
+            "Worker resolved source binding: message_id=%s binding_id=%s owner=%s:%s plugin_id=%s",
+            event.message_id,
+            binding.binding_id,
+            binding.owner_type,
+            binding.owner_id,
+            binding.source_plugin_id,
+            extra={
+                "message_id": event.message_id,
+                "binding_id": binding.binding_id,
+                "owner_type": binding.owner_type,
+                "owner_id": binding.owner_id,
+                "source_plugin_id": binding.source_plugin_id,
+            },
+        )
         try:
             target = self._owner_resolver.resolve(binding)
         except OwnerRoutingResolutionError as exc:
@@ -86,6 +104,23 @@ class WorkerCapturedEventRoutingService:
             return result
 
         analysis_request = await self._build_analysis_request(target=target, event=event)
+        logger.info(
+            "Worker analysis request built: message_id=%s binding_id=%s owner=%s:%s item_count=%s degraded=%s",
+            event.message_id,
+            analysis_request.binding_id,
+            analysis_request.owner_type,
+            analysis_request.owner_id,
+            len(analysis_request.items),
+            analysis_request.degraded,
+            extra={
+                "message_id": event.message_id,
+                "binding_id": analysis_request.binding_id,
+                "owner_type": analysis_request.owner_type,
+                "owner_id": analysis_request.owner_id,
+                "item_count": len(analysis_request.items),
+                "degraded": analysis_request.degraded,
+            },
+        )
         gateway_result = await self._industry_gateway.invoke(target=target, event=event, analysis_request=analysis_request)
         if gateway_result.status == "failed":
             return _route_result(

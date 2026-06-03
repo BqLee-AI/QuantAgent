@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import Select, and_, or_, select, update
+from sqlalchemy import Select, and_, func, or_, select, update
 from sqlalchemy.orm import Session
 
 from quantagent.core.db.models.source_binding import SourceBindingORM
@@ -29,6 +29,40 @@ class SourceBindingRepository:
             .where(SourceBindingORM.status == "active")
             .where(SourceBindingORM.next_run_at.is_not(None))
             .where(SourceBindingORM.next_run_at <= now)
+            .order_by(SourceBindingORM.next_run_at.asc(), SourceBindingORM.binding_id.asc())
+            .limit(_bounded_limit(limit))
+        )
+        return list(self._session.scalars(statement).all())
+
+    def count_active_bindings(self) -> int:
+        statement = select(func.count()).select_from(SourceBindingORM).where(SourceBindingORM.status == "active")
+        return int(self._session.scalar(statement) or 0)
+
+    def count_active_scheduled_bindings(self) -> int:
+        statement = (
+            select(func.count())
+            .select_from(SourceBindingORM)
+            .where(SourceBindingORM.status == "active")
+            .where(SourceBindingORM.next_run_at.is_not(None))
+        )
+        return int(self._session.scalar(statement) or 0)
+
+    def count_cooling_down_bindings(self, *, now: datetime) -> int:
+        statement = (
+            select(func.count())
+            .select_from(SourceBindingORM)
+            .where(SourceBindingORM.status == "active")
+            .where(SourceBindingORM.next_run_at.is_not(None))
+            .where(SourceBindingORM.next_run_at > now)
+        )
+        return int(self._session.scalar(statement) or 0)
+
+    def list_next_scheduled_bindings(self, *, now: datetime, limit: int = 3) -> list[SourceBindingORM]:
+        statement: Select[tuple[SourceBindingORM]] = (
+            select(SourceBindingORM)
+            .where(SourceBindingORM.status == "active")
+            .where(SourceBindingORM.next_run_at.is_not(None))
+            .where(SourceBindingORM.next_run_at > now)
             .order_by(SourceBindingORM.next_run_at.asc(), SourceBindingORM.binding_id.asc())
             .limit(_bounded_limit(limit))
         )

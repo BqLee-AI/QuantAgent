@@ -6,60 +6,66 @@ import {
 } from './runtime-audit-fixtures';
 
 describe('runtime audit fixtures', () => {
-  it('covers route, discard, review, degraded and schema-invalid examples', () => {
+  it('covers RawEvent-backed captured, routed and AI unavailable examples', () => {
     const response = createRuntimeAuditFixtureResponse();
 
-    expect(response.fixture_mode).toBe(true);
-    expect(response.groups.some((group) => group.decision === 'route')).toBe(true);
-    expect(response.groups.some((group) => group.decision === 'discard')).toBe(true);
-    expect(response.groups.some((group) => group.decision === 'review')).toBe(true);
-    expect(response.messages.some((message) => message.badges.includes('rss_summary_only'))).toBe(true);
-    expect(response.messages.some((message) => message.badges.includes('schema_invalid'))).toBe(true);
-    expect(response.health.partial_unavailable_count).toBeGreaterThan(0);
+    expect(response.items).toHaveLength(2);
+    expect(response.items.some((item) => item.status === 'routed')).toBe(true);
+    expect(response.items.some((item) => item.current_stage === 'scheduler_linked')).toBe(true);
+    expect(response.items.some((item) => item.timeline.some((step) => step.step_id === 'ai_intake_routed'))).toBe(true);
+    expect(response.items.some((item) => item.timeline.some((step) => step.step_id === 'route_decided'))).toBe(true);
+    expect(response.items.some((item) => item.timeline.some((step) => step.step_id === 'ai_intake_unavailable'))).toBe(true);
+    expect(response.items.some((item) => item.timeline.some((step) => step.step_id === 'route_unavailable'))).toBe(true);
+    expect(response.items.every((item) => item.agent_stages.some((stage) => stage.stage_id === 'router_agent'))).toBe(true);
+    expect(response.items.every((item) => item.agent_stages.some((stage) => stage.stage_id === 'industry_main_agent'))).toBe(true);
   });
 
-  it('filters groups and messages by decision', () => {
-    const response = filterRuntimeAuditFixtureResponse(
-      createRuntimeAuditFixtureResponse(),
-      { decision: 'discard' },
-    );
+  it('contains a reusable Router Agent output fixture for detail modal tests', () => {
+    const response = createRuntimeAuditFixtureResponse();
+    const routerStage = response.items[0]?.agent_stages.find((stage) => stage.stage_id === 'router_agent');
 
-    expect(response.groups).toHaveLength(1);
-    expect(response.groups[0]?.decision).toBe('discard');
-    expect(response.messages.every((message) => message.group_id === response.groups[0]?.group_id)).toBe(true);
+    expect(routerStage?.status).toBe('success');
+    expect(routerStage?.key_fields.short_summary).toBe('先进封装产能扩张直接影响半导体后段供给。');
+    expect(routerStage?.output_json?.schema_version).toBe('event_intake_decision.v1');
+    expect(routerStage?.output_json?.routing).toEqual(expect.objectContaining({
+      target_topics: ['advanced-packaging', 'memory'],
+    }));
   });
 
-  it('filters groups and messages by status, industry, event, trace and time range', () => {
+  it('filters news items by backend query params', () => {
     const response = filterRuntimeAuditFixtureResponse(
       createRuntimeAuditFixtureResponse(),
       {
-        event_id: 'EVT_CAPEX',
-        industry: 'SEMICONDUCTOR',
-        status: 'warning',
-        time_from: '2026-06-03T00:00:00.000Z',
-        time_to: '2026-06-03T01:00:00.000Z',
-        trace_id: 'TRACE_REVIEW',
+        binding_id: 'binding-runtime-001',
+        current_stage: 'scheduler_linked',
+        keyword: 'HBM',
+        request_id: 'req-capture-001',
+        source_plugin_id: 'quantagent.official.source.rss',
+        status: 'linked',
+        time_from: '2026-06-01T00:00:00.000Z',
+        time_to: '2026-06-01T23:59:59.000Z',
+        trace_id: 'trace-runtime-001',
       },
     );
 
-    expect(response.groups).toHaveLength(1);
-    expect(response.groups[0]?.group_id).toBe('audit-router-review-capex');
-    expect(response.messages.every((message) => message.group_id === 'audit-router-review-capex')).toBe(true);
+    expect(response.items).toHaveLength(1);
+    expect(response.items[0]?.raw_event_id).toBe('rawevt-runtime-001');
   });
 
-  it('ignores invalid time filter values instead of dropping all groups', () => {
+  it('ignores invalid time filter values instead of dropping all news items', () => {
     const response = filterRuntimeAuditFixtureResponse(
       createRuntimeAuditFixtureResponse(),
       { time_from: 'invalid-time' },
     );
 
-    expect(response.groups).toHaveLength(createRuntimeAuditFixtureResponse().groups.length);
+    expect(response.items).toHaveLength(createRuntimeAuditFixtureResponse().items.length);
   });
 
-  it('does not expose provider raw response in invalid fixture details', () => {
+  it('does not expose unsafe raw payload fixture details', () => {
     const response = createRuntimeAuditFixtureResponse();
-    const invalidMessage = response.messages.find((message) => message.id === 'msg-invalid-model');
+    const serialized = JSON.stringify(response.items[0]?.safe_details);
 
-    expect(invalidMessage?.safe_details?.provider_raw_response).toBe('[已脱敏]');
+    expect(serialized).not.toContain('must-redact');
+    expect(response.items[0]?.safe_details.raw_payload).toEqual({ secret: '[已脱敏]' });
   });
 });

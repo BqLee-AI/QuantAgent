@@ -45,7 +45,9 @@ from quantagent.api.routers.v1.register import (
 from quantagent.core.db.base import Base
 from quantagent.core.db.models.scheduler_run import SchedulerRunORM
 from quantagent.core.db.models.raw_event import RawEventORM
+from quantagent.core.db.models.raw_event_capture import RawEventCaptureORM
 from quantagent.core.db.models.source_binding import SourceBindingORM
+from quantagent.core.db.models.event_intake import EventIntakeRoutedEventORM
 from quantagent.core.model_config import FixedModelCallClient, ModelConfigCrypto, ModelTokenUsage
 from quantagent.core.model_config.service import ModelCallResult
 from quantagent.core.registry import PluginRegistry, PluginStatus, RegistryScanner
@@ -1848,6 +1850,140 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertIn("raw_payload", detail_body["data"])
         self.assertEqual(detail_body["data"]["raw_payload"]["url"], "https://example.com/articles/1")
 
+    def test_runtime_audit_news_returns_sanitized_raw_event_read_model(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            session = client.app.state.db_session_factory()
+            try:
+                self._seed_runtime_audit_news(session)
+                session.commit()
+            finally:
+                session.close()
+            self._login_with_client(client, settings)
+            response = client.get("/api/v1/runtime/audit/news", params={"limit": 20})
+
+        body = response.json()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(body["code"], 0)
+        items = body["data"]["items"]
+        self.assertGreaterEqual(len(items), 2)
+        first_item = items[0]
+        serialized_item = json.dumps(first_item, ensure_ascii=False)
+        self.assertEqual(first_item["raw_event_id"], "rawevt-runtime-002")
+        self.assertEqual(first_item["title"], "Advanced packaging capacity expands")
+        self.assertEqual(first_item["url_host"], "news.example.com")
+        self.assertEqual(first_item["status"], "captured")
+        self.assertEqual(first_item["current_stage"], "persisted")
+        self.assertEqual(first_item["focus_stage"], "ai_intake_unavailable")
+        self.assertIn("content_preview", first_item)
+        self.assertNotIn("content", first_item)
+        self.assertNotIn("raw_payload", first_item)
+        self.assertNotIn("very large full article body", serialized_item)
+        self.assertNotIn("secret-token", serialized_item)
+        self.assertIn("agent_stages", first_item)
+        router_stage = next(stage for stage in first_item["agent_stages"] if stage["stage_id"] == "router_agent")
+        self.assertEqual(router_stage["status"], "unavailable")
+        self.assertIsNone(router_stage["output_json"])
+        self.assertIn("尚未提供 Router Agent", router_stage["unavailable_reason"])
+        main_agent_stage = next(stage for stage in first_item["agent_stages"] if stage["stage_id"] == "industry_main_agent")
+        self.assertEqual(main_agent_stage["agent_type"], "industry_main_agent")
+        self.assertIsNone(main_agent_stage["output_json"])
+
+        timeline_by_step = {step["step_id"]: step for step in first_item["timeline"]}
+        self.assertEqual(timeline_by_step["ai_intake_unavailable"]["status"], "unavailable")
+        self.assertEqual(timeline_by_step["route_unavailable"]["status"], "unavailable")
+        self.assertIn("不展示伪造", timeline_by_step["ai_intake_unavailable"]["summary"])
+        self.assertNotIn("review", first_item)
+        self.assertNotIn("discard", first_item)
+
+        routed_item = next(item for item in items if item["raw_event_id"] == "rawevt-runtime-001")
+        self.assertEqual(routed_item["status"], "routed")
+        self.assertEqual(routed_item["current_stage"], "route_decided")
+        self.assertEqual(routed_item["focus_stage"], "route_decided")
+        router_stage = next(stage for stage in routed_item["agent_stages"] if stage["stage_id"] == "router_agent")
+        self.assertEqual(router_stage["status"], "success")
+        self.assertEqual(router_stage["key_fields"]["decision"], "route")
+        self.assertEqual(router_stage["key_fields"]["short_summary"], "HBM demand is directly relevant.")
+        self.assertEqual(router_stage["output_json"]["decision"], "route")
+        self.assertNotIn("full article body", json.dumps(router_stage["output_json"], ensure_ascii=False))
+        routed_timeline = {step["step_id"]: step for step in routed_item["timeline"]}
+        self.assertEqual(routed_timeline["ai_intake_routed"]["status"], "success")
+        self.assertEqual(routed_timeline["route_decided"]["status"], "success")
+        self.assertIn("已路由", routed_timeline["route_decided"]["summary"])
+
+    def test_runtime_audit_news_filters_by_backend_refs_and_time_range(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            session = client.app.state.db_session_factory()
+            try:
+                self._seed_runtime_audit_news(session)
+                session.commit()
+            finally:
+                session.close()
+            self._login_with_client(client, settings)
+            binding_response = client.get("/api/v1/runtime/audit/news", params={"binding_id": "binding-runtime-001"})
+            plugin_response = client.get(
+                "/api/v1/runtime/audit/news",
+                params={"source_plugin_id": "quantagent.official.source.rss"},
+            )
+            trace_response = client.get("/api/v1/runtime/audit/news", params={"trace_id": "trace-runtime-001"})
+            request_response = client.get("/api/v1/runtime/audit/news", params={"request_id": "req-capture-001"})
+            time_response = client.get(
+                "/api/v1/runtime/audit/news",
+                params={
+                    "time_from": "2026-06-02T00:00:00Z",
+                    "time_to": "2026-06-02T23:59:59Z",
+                },
+            )
+            stage_response = client.get("/api/v1/runtime/audit/news", params={"current_stage": "route_decided"})
+
+        self.assertEqual(binding_response.status_code, 200)
+        self.assertEqual(
+            [item["raw_event_id"] for item in binding_response.json()["data"]["items"]],
+            ["rawevt-runtime-001"],
+        )
+        self.assertEqual(plugin_response.status_code, 200)
+        self.assertEqual(len(plugin_response.json()["data"]["items"]), 2)
+        self.assertEqual(trace_response.status_code, 200)
+        self.assertEqual(trace_response.json()["data"]["items"][0]["trace"]["trace_id"], "trace-runtime-001")
+        self.assertEqual(request_response.status_code, 200)
+        self.assertEqual(request_response.json()["data"]["items"][0]["trace"]["request_id"], "req-capture-001")
+        self.assertEqual(time_response.status_code, 200)
+        self.assertEqual(
+            [item["raw_event_id"] for item in time_response.json()["data"]["items"]],
+            ["rawevt-runtime-002"],
+        )
+        self.assertEqual(stage_response.status_code, 200)
+        self.assertEqual(
+            [item["raw_event_id"] for item in stage_response.json()["data"]["items"]],
+            ["rawevt-runtime-001"],
+        )
+
+    def test_runtime_audit_news_requires_runtime_inspect_session(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        app = create_app(self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}"))
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            response = client.get("/api/v1/runtime/audit/news")
+
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"]["code"], "UNAUTHORIZED")
+
     def test_model_provider_create_masks_key_and_test_connection_records_usage(self) -> None:
         database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         database_file.close()
@@ -2948,6 +3084,7 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertIn("source-bindings", schema["paths"]["/api/v1/source-bindings/{binding_id}/actions/run-now"]["post"]["tags"])
         self.assertIn("runtime", schema["paths"]["/api/v1/scheduler-runs"]["get"]["tags"])
         self.assertIn("runtime", schema["paths"]["/api/v1/scheduler-runs/{run_id}"]["get"]["tags"])
+        self.assertIn("runtime", schema["paths"]["/api/v1/runtime/audit/news"]["get"]["tags"])
         self.assertNotIn("/api/v1/auth/test-actions/runtime-inspect", schema["paths"])
 
         login_schema = self._resolve_response_schema(schema, "/api/v1/auth/login", method="post")
@@ -3016,6 +3153,11 @@ class ApiAppTestCase(unittest.TestCase):
 
         scheduler_run_schema = self._resolve_response_schema(schema, "/api/v1/scheduler-runs/{run_id}")
         self.assertTrue({"code", "data", "msg", "error"}.issubset(scheduler_run_schema["properties"].keys()))
+
+        runtime_audit_news_schema = self._resolve_response_schema(schema, "/api/v1/runtime/audit/news")
+        self.assertTrue({"code", "data", "msg", "error"}.issubset(runtime_audit_news_schema["properties"].keys()))
+        runtime_audit_news_data_schema = self._resolve_schema_ref(schema, runtime_audit_news_schema["properties"]["data"])
+        self.assertTrue({"items", "next_cursor", "generated_at"}.issubset(runtime_audit_news_data_schema["properties"].keys()))
 
     def test_production_openapi_excludes_debug_routes(self) -> None:
         production_app = create_app(self._settings(APP_ENV="production"))
@@ -3150,6 +3292,244 @@ class ApiAppTestCase(unittest.TestCase):
 
         register_api_v1_protected_router(app, self.settings, router)
         return app
+
+    def _seed_runtime_audit_news(self, session) -> None:
+        session.add_all(
+            [
+                SourceBindingORM(
+                    binding_id="binding-runtime-001",
+                    owner_type="industry",
+                    owner_id="semiconductor",
+                    source_plugin_id="quantagent.official.source.rss",
+                    effective_config_snapshot={"feed": "https://example.com/rss"},
+                    schedule_policy={"interval_seconds": 300},
+                    retry_policy={"max_attempts": 3},
+                    rate_limit_policy={"requests_per_minute": 10},
+                    status="active",
+                    created_by="test",
+                    updated_by="test",
+                ),
+                SourceBindingORM(
+                    binding_id="binding-runtime-002",
+                    owner_type="industry",
+                    owner_id="semiconductor",
+                    source_plugin_id="quantagent.official.source.rss",
+                    effective_config_snapshot={"feed": "https://example.com/packaging.xml"},
+                    schedule_policy={"interval_seconds": 300},
+                    retry_policy={"max_attempts": 3},
+                    rate_limit_policy={"requests_per_minute": 10},
+                    status="active",
+                    created_by="test",
+                    updated_by="test",
+                ),
+                SchedulerRunORM(
+                    run_id="run-runtime-001",
+                    binding_id="binding-runtime-001",
+                    source_plugin_id="quantagent.official.source.rss",
+                    source_plugin_version=None,
+                    trigger_mode="scheduled",
+                    request_id="req-run-runtime-001",
+                    status="succeeded",
+                    started_at=datetime(2026, 6, 1, 9, 0, 0, tzinfo=UTC),
+                    finished_at=datetime(2026, 6, 1, 9, 0, 5, tzinfo=UTC),
+                    duration_ms=5000,
+                    captured_count=1,
+                    metadata_json={"trace_id": "trace-runtime-001", "correlation_id": "corr-runtime-001"},
+                ),
+                RawEventORM(
+                    raw_event_id="rawevt-runtime-001",
+                    source_plugin_id="quantagent.official.source.rss",
+                    external_id="entry-runtime-001",
+                    canonical_url="https://semis.example.com/news/hbm",
+                    title="HBM supply tightens",
+                    content="HBM supply chain update for semiconductor audit.",
+                    author="Memory Desk",
+                    published_at=datetime(2026, 6, 1, 8, 30, 0, tzinfo=UTC),
+                    first_captured_at=datetime(2026, 6, 1, 9, 0, 1, tzinfo=UTC),
+                    last_captured_at=datetime(2026, 6, 1, 9, 0, 2, tzinfo=UTC),
+                    raw_payload={"body": "full HBM body", "secret": "secret-token"},
+                    metadata_json={"source": "SemiWire", "feed": "memory", "trace_id": "trace-runtime-001"},
+                    canonical_dedupe_key="dedupe-runtime-001",
+                    dedupe_strategy="canonical_url",
+                    content_hash="hash-runtime-001",
+                    first_binding_id="binding-runtime-001",
+                    first_run_id="run-runtime-001",
+                    duplicate_capture_count=0,
+                    created_at=datetime(2026, 6, 1, 9, 0, 3, tzinfo=UTC),
+                    updated_at=datetime(2026, 6, 1, 9, 0, 3, tzinfo=UTC),
+                ),
+                EventIntakeRoutedEventORM(
+                    event_id="evt-routed-runtime-001",
+                    schema_version="event_intake_decision.v1",
+                    raw_event_id="rawevt-runtime-001",
+                    source_message_id="evt-source-runtime-001",
+                    analysis_request_id="evt-analysis-runtime-001",
+                    binding_id="binding-runtime-001",
+                    owner_type="industry",
+                    owner_id="semiconductor",
+                    request_id="req-1",
+                    correlation_id="corr-runtime-001",
+                    decision="route",
+                    discard_reason="not_discarded",
+                    status="success",
+                    summary="HBM demand is directly relevant.",
+                    output_json={
+                        "schema_version": "event_intake_decision.v1",
+                        "decision": "route",
+                        "discard_reason": "not_discarded",
+                        "quality": {
+                            "is_spam": False,
+                            "noise_flags": [],
+                            "content_completeness": "full",
+                            "enrichment_status": "succeeded",
+                            "confidence": 0.88,
+                        },
+                        "industry_relevance": [
+                            {
+                                "industry_id": "semiconductor",
+                                "relationship": "direct",
+                                "relevance_score": 0.91,
+                                "reason_summary": "HBM demand is directly relevant.",
+                            }
+                        ],
+                        "structured_news": {
+                            "canonical_title": "HBM demand update",
+                            "short_summary": "HBM demand is directly relevant.",
+                            "bullet_summary": ["HBM demand is directly relevant."],
+                            "event_type": "supply_demand",
+                            "entities": ["HBM"],
+                            "companies": [],
+                            "tickers": [],
+                            "technologies": ["HBM"],
+                            "products": ["memory"],
+                            "locations": [],
+                            "numbers": [],
+                            "time_horizon": "near_term",
+                            "source_facts": ["HBM demand and advanced packaging capacity tighten."],
+                            "uncertainties": [],
+                        },
+                        "routing": {
+                            "target_industries": ["semiconductor"],
+                            "target_topics": ["memory"],
+                            "priority": "high",
+                            "requires_deep_analysis": True,
+                            "requires_human_review": False,
+                            "dedupe_key_hint": "https://example.com/hbm",
+                        },
+                        "audit": {
+                            "reason_summary": "Direct semiconductor memory relevance.",
+                            "evidence_field_refs": ["article.title", "article.body_excerpt"],
+                            "schema_validation_status": "valid",
+                        },
+                        "source": {
+                            "plugin_id": "quantagent.official.source.rss",
+                            "binding_id": "binding-runtime-001",
+                            "url": "https://semis.example.com/news/hbm",
+                            "title": "HBM supply tightens",
+                            "published_at": "2026-06-01T08:30:00+00:00",
+                            "source_name": "SemiWire",
+                            "enrichment_status": "succeeded",
+                            "degraded_reason": None,
+                        },
+                        "article": {
+                            "content_completeness": "full",
+                            "body_content_available": True,
+                            "content_length_chars": 48,
+                            "excerpt_start": 0,
+                            "excerpt_end": 48,
+                        },
+                    },
+                    key_fields={
+                        "decision": "route",
+                        "discard_reason": "not_discarded",
+                        "short_summary": "HBM demand is directly relevant.",
+                        "event_type": "supply_demand",
+                        "target_industries": ["semiconductor"],
+                        "target_topics": ["memory"],
+                        "priority": "high",
+                        "requires_deep_analysis": True,
+                        "requires_human_review": False,
+                        "confidence": 0.88,
+                        "is_spam": False,
+                        "relevance": "semiconductor / direct / 0.91",
+                        "schema_validation_status": "valid",
+                    },
+                    source_snapshot={
+                        "plugin_id": "quantagent.official.source.rss",
+                        "binding_id": "binding-runtime-001",
+                        "url": "https://semis.example.com/news/hbm",
+                        "title": "HBM supply tightens",
+                        "published_at": "2026-06-01T08:30:00+00:00",
+                        "author": "Memory Desk",
+                        "language": "en",
+                        "feed_name": "memory",
+                        "source_name": "SemiWire",
+                        "source_tier": None,
+                        "enrichment_status": "succeeded",
+                        "degraded_reason": None,
+                    },
+                    article_snapshot={
+                        "title": "HBM supply tightens",
+                        "rss_summary": "HBM demand and advanced packaging capacity tighten.",
+                        "body_excerpt": "HBM demand and advanced packaging capacity tighten.",
+                        "body_content_available": True,
+                        "content_length_chars": 48,
+                        "excerpt_start": 0,
+                        "excerpt_end": 48,
+                        "content_completeness": "full",
+                    },
+                    provider_invocation_count=1,
+                    invocation_metadata={"status": "succeeded", "provider_metadata": {"model": "router-preview"}},
+                    created_at=datetime(2026, 6, 1, 9, 0, 6, tzinfo=UTC),
+                ),
+                RawEventORM(
+                    raw_event_id="rawevt-runtime-002",
+                    source_plugin_id="quantagent.official.source.rss",
+                    external_id="entry-runtime-002",
+                    canonical_url="https://news.example.com/articles/advanced-packaging",
+                    title="Advanced packaging capacity expands",
+                    content="Advanced packaging capacity expands across outsourced semiconductor assembly and test vendors.",
+                    author="Foundry Desk",
+                    published_at=datetime(2026, 6, 2, 7, 0, 0, tzinfo=UTC),
+                    first_captured_at=datetime(2026, 6, 2, 7, 1, 0, tzinfo=UTC),
+                    last_captured_at=datetime(2026, 6, 2, 7, 1, 2, tzinfo=UTC),
+                    raw_payload={"body": "very large full article body", "secret": "secret-token"},
+                    metadata_json={"source": "Packaging Daily", "feed": "advanced-packaging"},
+                    canonical_dedupe_key="dedupe-runtime-002",
+                    dedupe_strategy="canonical_url",
+                    content_hash="hash-runtime-002",
+                    first_binding_id="binding-runtime-002",
+                    first_run_id=None,
+                    duplicate_capture_count=1,
+                    created_at=datetime(2026, 6, 2, 7, 1, 3, tzinfo=UTC),
+                    updated_at=datetime(2026, 6, 2, 7, 1, 3, tzinfo=UTC),
+                ),
+                RawEventCaptureORM(
+                    capture_id="capture-runtime-001",
+                    raw_event_id="rawevt-runtime-001",
+                    source_plugin_id="quantagent.official.source.rss",
+                    source_binding_id="binding-runtime-001",
+                    scheduler_run_id="run-runtime-001",
+                    capture_dedupe_key="capture-dedupe-runtime-001",
+                    capture_status="captured",
+                    captured_at=datetime(2026, 6, 1, 9, 0, 1, tzinfo=UTC),
+                    request_id="req-capture-001",
+                    metadata_json={"trace_id": "trace-runtime-001", "correlation_id": "corr-runtime-001"},
+                ),
+                RawEventCaptureORM(
+                    capture_id="capture-runtime-002",
+                    raw_event_id="rawevt-runtime-002",
+                    source_plugin_id="quantagent.official.source.rss",
+                    source_binding_id="binding-runtime-002",
+                    scheduler_run_id=None,
+                    capture_dedupe_key="capture-dedupe-runtime-002",
+                    capture_status="captured",
+                    captured_at=datetime(2026, 6, 2, 7, 1, 0, tzinfo=UTC),
+                    request_id="req-capture-002",
+                    metadata_json={},
+                ),
+            ]
+        )
 
     def _login(self) -> None:
         response = self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})

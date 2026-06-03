@@ -1,22 +1,18 @@
-import type { ApiClient } from '@/shared/api';
+import { BaseApi, type ApiClient } from '@/shared/api';
 
-import {
-  createRuntimeAuditFixtureResponse,
-  filterRuntimeAuditFixtureResponse,
-} from '../utils/runtime-audit-fixtures';
 import type {
-  RuntimeAuditMessagesResponse,
+  RuntimeAuditApiContract,
+  RuntimeAuditNewsListResponse,
   RuntimeAuditQueryParams,
 } from './runtime-audit.contracts';
 
-export class RuntimeAuditApi {
-  // 当前 V1 只提供受控 fixture read model，用于验证审计流形态；不要伪装成生产 endpoint。
-  constructor(_apiClient: ApiClient) {}
+export class RuntimeAuditApi extends BaseApi implements RuntimeAuditApiContract {
+  constructor(apiClient: ApiClient) {
+    super(apiClient, { basePath: '/runtime/audit' });
+  }
 
-  async listAuditMessages(
-    params: RuntimeAuditQueryParams = {},
-  ): Promise<RuntimeAuditMessagesResponse> {
-    return filterRuntimeAuditFixtureResponse(createRuntimeAuditFixtureResponse(), params);
+  listAuditNews(params: RuntimeAuditQueryParams = {}): Promise<RuntimeAuditNewsListResponse> {
+    return this.get<RuntimeAuditNewsListResponse>('/news', { params: { ...params } });
   }
 }
 

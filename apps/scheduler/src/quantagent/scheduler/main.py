@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -26,6 +27,8 @@ from quantagent.core.scheduling import (
 )
 
 logger = logging.getLogger(__name__)
+_last_idle_log_at: datetime | None = None
+_last_idle_signature: tuple[object, ...] | None = None
 
 
 @dataclass(frozen=True)
@@ -85,8 +88,14 @@ def create_scheduler_app() -> SchedulerApp:
 
 
 async def run_once() -> SchedulerLoopTickResult:
+    _configure_logging()
     app = create_scheduler_app()
     try:
+        logger.info(
+            "Scheduler run_once started: backend=%s due_limit=%s",
+            app.runtime.backend,
+            settings.SCHEDULER_DUE_LIMIT,
+        )
         result = await app.run_once()
         _log_tick_result(result)
         return result
@@ -95,12 +104,19 @@ async def run_once() -> SchedulerLoopTickResult:
 
 
 def run() -> None:
+    _configure_logging()
     asyncio.run(_run_forever())
 
 
 async def _run_forever() -> None:
     app = create_scheduler_app()
     try:
+        logger.info(
+            "Scheduler service started: backend=%s poll_interval_seconds=%s due_limit=%s",
+            app.runtime.backend,
+            settings.SCHEDULER_POLL_INTERVAL_SECONDS,
+            settings.SCHEDULER_DUE_LIMIT,
+        )
         await app.run_forever()
     finally:
         await app.close()
@@ -111,8 +127,21 @@ def _repo_root() -> Path:
 
 
 def _log_tick_result(result: SchedulerLoopTickResult) -> None:
+    if result.due_bindings == 0 and result.failed_runs == 0 and result.persistence_failures == 0:
+        _log_idle_tick_result(result)
+        return
     logger.info(
-        "Scheduler tick completed.",
+        (
+            "Scheduler tick completed: due_bindings=%s processed_bindings=%s "
+            "succeeded_runs=%s failed_runs=%s emitted_events=%s duration_ms=%s next_due=%s"
+        ),
+        result.due_bindings,
+        result.processed_bindings,
+        result.succeeded_runs,
+        result.failed_runs,
+        result.emitted_events,
+        result.duration_ms,
+        _format_next_due(result),
         extra={
             "due_bindings": result.due_bindings,
             "processed_bindings": result.processed_bindings,
@@ -121,5 +150,80 @@ def _log_tick_result(result: SchedulerLoopTickResult) -> None:
             "persistence_failures": result.persistence_failures,
             "emitted_events": result.emitted_events,
             "duration_ms": result.duration_ms,
+            "next_due": _next_due_for_extra(result),
         },
+    )
+
+
+def _log_idle_tick_result(result: SchedulerLoopTickResult) -> None:
+    global _last_idle_log_at, _last_idle_signature
+
+    summary = result.schedule_summary
+    signature: tuple[object, ...] = (
+        summary.active_bindings,
+        summary.active_scheduled_bindings,
+        summary.cooling_down_bindings,
+        summary.unscheduled_active_bindings,
+        tuple((item.binding_id, item.next_run_at.isoformat()) for item in summary.next_due_bindings),
+    )
+    should_log = _last_idle_log_at is None or _last_idle_signature != signature
+    if not should_log:
+        idle_for_seconds = (result.finished_at - _last_idle_log_at).total_seconds()
+        should_log = idle_for_seconds >= settings.SCHEDULER_IDLE_LOG_INTERVAL_SECONDS
+    if not should_log:
+        return
+
+    _last_idle_log_at = result.finished_at
+    _last_idle_signature = signature
+    logger.info(
+        (
+            "Scheduler idle: active_bindings=%s cooling_down_bindings=%s "
+            "unscheduled_active_bindings=%s next_due=%s"
+        ),
+        summary.active_bindings,
+        summary.cooling_down_bindings,
+        summary.unscheduled_active_bindings,
+        _format_next_due(result),
+        extra={
+            "active_bindings": summary.active_bindings,
+            "active_scheduled_bindings": summary.active_scheduled_bindings,
+            "cooling_down_bindings": summary.cooling_down_bindings,
+            "unscheduled_active_bindings": summary.unscheduled_active_bindings,
+            "next_due": _next_due_for_extra(result),
+        },
+    )
+
+
+def _format_next_due(result: SchedulerLoopTickResult) -> str:
+    previews = result.schedule_summary.next_due_bindings
+    if not previews:
+        return "none"
+    return "; ".join(
+        (
+            f"{item.binding_id} plugin={item.source_plugin_id} owner={item.owner_type}:{item.owner_id} "
+            f"in={item.seconds_until_due}s at={item.next_run_at.isoformat()}"
+        )
+        for item in previews
+    )
+
+
+def _next_due_for_extra(result: SchedulerLoopTickResult) -> list[dict[str, object]]:
+    return [
+        {
+            "binding_id": item.binding_id,
+            "source_plugin_id": item.source_plugin_id,
+            "owner_type": item.owner_type,
+            "owner_id": item.owner_id,
+            "next_run_at": item.next_run_at.isoformat(),
+            "seconds_until_due": item.seconds_until_due,
+        }
+        for item in result.schedule_summary.next_due_bindings
+    ]
+
+
+def _configure_logging() -> None:
+    level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )

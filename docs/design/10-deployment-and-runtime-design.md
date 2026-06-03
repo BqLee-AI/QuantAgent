@@ -4,7 +4,7 @@
 
 **状态**：正式草案 v0.2  
 **范围**：Docker Compose、服务拆分、镜像策略、环境变量、runtime 目录、插件持久化、开发/生产启动方式、migration、日志、健康检查、消息总线演进  
-**当前约定**：部署目标为 Docker；初版保留 API、worker、scheduler、web 多入口；数据库使用 PostgreSQL；Event Bus 默认使用内存 fake，并通过 optional Kafka profile 提供跨进程运行时  
+**当前约定**：部署目标为 Docker；初版保留 API、worker、scheduler、web 多入口；数据库使用 PostgreSQL；Event Bus 运行态默认使用 Kafka，`memory` 只保留给单元测试和单进程 smoke
 **不包含**：Kubernetes、云厂商 Secret Manager、生产级监控告警平台、插件签名系统、真实交易所网络隔离
 
 ## 设计前提
@@ -24,7 +24,7 @@
 - Web 生产部署使用静态服务，不跑 Vite dev server。
 - `runtime/` 保存插件、配置、数据、日志和隔离依赖环境，不进入 Git。
 - 运行时依赖必须可重建、可审计、可隔离。
-- 普通本地开发默认使用内存 fake；需要跨进程分发时显式启用 Kafka profile。
+- 普通本地开发默认使用 Kafka，以便 scheduler / worker 跨进程分发；`memory` fake 只用于单元测试和单进程 smoke。
 
 ## Docker Compose 结构
 
@@ -37,7 +37,7 @@ api
 worker
 scheduler
 web
-kafka      # optional profile
+kafka
 ```
 
 启动依赖：
@@ -54,7 +54,7 @@ postgres
 - `api`、`worker`、`scheduler` 共用 Python runtime 镜像，用不同 command 启动。
 - `web` 使用独立前端构建镜像和静态服务。
 - `postgres` 使用持久化 volume。
-- `kafka` 作为 optional profile，不默认启用。
+- `kafka` 作为默认本地基础服务，支撑 worker / scheduler 跨进程事件分发。
 - `migrate` 执行 Alembic upgrade 后退出。
 
 ## 镜像策略
@@ -217,12 +217,12 @@ bun run dev
 
 ## Kafka Event Bus 运行时
 
-普通本地开发和单元测试默认使用内存 fake。需要跨进程分发时，Compose 提供 `kafka` optional profile。
+普通本地开发和运行态默认使用 Kafka。单元测试和单进程 smoke 可以显式覆盖为内存 fake；Compose 默认提供本地 broker。
 
 规则：
 
-- 初版不强制启用 Kafka。
-- Compose 可以提供 `kafka` service，但放在 optional profile。
+- 运行态默认启用 Kafka；如果只启动 API 且不触发事件消费，可以暂不启动 broker。
+- Compose 默认提供 `kafka` service；worker / scheduler 启动时必须等待 Kafka healthy。
 - `api` 不承担长期 consumer loop；`worker` / `scheduler` 作为 Event Bus composition root。
 - EventEnvelope、topic、correlation_id、causation_id、schema_version 在内存 fake 和 Kafka backend 间保持一致。
 - RawEvent / Event 持久化、outbox、replay、DLQ 数据库记录不在当前 phase。
@@ -240,7 +240,7 @@ bun run dev
 
 ## 当前推荐结论汇总
 
-- Docker Compose 初版包含 `postgres`、`migrate`、`api`、`worker`、`scheduler`、`web`，Kafka 作为 optional profile。
+- Docker Compose 初版包含 `postgres`、`migrate`、`api`、`worker`、`scheduler`、`web`、`kafka`。
 - API、worker、scheduler 共用 Python runtime 镜像，用不同 command 启动。
 - Web 独立构建并使用静态服务，不在生产跑 Vite dev server。
 - runtime 目录按 plugins、config、data、logs、plugin-envs 分开挂载。
