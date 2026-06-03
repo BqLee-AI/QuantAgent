@@ -15,6 +15,7 @@ class EventBusSettings:
     kafka_session_timeout_ms: int
     kafka_heartbeat_interval_ms: int
     kafka_max_poll_interval_ms: int
+    kafka_consumer_concurrency: int
     topic_prefix: str
 
     @classmethod
@@ -27,6 +28,7 @@ class EventBusSettings:
             kafka_session_timeout_ms=app_settings.EVENT_BUS_KAFKA_SESSION_TIMEOUT_MS,
             kafka_heartbeat_interval_ms=app_settings.EVENT_BUS_KAFKA_HEARTBEAT_INTERVAL_MS,
             kafka_max_poll_interval_ms=app_settings.EVENT_BUS_KAFKA_MAX_POLL_INTERVAL_MS,
+            kafka_consumer_concurrency=app_settings.EVENT_BUS_KAFKA_CONSUMER_CONCURRENCY,
             topic_prefix=app_settings.EVENT_BUS_TOPIC_PREFIX,
         )
         resolved.validate()

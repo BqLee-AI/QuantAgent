@@ -77,8 +77,11 @@ class FakeProducer:
 
 
 class FakeMessage:
-    def __init__(self, value: bytes) -> None:
+    def __init__(self, value: bytes, *, topic: str = "source.event.captured", partition: int = 0, offset: int = 0) -> None:
         self.value = value
+        self.topic = topic
+        self.partition = partition
+        self.offset = offset
 
 
 class FakeConsumer:
@@ -89,6 +92,7 @@ class FakeConsumer:
         self.stopped = False
         self.committed = False
         self.commit_count = 0
+        self.committed_offsets: list[object] = []
         self.messages: list[FakeMessage] = []
 
     async def start(self) -> None:
@@ -102,9 +106,10 @@ class FakeConsumer:
             await asyncio.sleep(3600)
         return self.messages.pop(0)
 
-    async def commit(self) -> None:
+    async def commit(self, offsets=None) -> None:
         self.committed = True
         self.commit_count += 1
+        self.committed_offsets.append(offsets)
 
 
 class SequencedConsumerFactory:
@@ -131,6 +136,23 @@ class DispatchingHandler:
 
     async def handle(self, envelope: EventEnvelope) -> None:
         self.seen.append(envelope.topic)
+
+
+class DelayedRecordingHandler:
+    def __init__(self, delays: dict[str, float]) -> None:
+        self._delays = delays
+        self.seen: list[str] = []
+        self.active = 0
+        self.max_active = 0
+
+    async def handle(self, envelope: EventEnvelope) -> None:
+        self.active += 1
+        self.max_active = max(self.max_active, self.active)
+        try:
+            await asyncio.sleep(self._delays.get(envelope.id, 0))
+            self.seen.append(envelope.id)
+        finally:
+            self.active -= 1
 
 
 class KafkaEventBusTestCase(unittest.IsolatedAsyncioTestCase):
@@ -380,7 +402,12 @@ class KafkaEventBusTestCase(unittest.IsolatedAsyncioTestCase):
             )
         )
         fake_consumer = FakeConsumer("source.event.captured", "industry.analysis.requested", group_id="group-a")
-        fake_consumer.messages.extend([FakeMessage(first), FakeMessage(second)])
+        fake_consumer.messages.extend(
+            [
+                FakeMessage(first, topic="source.event.captured", partition=0, offset=0),
+                FakeMessage(second, topic="industry.analysis.requested", partition=0, offset=1),
+            ]
+        )
         consumer = KafkaEventBusConsumer(
             bootstrap_servers="localhost:9092",
             client_id="quantagent-test",
@@ -451,13 +478,90 @@ class KafkaEventBusTestCase(unittest.IsolatedAsyncioTestCase):
                 handler=handler,
             )
         )
-        await asyncio.sleep(0)
+        await asyncio.sleep(0.05)
         task.cancel()
         with self.assertRaises(asyncio.CancelledError):
             await task
 
         self.assertEqual(handler.seen, ["source.event.captured", "industry.analysis.requested"])
-        self.assertEqual(fake_consumer.commit_count, 2)
+        self.assertGreaterEqual(fake_consumer.commit_count, 1)
+        self.assertIn(1, _committed_offset_values(fake_consumer.committed_offsets))
+
+    async def test_kafka_consume_forever_processes_messages_concurrently_and_commits_contiguous_offsets(self) -> None:
+        bootstrapper = KafkaTopicBootstrapper(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            topics=("source.event.captured",),
+            admin_factory=FakeAdmin,
+            topic_factory=FakeTopic,
+        )
+        codec_publisher = KafkaEventBusPublisher(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            producer_factory=FakeProducer,
+            topic_bootstrapper=bootstrapper,
+        )
+        first = codec_publisher._codec.encode(
+            EventEnvelope(
+                id="evt-slow",
+                topic="source.event.captured",
+                payload={"external_id": "news-1"},
+                producer="scheduler",
+                created_at="2026-05-30T00:00:00Z",
+            )
+        )
+        second = codec_publisher._codec.encode(
+            EventEnvelope(
+                id="evt-fast",
+                topic="source.event.captured",
+                payload={"external_id": "news-2"},
+                producer="scheduler",
+                created_at="2026-05-30T00:00:00Z",
+            )
+        )
+        fake_consumer = FakeConsumer("source.event.captured", group_id="group-a")
+        fake_consumer.messages.extend(
+            [
+                FakeMessage(first, topic="source.event.captured", partition=0, offset=0),
+                FakeMessage(second, topic="source.event.captured", partition=0, offset=1),
+            ]
+        )
+        consumer = KafkaEventBusConsumer(
+            bootstrap_servers="localhost:9092",
+            client_id="quantagent-test",
+            consumer_factory=lambda *topics, **kwargs: fake_consumer,
+            topic_bootstrapper=bootstrapper,
+            consumer_concurrency=2,
+        )
+        handler = DelayedRecordingHandler({"evt-slow": 0.02, "evt-fast": 0.0})
+
+        task = asyncio.create_task(
+            consumer.consume_forever(
+                topics=("source.event.captured",),
+                group_id="group-a",
+                handler=handler,
+            )
+        )
+        await asyncio.sleep(0.05)
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+
+        self.assertEqual(set(handler.seen), {"evt-slow", "evt-fast"})
+        self.assertEqual(handler.max_active, 2)
+        self.assertGreaterEqual(fake_consumer.commit_count, 1)
+        self.assertIn(2, _committed_offset_values(fake_consumer.committed_offsets))
+
+
+def _committed_offset_values(committed_offsets: list[object]) -> set[int]:
+    values: set[int] = set()
+    for offsets in committed_offsets:
+        if not isinstance(offsets, dict):
+            continue
+        for value in offsets.values():
+            if isinstance(value, int):
+                values.add(value)
+    return values
 
 
 if __name__ == "__main__":

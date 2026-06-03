@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
 import unittest
@@ -87,6 +88,43 @@ class _FakeRuntime:
                 )()
 
         return _Invocation(output=self._output, error_code=self._error_code)
+
+
+class _ConcurrencyRecordingRuntime:
+    def __init__(self, *, delay: float = 0.01) -> None:
+        self.active = 0
+        self.max_active = 0
+        self.invocation_count = 0
+        self._delay = delay
+
+    async def invoke(self, record, *, capability, request_id, config=None, input=None, metadata=None):
+        class _Invocation:
+            def __init__(self, *, output):
+                self.result = type("Result", (), {"output": output})()
+                self.error = None
+
+        self.active += 1
+        self.max_active = max(self.max_active, self.active)
+        self.invocation_count += 1
+        try:
+            await asyncio.sleep(self._delay)
+            return _Invocation(
+                output={
+                    "items": [
+                        {
+                            "url": (input or {}).get("url"),
+                            "title": f"enriched {self.invocation_count}",
+                            "content": "Long enriched article body " * 20,
+                            "metadata": {"canonical_url": (input or {}).get("url")},
+                            "raw_payload": {},
+                        }
+                    ],
+                    "next_cursor": None,
+                    "metadata": {"source": "readability"},
+                }
+            )
+        finally:
+            self.active -= 1
 
 
 class _RecordingAnalysisHandler:
@@ -216,6 +254,42 @@ class WorkerCapturedEventRoutingTestCase(unittest.IsolatedAsyncioTestCase):
             published.payload["items"][0]["enrichment_error_code"],
             "READABILITY_PLUGIN_NOT_REGISTERED",
         )
+
+    async def test_readability_enrichment_limits_article_concurrency(self) -> None:
+        readability_record = PluginRecord(
+            id="quantagent.official.source.readability",
+            source=PluginSource.OFFICIAL,
+            path=self._repo_plugin_path(),
+            status=PluginStatus.VALID,
+            manifest=PluginManifest(
+                id="quantagent.official.source.readability",
+                name="Readability Link Reader",
+                type=PluginType.SOURCE,
+                version="0.1.0",
+                entrypoint="src.readability_source:plugin",
+                capabilities=("source.fetch",),
+                config_schema="config.schema.json",
+            ),
+            config_schema_path=None,
+            last_error=None,
+        )
+        runtime = _ConcurrencyRecordingRuntime()
+        service = WorkerArticleEnrichmentService(
+            registry=_FakeRegistry(readability_record),
+            runtime=runtime,
+            article_concurrency=3,
+        )
+
+        items = await service.build_analysis_items(
+            owner_id="semiconductor",
+            event=decode_captured_source_event(
+                self._envelope(binding_id="binding-001", short_content=True, item_count=10)
+            ),
+        )
+
+        self.assertEqual(len(items), 10)
+        self.assertEqual(runtime.invocation_count, 10)
+        self.assertLessEqual(runtime.max_active, 3)
 
     async def test_missing_binding_id_is_controlled_failure(self) -> None:
         routing = WorkerCapturedEventRoutingService(
@@ -348,24 +422,26 @@ class WorkerCapturedEventRoutingTestCase(unittest.IsolatedAsyncioTestCase):
         binding_id: str | None,
         message_id: str = "evt-001",
         short_content: bool = False,
+        item_count: int = 1,
     ) -> EventEnvelope:
         payload = {
             "plugin_id": "quantagent.official.source.test",
             "items": [
                 {
-                    "external_id": "item-1",
-                    "url": "https://example.com/article",
-                    "title": "HBM Demand Surges",
+                    "external_id": f"item-{index}",
+                    "url": f"https://example.com/article-{index}",
+                    "title": f"HBM Demand Surges {index}",
                     "content": "short summary" if short_content else "This is a long enough body to avoid enrichment." * 8,
                     "metadata": {"source": "rss"},
                 }
+                for index in range(1, item_count + 1)
             ],
             "metadata": {"source": "rss"},
         }
         headers: dict[str, object] = {
             "request_id": "req-001",
             "plugin_id": "quantagent.official.source.test",
-            "item_count": 1,
+            "item_count": item_count,
         }
         if binding_id is not None:
             payload["binding_id"] = binding_id

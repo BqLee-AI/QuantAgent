@@ -35,6 +35,7 @@ from quantagent.core.worker_routing import (
     WorkerCapturedEventRoutingService,
 )
 from quantagent.worker.consumer import (
+    AnalysisRequestProcessingScope,
     CapturedSourceEventHandler,
     IndustryAnalysisRequestHandler,
     InMemoryAnalysisRequestIntakeAuditSink,
@@ -98,7 +99,8 @@ class WorkerApp:
 
 def create_worker_app() -> WorkerApp:
     runtime = create_worker_runtime()
-    session = create_session_factory()()
+    session_factory = create_session_factory()
+    session = session_factory()
     registry = PluginRegistry(
         RegistryScanner(
             official_root=_repo_root() / "plugins",
@@ -117,6 +119,7 @@ def create_worker_app() -> WorkerApp:
             enrichment_service=WorkerArticleEnrichmentService(
                 registry=registry,
                 runtime=plugin_runtime,
+                article_concurrency=settings.WORKER_ARTICLE_CONCURRENCY,
             ),
         ),
         audit_sink=InMemoryWorkerRouteAuditSink(),
@@ -133,6 +136,8 @@ def create_worker_app() -> WorkerApp:
         ),
         commit=session.commit,
         rollback=session.rollback,
+        article_concurrency=settings.WORKER_ARTICLE_CONCURRENCY,
+        processing_scope_factory=_build_analysis_processing_scope_factory(session_factory),
     )
     return WorkerApp(runtime=runtime, handler=handler, analysis_request_handler=analysis_request_handler, session=session)
 
@@ -169,6 +174,23 @@ def _build_intake_invoker(session: object):
         service = ModelConfigService(session, encryption_key=settings.MODEL_CONFIG_ENCRYPTION_KEY)
         return ModelConfigStructuredModelInvoker(service=service)
     return ReviewOnlyStructuredModelInvoker()
+
+
+def _build_analysis_processing_scope_factory(session_factory):
+    def create_scope() -> AnalysisRequestProcessingScope:
+        session = session_factory()
+        # 每篇 AI intake 使用独立 session；ModelConfigService 会在线程里记录 invocation，不能共享 worker 主 session。
+        return AnalysisRequestProcessingScope(
+            runner=SingleCallEventIntakeRunner(invoker=_build_intake_invoker(session)),
+            routed_event_store=SqlAlchemyEventIntakeRoutedEventStore(
+                EventIntakeRoutedEventRepository(session)
+            ),
+            commit=session.commit,
+            rollback=session.rollback,
+            close=session.close,
+        )
+
+    return create_scope
 
 
 def _configure_logging() -> None:

@@ -5,12 +5,14 @@ from quantagent.worker.consumer.captured_event_handler import (
 )
 from quantagent.worker.consumer.analysis_request_handler import (
     AnalysisRequestIntakeAuditSink,
+    AnalysisRequestProcessingScope,
     IndustryAnalysisRequestHandler,
     InMemoryAnalysisRequestIntakeAuditSink,
 )
 
 __all__ = [
     "AnalysisRequestIntakeAuditSink",
+    "AnalysisRequestProcessingScope",
     "CapturedSourceEventHandler",
     "IndustryAnalysisRequestHandler",
     "InMemoryAnalysisRequestIntakeAuditSink",

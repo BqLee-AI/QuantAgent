@@ -38,11 +38,13 @@ class Settings(BaseSettings):
     EVENT_BUS_KAFKA_SESSION_TIMEOUT_MS: int = 120000
     EVENT_BUS_KAFKA_HEARTBEAT_INTERVAL_MS: int = 3000
     EVENT_BUS_KAFKA_MAX_POLL_INTERVAL_MS: int = 900000
+    EVENT_BUS_KAFKA_CONSUMER_CONCURRENCY: int = Field(default=10, ge=1, le=128)
     EVENT_BUS_TOPIC_PREFIX: str = ""
     SCHEDULER_POLL_INTERVAL_SECONDS: float = 5.0
     SCHEDULER_DUE_LIMIT: int = 100
     SCHEDULER_RUN_TIMEOUT_MS: int | None = 30000
     SCHEDULER_IDLE_LOG_INTERVAL_SECONDS: float = 60.0
+    WORKER_ARTICLE_CONCURRENCY: int = Field(default=10, ge=1, le=64)
 
     @field_validator("RUNTIME_DIR", mode="before")
     @classmethod

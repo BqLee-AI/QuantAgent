@@ -70,7 +70,9 @@ worker 使用和 core 一致的 event bus 配置：
 - `EVENT_BUS_KAFKA_BOOTSTRAP_SERVERS`
 - `EVENT_BUS_KAFKA_CLIENT_ID`
 - `EVENT_BUS_KAFKA_DEFAULT_GROUP_ID`
+- `EVENT_BUS_KAFKA_CONSUMER_CONCURRENCY`
 - `EVENT_BUS_TOPIC_PREFIX`
+- `WORKER_ARTICLE_CONCURRENCY`
 
 默认本地行为：
 
@@ -84,6 +86,8 @@ worker 使用和 core 一致的 event bus 配置：
 - `memory` backend 只在当前进程内有效
 - 如果 `scheduler` 和 `worker` 分开进程运行，`memory` backend 不会把 `source.event.captured` 从 scheduler 传给 worker
 - 需要跨进程验证时，必须使用 `kafka`
+- `EVENT_BUS_KAFKA_CONSUMER_CONCURRENCY` 默认 `10`，限制同一 worker 进程最多同时处理的 Kafka 消息数；consumer 只提交每个 partition 上连续成功的 offset，避免乱序完成时跳过失败消息
+- `WORKER_ARTICLE_CONCURRENCY` 默认 `10`，限制 legacy batch 消息内按文章执行的 Readability / AI intake 并发数
 
 worker 包已经依赖 `quantagent-core[kafka]`，本地同步依赖时会默认带上 Kafka client：
 
@@ -113,6 +117,8 @@ uv run --package quantagent-worker python -m unittest discover -s apps/worker/sr
 AI intake 约束：
 
 - 每篇 article item 最多一次 provider invocation
+- 普通单篇 Kafka message 默认最多 10 条并发处理；单条 `industry.analysis.requested` 内多篇 article item 也默认最多 10 篇并发处理
+- 生产入口会为每篇 AI intake 创建独立 DB session，避免并发模型调用共享 SQLAlchemy session
 - 不允许 tool-call loop、multi-turn agent loop、二次网页抓取或模型分块总结
 - `event.routed` 列表型输出不包含完整正文；完整正文只存在于 bounded context 内供一次 intake 判断使用
 

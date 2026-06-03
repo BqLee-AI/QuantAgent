@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -23,6 +24,15 @@ class AnalysisRequestIntakeAuditSink(Protocol):
     def record(self, entry: dict[str, object]) -> None: ...
 
 
+@dataclass(frozen=True)
+class AnalysisRequestProcessingScope:
+    runner: SingleCallEventIntakeRunner
+    routed_event_store: EventIntakeRoutedEventStore | None = None
+    commit: Callable[[], None] | None = None
+    rollback: Callable[[], None] | None = None
+    close: Callable[[], None] | None = None
+
+
 @dataclass
 class InMemoryAnalysisRequestIntakeAuditSink:
     entries: list[dict[str, object]]
@@ -43,65 +53,50 @@ class IndustryAnalysisRequestHandler:
     routed_event_store: EventIntakeRoutedEventStore | None = None
     commit: Callable[[], None] | None = None
     rollback: Callable[[], None] | None = None
+    article_concurrency: int = 10
+    processing_scope_factory: Callable[[], AnalysisRequestProcessingScope] | None = None
 
     async def handle(self, envelope: EventEnvelope) -> None:
         contexts = self.context_builder.build_contexts(envelope)
+        concurrency = max(1, self.article_concurrency)
         logger.info(
-            "Worker AI intake started: analysis_request_id=%s binding_id=%s owner=%s:%s context_count=%s",
+            "Worker AI intake started: analysis_request_id=%s binding_id=%s owner=%s:%s context_count=%s concurrency=%s",
             envelope.id,
             envelope.headers.get("binding_id"),
             envelope.payload.get("owner_type"),
             envelope.payload.get("owner_id"),
             len(contexts),
+            concurrency,
             extra={
                 "analysis_request_id": envelope.id,
                 "binding_id": envelope.headers.get("binding_id"),
                 "owner_type": envelope.payload.get("owner_type"),
                 "owner_id": envelope.payload.get("owner_id"),
                 "context_count": len(contexts),
+                "article_concurrency": concurrency,
             },
         )
-        for context in contexts:
-            result = await self.runner.run(context)
-            published = await self.routed_publisher.publish(result)
-            self._record_routed_event(envelope=published, result=result)
+        if contexts:
+            semaphore = asyncio.Semaphore(concurrency)
+
+            async def process_bounded(context) -> None:
+                # 每篇文章独立处理，生产入口会给每个 scope 独立 DB session，避免并发模型调用共享 session。
+                async with semaphore:
+                    await self._process_context(envelope=envelope, context=context)
+
+            await asyncio.gather(*(process_bounded(context) for context in contexts))
             logger.info(
-                (
-                    "Worker AI intake routed: analysis_request_id=%s source_message_id=%s binding_id=%s "
-                    "item_index=%s decision=%s discard_reason=%s provider_calls=%s event_routed_message_id=%s"
-                ),
-                context.trace.analysis_request_id,
-                context.trace.source_message_id,
-                context.trace.binding_id,
-                context.trace.item_index,
-                result.decision.decision.value,
-                result.decision.discard_reason.value,
-                result.provider_invocation_count,
-                published.id,
+                "Worker AI intake batch completed: analysis_request_id=%s context_count=%s concurrency=%s",
+                envelope.id,
+                len(contexts),
+                concurrency,
                 extra={
-                    "analysis_request_id": context.trace.analysis_request_id,
-                    "source_message_id": context.trace.source_message_id,
-                    "binding_id": context.trace.binding_id,
-                    "item_index": context.trace.item_index,
-                    "decision": result.decision.decision.value,
-                    "discard_reason": result.decision.discard_reason.value,
-                    "provider_invocation_count": result.provider_invocation_count,
-                    "event_routed_message_id": published.id,
+                    "analysis_request_id": envelope.id,
+                    "context_count": len(contexts),
+                    "article_concurrency": concurrency,
                 },
             )
-            self.audit_sink.record(
-                {
-                    "analysis_request_id": context.trace.analysis_request_id,
-                    "source_message_id": context.trace.source_message_id,
-                    "binding_id": context.trace.binding_id,
-                    "owner_id": context.trace.owner_id,
-                    "item_index": context.trace.item_index,
-                    "decision": result.decision.decision.value,
-                    "discard_reason": result.decision.discard_reason.value,
-                    "event_routed_message_id": published.id,
-                    "provider_invocation_count": result.provider_invocation_count,
-                }
-            )
+            return
         if not contexts:
             decision = build_discard_decision(
                 trace={
@@ -164,7 +159,13 @@ class IndustryAnalysisRequestHandler:
                 invocation_metadata={"status": "malformed_analysis_request"},
             )
             published = await self.routed_publisher.publish(fallback_result)
-            self._record_routed_event(envelope=published, result=fallback_result)
+            self._record_routed_event(
+                envelope=published,
+                result=fallback_result,
+                routed_event_store=self.routed_event_store,
+                commit=self.commit,
+                rollback=self.rollback,
+            )
             logger.warning(
                 "Worker AI intake malformed request routed to discard: analysis_request_id=%s event_routed_message_id=%s",
                 envelope.id,
@@ -190,13 +191,84 @@ class IndustryAnalysisRequestHandler:
                 }
             )
 
-    def _record_routed_event(self, *, envelope: EventEnvelope, result) -> None:
-        if self.routed_event_store is None:
+    async def _process_context(self, *, envelope: EventEnvelope, context) -> None:
+        scope = self._create_processing_scope()
+        try:
+            result = await scope.runner.run(context)
+            published = await self.routed_publisher.publish(result)
+            self._record_routed_event(
+                envelope=published,
+                result=result,
+                routed_event_store=scope.routed_event_store,
+                commit=scope.commit,
+                rollback=scope.rollback,
+            )
+            logger.info(
+                (
+                    "Worker AI intake routed: analysis_request_id=%s source_message_id=%s binding_id=%s "
+                    "item_index=%s decision=%s discard_reason=%s provider_calls=%s event_routed_message_id=%s"
+                ),
+                context.trace.analysis_request_id,
+                context.trace.source_message_id,
+                context.trace.binding_id,
+                context.trace.item_index,
+                result.decision.decision.value,
+                result.decision.discard_reason.value,
+                result.provider_invocation_count,
+                published.id,
+                extra={
+                    "analysis_request_id": context.trace.analysis_request_id,
+                    "source_message_id": context.trace.source_message_id,
+                    "binding_id": context.trace.binding_id,
+                    "item_index": context.trace.item_index,
+                    "decision": result.decision.decision.value,
+                    "discard_reason": result.decision.discard_reason.value,
+                    "provider_invocation_count": result.provider_invocation_count,
+                    "event_routed_message_id": published.id,
+                },
+            )
+            self.audit_sink.record(
+                {
+                    "analysis_request_id": context.trace.analysis_request_id,
+                    "source_message_id": context.trace.source_message_id,
+                    "binding_id": context.trace.binding_id,
+                    "owner_id": context.trace.owner_id,
+                    "item_index": context.trace.item_index,
+                    "decision": result.decision.decision.value,
+                    "discard_reason": result.decision.discard_reason.value,
+                    "event_routed_message_id": published.id,
+                    "provider_invocation_count": result.provider_invocation_count,
+                }
+            )
+        finally:
+            if scope.close is not None:
+                scope.close()
+
+    def _create_processing_scope(self) -> AnalysisRequestProcessingScope:
+        if self.processing_scope_factory is not None:
+            return self.processing_scope_factory()
+        return AnalysisRequestProcessingScope(
+            runner=self.runner,
+            routed_event_store=self.routed_event_store,
+            commit=self.commit,
+            rollback=self.rollback,
+        )
+
+    def _record_routed_event(
+        self,
+        *,
+        envelope: EventEnvelope,
+        result,
+        routed_event_store: EventIntakeRoutedEventStore | None,
+        commit: Callable[[], None] | None,
+        rollback: Callable[[], None] | None,
+    ) -> None:
+        if routed_event_store is None:
             return
         try:
-            self.routed_event_store.record(envelope=envelope, result=result)
-            if self.commit is not None:
-                self.commit()
+            routed_event_store.record(envelope=envelope, result=result)
+            if commit is not None:
+                commit()
             logger.info(
                 "Worker persisted event.routed read model: message_id=%s binding_id=%s decision=%s",
                 envelope.id,
@@ -209,8 +281,8 @@ class IndustryAnalysisRequestHandler:
                 },
             )
         except Exception:
-            if self.rollback is not None:
-                self.rollback()
+            if rollback is not None:
+                rollback()
             logger.exception(
                 "Worker failed to persist event.routed read model: message_id=%s binding_id=%s",
                 envelope.id,

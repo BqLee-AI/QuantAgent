@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 class WorkerArticleEnrichmentService:
     registry: PluginRegistry
     runtime: PluginRuntimeService
+    article_concurrency: int = 10
 
     async def build_analysis_items(
         self,
@@ -32,18 +34,39 @@ class WorkerArticleEnrichmentService:
         if not isinstance(items, tuple | list):
             return ()
 
-        result_items: list[AnalysisRequestItem] = []
-        for index, raw_item in enumerate(items):
-            if not isinstance(raw_item, Mapping):
-                continue
-            result_items.append(
-                await self._enrich_item(
+        semaphore = asyncio.Semaphore(max(1, self.article_concurrency))
+
+        async def enrich_bounded(index: int, raw_item: Mapping[str, object]) -> AnalysisRequestItem:
+            # 并发边界按“文章”计数，而不是按 Kafka message；旧批量消息也不会被单篇慢网页拖住整批。
+            async with semaphore:
+                return await self._enrich_item(
                     owner_id=owner_id,
                     event=event,
                     raw_item=dict(raw_item),
                     item_index=index,
                 )
-            )
+
+        tasks = [
+            asyncio.create_task(enrich_bounded(index, raw_item))
+            for index, raw_item in enumerate(items)
+            if isinstance(raw_item, Mapping)
+        ]
+        if not tasks:
+            return ()
+        result_items = await asyncio.gather(*tasks)
+        logger.info(
+            "Worker enrichment batch completed: message_id=%s binding_id=%s item_count=%s concurrency=%s",
+            event.message_id,
+            event.binding_id,
+            len(result_items),
+            max(1, self.article_concurrency),
+            extra={
+                "message_id": event.message_id,
+                "binding_id": event.binding_id,
+                "item_count": len(result_items),
+                "article_concurrency": max(1, self.article_concurrency),
+            },
+        )
         return tuple(result_items)
 
     async def _enrich_item(

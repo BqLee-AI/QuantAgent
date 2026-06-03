@@ -50,6 +50,7 @@ def build_event_bus_runtime(settings: EventBusSettings) -> EventBusRuntime:
                 session_timeout_ms=settings.kafka_session_timeout_ms,
                 heartbeat_interval_ms=settings.kafka_heartbeat_interval_ms,
                 max_poll_interval_ms=settings.kafka_max_poll_interval_ms,
+                consumer_concurrency=settings.kafka_consumer_concurrency,
             ),
             backend="kafka",
         )

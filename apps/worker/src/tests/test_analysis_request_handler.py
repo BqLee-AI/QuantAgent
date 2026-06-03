@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import unittest
 
 from quantagent.core.event_intake import (
@@ -10,7 +11,11 @@ from quantagent.core.event_intake import (
     SingleCallEventIntakeRunner,
 )
 from quantagent.core.events import EventEnvelope, InMemoryEventBus
-from quantagent.worker.consumer import IndustryAnalysisRequestHandler, InMemoryAnalysisRequestIntakeAuditSink
+from quantagent.worker.consumer import (
+    AnalysisRequestProcessingScope,
+    IndustryAnalysisRequestHandler,
+    InMemoryAnalysisRequestIntakeAuditSink,
+)
 
 
 class _RecordingHandler:
@@ -28,6 +33,27 @@ class _RecordingRoutedEventStore:
     def record(self, *, envelope: EventEnvelope, result) -> object:
         self.records.append((envelope, result))
         return object()
+
+
+class _ConcurrencyRecordingInvoker:
+    def __init__(self, output: dict[str, object], *, delay: float = 0.01) -> None:
+        self._output = output
+        self._delay = delay
+        self.active = 0
+        self.max_active = 0
+        self.invocation_count = 0
+
+    async def invoke(self, *, context, output_schema: str):
+        from quantagent.core.event_intake import StructuredModelInvocation
+
+        self.active += 1
+        self.max_active = max(self.max_active, self.active)
+        self.invocation_count += 1
+        try:
+            await asyncio.sleep(self._delay)
+            return StructuredModelInvocation(output={**self._output, "schema_version": output_schema})
+        finally:
+            self.active -= 1
 
 
 class AnalysisRequestHandlerTestCase(unittest.IsolatedAsyncioTestCase):
@@ -112,7 +138,44 @@ class AnalysisRequestHandlerTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(routed_store.records), 1)
         self.assertEqual(commits, ["commit"])
 
-    def _analysis_request_envelope(self) -> EventEnvelope:
+    async def test_handler_limits_article_processing_concurrency(self) -> None:
+        bus = InMemoryEventBus()
+        recorder = _RecordingHandler()
+        await bus.subscribe(topics=("event.routed",), group_id="test", handler=recorder)
+        invoker = _ConcurrencyRecordingInvoker(self._route_output())
+        handler = IndustryAnalysisRequestHandler(
+            context_builder=IndustryEventContextBuilder(),
+            runner=SingleCallEventIntakeRunner(invoker=invoker),
+            routed_publisher=EventIntakeRoutedPublisher(bus),
+            audit_sink=InMemoryAnalysisRequestIntakeAuditSink(),
+            article_concurrency=3,
+            processing_scope_factory=lambda: AnalysisRequestProcessingScope(
+                runner=SingleCallEventIntakeRunner(invoker=invoker)
+            ),
+        )
+
+        await handler.handle(self._analysis_request_envelope(item_count=10))
+
+        self.assertEqual(invoker.invocation_count, 10)
+        self.assertLessEqual(invoker.max_active, 3)
+        self.assertEqual(len(recorder.seen), 10)
+
+    def _analysis_request_envelope(self, *, item_count: int = 1) -> EventEnvelope:
+        items = [
+            {
+                "url": f"https://example.com/hbm-{index}",
+                "title": f"HBM demand update {index}",
+                "summary_or_content": "HBM demand and advanced packaging capacity tighten.",
+                "enrichment_status": "succeeded",
+                "source_metadata": {
+                    "raw_event_id": f"rawevt-worker-{index:03d}",
+                    "source_event_id": f"entry-worker-{index:03d}",
+                    "source": "rss",
+                    "language": "en",
+                },
+            }
+            for index in range(1, item_count + 1)
+        ]
         return EventEnvelope(
             id="evt-analysis-1",
             topic="industry.analysis.requested",
@@ -126,20 +189,7 @@ class AnalysisRequestHandlerTestCase(unittest.IsolatedAsyncioTestCase):
                 "correlation_id": "corr-1",
                 "causation_id": "evt-source-1",
                 "degraded": False,
-                "items": [
-                    {
-                        "url": "https://example.com/hbm",
-                        "title": "HBM demand update",
-                        "summary_or_content": "HBM demand and advanced packaging capacity tighten.",
-                        "enrichment_status": "succeeded",
-                        "source_metadata": {
-                            "raw_event_id": "rawevt-worker-001",
-                            "source_event_id": "entry-worker-001",
-                            "source": "rss",
-                            "language": "en",
-                        },
-                    }
-                ],
+                "items": items,
             },
             producer="worker-industry-routing",
             created_at="2026-06-02T00:00:00Z",

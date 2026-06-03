@@ -262,6 +262,7 @@ uv run quantagent-source-event-replay replay --raw-event-id rawevt_xxx --clear-r
 - 回放不会删除 `raw_events` / `raw_event_captures`，只会重新发布 `source.event.captured`。
 - `--clear-routed` 只删除所选 RawEvent 对应的 `event_intake_routed_events` read model，用于回测重新观察；不要在生产环境随意使用。
 - worker 必须运行：`uv run quantagent-worker`。如果 worker 没启动，回放消息只会留在 Kafka 等待消费。
+- worker 默认最多同时处理 10 条 Kafka 消息，可通过 `EVENT_BUS_KAFKA_CONSUMER_CONCURRENCY` 调整；legacy batch 消息内的文章并发可通过 `WORKER_ARTICLE_CONCURRENCY` 调整。Kafka offset 只提交每个 partition 上连续成功的 offset，避免并发乱序完成造成消息丢失。
 
 ### AI intake 模型兼容要求
 

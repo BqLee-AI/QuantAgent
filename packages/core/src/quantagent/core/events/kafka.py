@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Iterable
+from dataclasses import dataclass, field
 from typing import Any
 
 from quantagent.core.events.codec import EventBusCodec
@@ -14,12 +15,14 @@ try:  # pragma: no cover - exercised via integration boundary or import failure 
     from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
     from aiokafka.admin import AIOKafkaAdminClient, NewTopic
     from aiokafka.errors import TopicAlreadyExistsError
+    from aiokafka.structs import TopicPartition
 except ImportError:  # pragma: no cover - depends on local optional dependency.
     AIOKafkaAdminClient = None
     AIOKafkaConsumer = None
     AIOKafkaProducer = None
     NewTopic = None
     TopicAlreadyExistsError = None
+    TopicPartition = None
 
 
 class KafkaTopicBootstrapper:
@@ -100,6 +103,76 @@ def _is_topic_already_exists_error(exc: Exception) -> bool:
     return error_type in {"TopicAlreadyExistsError", "TopicAlreadyExists"}
 
 
+@dataclass(frozen=True)
+class _HandledMessage:
+    message: Any
+
+
+@dataclass
+class _PartitionState:
+    next_commit_offset: int | None = None
+    completed_offsets: set[int] = field(default_factory=set)
+
+
+class _PartitionCommitTracker:
+    def __init__(self) -> None:
+        self._states: dict[object, _PartitionState] = {}
+
+    def mark_seen(self, message: Any) -> None:
+        key = _message_partition_key(message)
+        if key is None:
+            return
+        offset = _message_offset(message)
+        if offset is None:
+            return
+        state = self._states.setdefault(key, _PartitionState(next_commit_offset=offset))
+        if state.next_commit_offset is None or offset < state.next_commit_offset:
+            state.next_commit_offset = offset
+
+    def mark_completed(self, message: Any) -> None:
+        key = _message_partition_key(message)
+        offset = _message_offset(message)
+        if key is None or offset is None:
+            return
+        state = self._states.setdefault(key, _PartitionState(next_commit_offset=offset))
+        state.completed_offsets.add(offset)
+
+    async def commit_ready(self, consumer: Any) -> None:
+        offsets: dict[object, int] = {}
+        for key, state in self._states.items():
+            if state.next_commit_offset is None:
+                continue
+            next_offset = state.next_commit_offset
+            while next_offset in state.completed_offsets:
+                state.completed_offsets.remove(next_offset)
+                next_offset += 1
+            if next_offset != state.next_commit_offset:
+                state.next_commit_offset = next_offset
+                offsets[_to_topic_partition(key)] = next_offset
+        if offsets:
+            # 并发处理会乱序完成；只提交每个 partition 上连续完成的 offset，避免跳过失败消息。
+            await consumer.commit(offsets=offsets)
+
+
+def _message_partition_key(message: Any) -> tuple[str, int] | None:
+    topic = getattr(message, "topic", None)
+    partition = getattr(message, "partition", None)
+    if isinstance(topic, str) and isinstance(partition, int):
+        return topic, partition
+    return None
+
+
+def _message_offset(message: Any) -> int | None:
+    offset = getattr(message, "offset", None)
+    return offset if isinstance(offset, int) else None
+
+
+def _to_topic_partition(key: tuple[str, int]) -> object:
+    if TopicPartition is not None:
+        return TopicPartition(key[0], key[1])
+    return key
+
+
 class KafkaEventBusPublisher(EventBusPublisher):
     def __init__(
         self,
@@ -175,6 +248,7 @@ class KafkaEventBusConsumer(EventBusConsumer):
         session_timeout_ms: int = 120000,
         heartbeat_interval_ms: int = 3000,
         max_poll_interval_ms: int = 900000,
+        consumer_concurrency: int = 10,
     ) -> None:
         self._topic_policy = topic_policy or EventTopicPolicy()
         self._codec = codec or EventBusCodec()
@@ -192,6 +266,7 @@ class KafkaEventBusConsumer(EventBusConsumer):
         self._session_timeout_ms = session_timeout_ms
         self._heartbeat_interval_ms = heartbeat_interval_ms
         self._max_poll_interval_ms = max_poll_interval_ms
+        self._consumer_concurrency = max(1, consumer_concurrency)
 
     async def subscribe(
         self,
@@ -223,7 +298,7 @@ class KafkaEventBusConsumer(EventBusConsumer):
                 retryable=True,
             ) from exc
 
-        await self._dispatch_message(message=message, handler=handler, consumer=consumer)
+        await self._dispatch_message_and_commit(message=message, handler=handler, consumer=consumer)
 
     async def consume_forever(
         self,
@@ -243,8 +318,7 @@ class KafkaEventBusConsumer(EventBusConsumer):
 
         try:
             while True:
-                message = await consumer.getone()
-                await self._dispatch_message(message=message, handler=handler, consumer=consumer)
+                await self._consume_concurrently(consumer=consumer, handler=handler)
         except asyncio.CancelledError:
             raise
         except EventBusError:
@@ -265,7 +339,7 @@ class KafkaEventBusConsumer(EventBusConsumer):
             self._consumer_topics = None
             self._consumer_group_id = None
 
-    async def _dispatch_message(self, *, message: Any, handler: EventBusHandler, consumer: Any) -> None:
+    async def _dispatch_message(self, *, message: Any, handler: EventBusHandler) -> None:
         envelope = self._codec.decode(getattr(message, "value", message))
         try:
             await handler.handle(envelope)
@@ -279,7 +353,43 @@ class KafkaEventBusConsumer(EventBusConsumer):
                 details={"error_type": exc.__class__.__name__, "topic": envelope.topic},
                 retryable=True,
             ) from exc
+
+    async def _dispatch_message_and_commit(self, *, message: Any, handler: EventBusHandler, consumer: Any) -> None:
+        await self._dispatch_message(message=message, handler=handler)
         await consumer.commit()
+
+    async def _consume_concurrently(self, *, consumer: Any, handler: EventBusHandler) -> None:
+        tracker = _PartitionCommitTracker()
+        in_flight: set[asyncio.Task[_HandledMessage]] = set()
+        try:
+            while True:
+                while len(in_flight) < self._consumer_concurrency:
+                    try:
+                        # 如果已有消息正在处理，不为了填满并发槽位无限阻塞；先让已完成任务提交 offset。
+                        timeout = 0.01 if in_flight else None
+                        message = await asyncio.wait_for(consumer.getone(), timeout=timeout)
+                    except asyncio.TimeoutError:
+                        break
+                    tracker.mark_seen(message)
+                    in_flight.add(asyncio.create_task(self._handle_message_task(message=message, handler=handler)))
+
+                if not in_flight:
+                    continue
+                done, in_flight = await asyncio.wait(in_flight, return_when=asyncio.FIRST_COMPLETED)
+                for task in done:
+                    handled = task.result()
+                    tracker.mark_completed(handled.message)
+                await tracker.commit_ready(consumer)
+        except asyncio.CancelledError:
+            for task in in_flight:
+                task.cancel()
+            if in_flight:
+                await asyncio.gather(*in_flight, return_exceptions=True)
+            raise
+
+    async def _handle_message_task(self, *, message: Any, handler: EventBusHandler) -> "_HandledMessage":
+        await self._dispatch_message(message=message, handler=handler)
+        return _HandledMessage(message=message)
 
     async def _get_consumer(self, topics: tuple[str, ...], *, group_id: str) -> Any:
         if self._consumer is not None:
