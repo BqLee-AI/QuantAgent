@@ -6,6 +6,7 @@ from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
 from quantagent.agent.definitions.models import RuntimePolicy
 from quantagent.agent.runtime import AgentRuntime
+from quantagent.agent.runtime.errors import AgentRuntimeError
 from quantagent.agent.streaming.adapter import EventSequencer
 from quantagent.agent.testing import build_echo_platform_tool, build_echo_run_request
 
@@ -31,3 +32,14 @@ class DeepAgentsFactoryTest(TestCase):
 
         self.assertEqual(len(tools), 1)
         self.assertEqual(tools[0].name, "echo")
+
+    def test_runtime_rejects_unprofiled_tool_request(self) -> None:
+        runtime = AgentRuntime(tools=[build_echo_platform_tool()])
+        request = build_echo_run_request().model_copy(
+            update={
+                "tool_profile": build_echo_run_request().tool_profile.model_copy(update={"tool_bindings": []}),
+            }
+        )
+
+        with self.assertRaises(AgentRuntimeError):
+            runtime._build_langchain_tools(request, EventSequencer())

@@ -56,7 +56,7 @@ class ToolAdapter:
             if inspect.isawaitable(result):
                 result = await result
         except Exception as exc:  # noqa: BLE001
-            safe_error = f"{type(exc).__name__}: {str(exc)[:200]}"
+            safe_error = _safe_error_summary(exc)
             events.append(
                 self._sequencer.next(
                     agent_run_id=self._runtime_context.agent_run_id,
@@ -78,3 +78,9 @@ class ToolAdapter:
             )
         )
         return dict(result), events
+
+
+def _safe_error_summary(exc: Exception) -> str:
+    """错误摘要只保留类别，原始异常内容可能带 secret、路径、prompt 或 provider 请求。"""
+
+    return f"{type(exc).__name__}: tool execution failed"

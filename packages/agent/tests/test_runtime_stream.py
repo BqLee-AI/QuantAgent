@@ -41,3 +41,21 @@ class RuntimeStreamTest(TestCase):
             self.assertTrue(result.artifact_refs)
 
         asyncio.run(_run())
+
+    def test_runtime_failure_event_does_not_include_exception_text(self) -> None:
+        async def _bad_runner(request, sequencer, artifact_store):
+            raise RuntimeError("sk-secret prompt raw /tmp/private")
+            yield  # pragma: no cover
+
+        async def _run() -> None:
+            runtime = AgentRuntime(scripted_runner=_bad_runner)
+
+            events = [event async for event in runtime.run_stream(build_echo_run_request())]
+
+            failed = events[-1]
+            self.assertEqual(failed.type, AgentRunEventType.RUN_FAILED)
+            self.assertEqual(failed.payload["error"], "RuntimeError: agent runtime failed")
+            self.assertNotIn("sk-secret", str(failed.payload))
+            self.assertNotIn("prompt raw", failed.safe_summary or "")
+
+        asyncio.run(_run())

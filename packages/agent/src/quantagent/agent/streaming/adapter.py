@@ -31,14 +31,11 @@ class EventSequencer:
 
 
 def chunk_to_safe_summary(chunk: object) -> str:
-    """DeepAgents chunk 格式会随版本变化；MVP 只把未知 chunk 压缩成安全摘要。"""
+    """DeepAgents chunk 格式会随版本变化；未知 chunk 只返回形态摘要，避免泄露原文。"""
 
     if isinstance(chunk, str):
-        return chunk
+        return f"deepagents string chunk length={len(chunk)}"
     if isinstance(chunk, Mapping):
-        for key in ("content", "text", "message"):
-            value = chunk.get(key)
-            if isinstance(value, str):
-                return value
-        return f"deepagents chunk keys: {', '.join(str(key) for key in chunk.keys())}"
+        key_summary = ", ".join(str(key) for key in chunk.keys())
+        return f"deepagents mapping chunk keys=[{key_summary}]"
     return type(chunk).__name__
