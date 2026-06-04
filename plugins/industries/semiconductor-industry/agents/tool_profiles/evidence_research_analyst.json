@@ -1,0 +1,19 @@
+{
+  "profile_id": "quantagent.official.industry.semiconductor.tool_profile.evidence_research_analyst",
+  "permission_scope": "semiconductor-research-public-evidence",
+  "max_tool_calls": 6,
+  "tool_bindings": [
+    {
+      "tool_id": "quantagent.core.tool.get_run_context",
+      "name": "get_run_context",
+      "description": "Read bounded event and industry context for the current AgentRun.",
+      "risk_level": "low"
+    },
+    {
+      "tool_id": "quantagent.official.source.tavily.search_web",
+      "name": "search_web",
+      "description": "Search public web sources through the configured search plugin.",
+      "risk_level": "medium"
+    }
+  ]
+}

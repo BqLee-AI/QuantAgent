@@ -1,0 +1,21 @@
+companies:
+  - name: NVIDIA
+    tickers: ["NVDA"]
+    exposure: ["AI GPU", "data_center", "accelerator"]
+  - name: Micron
+    tickers: ["MU"]
+    exposure: ["DRAM", "NAND", "HBM"]
+  - name: TSMC
+    tickers: ["TSM"]
+    exposure: ["foundry", "advanced_process"]
+  - name: ASML
+    tickers: ["ASML"]
+    exposure: ["lithography", "equipment"]
+
+themes:
+  - id: ai_accelerator_demand
+    related_exposure: ["AI GPU", "data_center", "HBM", "advanced packaging"]
+  - id: foundry_capacity
+    related_exposure: ["foundry", "wafer capacity", "advanced_process"]
+  - id: memory_cycle
+    related_exposure: ["DRAM", "NAND", "HBM"]

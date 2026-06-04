@@ -1,0 +1,12 @@
+{
+  "subagent_id": "quantagent.official.industry.semiconductor.subagent.evidence_research_analyst",
+  "name": "evidence_research_analyst",
+  "description": "Researches public evidence for a routed semiconductor event and returns compact evidence artifacts.",
+  "system_prompt_path": "evidence_research_analyst.md",
+  "tool_profile_path": "../tool_profiles/evidence_research_analyst.json",
+  "skill_paths": [
+    "skills/evidence-research"
+  ],
+  "max_tool_calls": 6,
+  "output_schema_id": "quantagent.schema.evidence_research_report.v1"
+}

@@ -1,0 +1,14 @@
+{
+  "primary_earnings_event": {
+    "expected_intent": "propose_trade",
+    "submit_action_plan_calls": 1,
+    "requires_subagent": true,
+    "final_trade_decision": "submit_dry_run_open_long"
+  },
+  "media_follow_up_event": {
+    "expected_intent": "record_only",
+    "submit_action_plan_calls": 0,
+    "requires_subagent": false,
+    "final_trade_decision": "no_action_duplicate"
+  }
+}

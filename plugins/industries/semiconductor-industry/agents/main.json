@@ -1,0 +1,17 @@
+{
+  "agent_id": "quantagent.official.industry.semiconductor.agent.main",
+  "version": "0.1.0",
+  "name": "Semiconductor MainAgent",
+  "description": "PlannerExecutor controller for semiconductor industry event analysis.",
+  "system_prompt_path": "main.md",
+  "tool_profile_path": "tool_profiles/main.json",
+  "skill_paths": [
+    "skills/market-analysis"
+  ],
+  "subagents": [
+    {
+      "definition_path": "subagents/evidence_research_analyst.json"
+    }
+  ],
+  "output_schema_id": "quantagent.schema.industry_analysis.v1"
+}

@@ -1,0 +1,44 @@
+{
+  "profile_id": "quantagent.official.industry.semiconductor.tool_profile.main",
+  "permission_scope": "semiconductor-mainagent-mvp",
+  "max_tool_calls": 12,
+  "tool_bindings": [
+    {
+      "tool_id": "quantagent.core.tool.get_run_context",
+      "name": "get_run_context",
+      "description": "Read bounded context slices for the current AgentRun.",
+      "risk_level": "low"
+    },
+    {
+      "tool_id": "quantagent.official.source.tavily.search_web",
+      "name": "search_web",
+      "description": "Search public web sources through the configured search plugin.",
+      "risk_level": "medium"
+    },
+    {
+      "tool_id": "quantagent.core.tool.get_account_context",
+      "name": "get_account_context",
+      "description": "Read authorized account, policy, broker mode, and recent activity summaries.",
+      "risk_level": "medium"
+    },
+    {
+      "tool_id": "quantagent.core.tool.evaluate_thesis",
+      "name": "evaluate_thesis",
+      "description": "Evaluate evidence quality, materiality, novelty, prior coverage, confidence, and risk.",
+      "risk_level": "medium"
+    },
+    {
+      "tool_id": "quantagent.core.tool.build_action_plan",
+      "name": "build_action_plan",
+      "description": "Build a risk-controlled ActionPlan from analysis, evaluation, and account context IDs.",
+      "risk_level": "high"
+    },
+    {
+      "tool_id": "quantagent.core.tool.submit_action_plan",
+      "name": "submit_action_plan",
+      "description": "Submit an ActionPlan to policy, approval, notification, monitor, and broker mock/dry-run orchestration.",
+      "risk_level": "critical",
+      "requires_interrupt": true
+    }
+  ]
+}

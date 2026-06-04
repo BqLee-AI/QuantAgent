@@ -2,18 +2,25 @@
 
 这是一个官方 `industry` 插件，插件 ID 为 `quantagent.official.industry.semiconductor`。
 
-它的目标不是直接实现完整行业分析，而是先提供半导体 / 内存主链路所需的稳定 `source_bindings` 资产：
+它的目标不是直接执行完整行业分析，而是提供半导体 / 内存主链路所需的稳定行业资产：
 
 - required 的 RSS baseline feed 模板
 - optional 的 RSS expansion feed 模板
 - optional 的 Readability 正文增强模板
+- 半导体 MainAgent / Research SubAgent prompt 资产
+- MainAgent / Research SubAgent tool profile
+- 半导体行业 skill、mapping 和 NVDA 财报链路 fixture
 
 ## 资产边界
 
-这个行业包当前只负责：
+这个行业包当前只负责声明资产：
 
 - 在 `plugin.yaml` 中声明 `source_bindings` 元信息
 - 在 `templates/source_bindings/` 中提供默认模板文件
+- 在 `agents/` 中声明 MainAgent、Research SubAgent 和 tool profile
+- 在 `skills/` 中提供 DeepAgents skill 目录
+- 在 `mappings/` 中提供可交易标的和主题映射
+- 在 `fixtures/` 中提供无外部依赖的 NVDA 财报链路测试数据
 - 用 README 解释 required / optional 语义，以及模板里不要放什么
 
 它不负责：
@@ -21,7 +28,9 @@
 - effective config 合成
 - `SourceBinding` / `SchedulerRun` 持久化
 - scheduler loop、worker enrichment 编排或 Event Bus publish
-- 真实行业分析、评分、Decision、Approval 或 broker 执行
+- 直接创建 DeepAgents 或绕过 `AgentRuntime`
+- 真实行业分析运行、评分服务、Decision、Approval 或 broker 执行
+- 真实 Tavily secret、真实账户、真实通知或真实下单
 
 ## 目录结构
 
@@ -31,12 +40,54 @@ plugins/industries/semiconductor-industry/
   config.schema.json
   industry_plugin.py
   README.md
+  agents/
+    main.json
+    main.md
+    subagents/
+      evidence_research_analyst.json
+      evidence_research_analyst.md
+    tool_profiles/
+      main.json
+      evidence_research_analyst.json
+  skills/
+    market-analysis/SKILL.md
+    evidence-research/SKILL.md
+  mappings/
+    instruments.yaml
+  fixtures/
+    nvda_earnings_chain/
+      events.json
+      expected_flows.json
   templates/
     source_bindings/
       rss.baseline.yaml
       rss.expansion.yaml
       readability.default.yaml
 ```
+
+## Agent 资产说明
+
+`agents/main.json` 和 `agents/subagents/evidence_research_analyst.json` 是机器可读资产，测试或平台 loader 会把它们转换为通用 `AgentDefinition` / `SubAgentDefinition` / `ToolProfile`。Markdown 文件只承载 prompt 文本和人工可读说明。
+
+当前 MVP 只固定一个可选 SubAgent：
+
+| Agent | 可见工具 | 职责 |
+| --- | --- | --- |
+| MainAgent | `get_run_context`、`search_web`、`get_account_context`、`evaluate_thesis`、`build_action_plan`、`submit_action_plan` | PlannerExecutor 总控、证据收敛、评分、ActionPlan 提交和 `record_only` 判断 |
+| `evidence_research_analyst` | `get_run_context`、`search_web` | 多次窄 query、来源分层、EvidenceBoard / EvidenceResearchReport 压缩 |
+
+MainAgent 不直接面对通知、审批、broker 或监控底层工具。需要行动时只生成 / 引用 ActionPlan，并通过 `submit_action_plan` 进入平台策略、Policy Gate、mock/dry-run、通知和监控编排。
+
+Research SubAgent 不读取账户、不生成交易计划、不提交动作。自定义 SubAgent 是 DeepAgents `task` 创建的一次性执行单元，MainAgent 调用时必须给完整任务说明。
+
+## NVDA 财报 fixture
+
+`fixtures/nvda_earnings_chain/` 用来验证文档中的两事件链路：
+
+- T+5 一手财报公告：MainAgent 规划 todo，委派 Research SubAgent 产出 EvidenceBoard，经 `evaluate_thesis`、`build_action_plan`、`submit_action_plan` 形成 mock/dry-run 提交结果。
+- T+30 二手媒体报道：MainAgent 读取近期 action / notification，识别同主题已覆盖，最终 `record_only`，不生成 ActionPlan，不调用 `submit_action_plan`，不重复通知。
+
+这些 fixture 不包含真实 secret、真实账户、真实 broker 或真实模型调用。运行时由 `packages/agent` 的 scripted harness 驱动，用于验证 stream event、artifact 引用和工具调用边界。
 
 ## source_bindings 说明
 
@@ -126,9 +177,10 @@ plugins/industries/semiconductor-industry/
 
 ```bash
 uv run python -m unittest packages/core/tests/test_registry.py
+uv run --package quantagent-agent python -m unittest discover -s packages/agent/tests
 ```
 
-这里的验证目标是确认 Registry 能稳定读取半导体行业包的 `source_bindings` 元信息，而不是验证行业分析闭环。
+第一条验证 Registry 能稳定读取半导体行业包的 `source_bindings` 元信息。第二条验证 AgentRuntime、半导体 MainAgent fixture、工具 profile、ID-first artifact 和 NVDA 两事件 scripted flow。
 
 ## 运行备注
 

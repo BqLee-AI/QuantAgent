@@ -1,0 +1,32 @@
+{
+  "primary_earnings_event": {
+    "event_id": "evt_nvda_earnings_release_001",
+    "title": "NVIDIA reports quarterly results",
+    "source": "company investor relations",
+    "source_tier": "primary",
+    "published_at": "2026-08-20T20:00:00Z",
+    "observed_at": "2026-08-20T20:05:00Z",
+    "tickers": ["NVDA"],
+    "event_family": "quarterly_earnings",
+    "facts": [
+      "Revenue: 46.7B",
+      "Data center revenue: 41.1B",
+      "Gross margin: 73.5%",
+      "Next-quarter revenue guide: 50.0B +/- 2%"
+    ]
+  },
+  "media_follow_up_event": {
+    "event_id": "evt_nvda_media_beat_001",
+    "title": "NVIDIA beats expectations as AI demand surges",
+    "source": "financial media",
+    "source_tier": "secondary",
+    "published_at": "2026-08-20T20:31:00Z",
+    "observed_at": "2026-08-20T20:33:00Z",
+    "tickers": ["NVDA"],
+    "event_family": "quarterly_earnings",
+    "facts": [
+      "Media reports NVIDIA beat expectations.",
+      "Article attributes upside to data center AI demand."
+    ]
+  }
+}
