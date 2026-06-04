@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import binascii
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 import json
 from urllib.parse import urlsplit
@@ -24,7 +25,9 @@ from quantagent.core.db.models.raw_event_capture import RawEventCaptureORM
 from quantagent.core.db.models.scheduler_run import SchedulerRunORM
 from quantagent.core.db.repositories.event_intake_repository import EventIntakeRoutedEventRepository
 from quantagent.core.db.models.event_intake import EventIntakeRoutedEventORM
-from quantagent.core.events.codec import sanitize_mapping
+from quantagent.core.events.codec import REDACTED, sanitize_mapping
+
+_AUDIT_READ_MODEL_SENSITIVE_KEYWORDS = frozenset({"prompt", "raw_response"})
 
 
 class RuntimeAuditNewsQueryService:
@@ -443,7 +446,7 @@ def _build_agent_stages(
             agent_type="router_agent",
             status="success" if routed_event.status == "success" else "failed",
             summary=routed_event.summary or _route_decision_summary(routed_event),
-            key_fields=dict(routed_event.key_fields or {}),
+            key_fields=_json_safe_mapping(routed_event.key_fields),
             # 中文注释：Router output 允许展示结构化摘要，但必须先脱敏，避免未来新增字段把 secret / prompt / raw response 直接带到前端。
             output_json=_safe_output_json(routed_event.output_json),
             refs=[
@@ -555,13 +558,35 @@ def _safe_details(
             "captured_count": run.captured_count,
             "duration_ms": run.duration_ms,
         }
-    return details
+    return _json_safe_mapping(details)
 
 
 def _safe_output_json(value: object) -> dict[str, object]:
-    if not isinstance(value, dict):
+    if not isinstance(value, Mapping):
         return {}
-    return dict(sanitize_mapping(value))
+    return _json_safe_mapping(sanitize_mapping(value))
+
+
+def _json_safe_mapping(value: object) -> dict[str, object]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {
+        str(key): REDACTED if _is_audit_read_model_sensitive_key(str(key)) else _json_safe_value(item)
+        for key, item in value.items()
+    }
+
+
+def _json_safe_value(value: object) -> object:
+    if isinstance(value, Mapping):
+        return _json_safe_mapping(value)
+    if isinstance(value, Sequence) and not isinstance(value, str | bytes | bytearray):
+        return [_json_safe_value(item) for item in value]
+    return value
+
+
+def _is_audit_read_model_sensitive_key(key: str) -> bool:
+    normalized = key.lower()
+    return any(keyword in normalized for keyword in _AUDIT_READ_MODEL_SENSITIVE_KEYWORDS)
 
 
 def _content_preview(content: str | None) -> str | None:

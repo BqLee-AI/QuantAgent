@@ -106,6 +106,8 @@ def register_api_v1_routes(app: FastAPI, app_settings: Settings) -> None:
         register_api_v1_router(app, app_settings, registration)
 
     if not app_settings.is_production:
+        from quantagent.api.routers.v1.agent_debug import router as agent_debug_router
         from quantagent.api.routers.v1.debug import router as debug_router
 
         register_api_v1_protected_router(app, app_settings, debug_router)
+        register_api_v1_protected_router(app, app_settings, agent_debug_router)

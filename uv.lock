@@ -1686,6 +1686,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "pynacl" },
     { name = "python-dotenv" },
+    { name = "quantagent-agent" },
     { name = "quantagent-core" },
 ]
 
@@ -1695,6 +1696,7 @@ requires-dist = [
     { name = "pydantic-settings", specifier = ">=2.14.1" },
     { name = "pynacl", specifier = ">=1.5.0" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "quantagent-agent", editable = "packages/agent" },
     { name = "quantagent-core", editable = "packages/core" },
 ]
 

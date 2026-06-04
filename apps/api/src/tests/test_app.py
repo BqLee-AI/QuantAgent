@@ -690,6 +690,49 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(body["error"]["code"], "UNAUTHORIZED")
         self.assertEqual(response.headers["X-Request-ID"], body["error"]["request_id"])
 
+    def test_agent_debug_sse_streams_nvda_fixture_events(self) -> None:
+        self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+
+        with self.client.stream(
+            "POST",
+            "/api/v1/debug/agent-runs/fixtures/semiconductor-nvda-earnings/stream",
+            json={"scenario": "primary"},
+            headers={"Accept": "text/event-stream"},
+        ) as response:
+            body = "".join(response.iter_text())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/event-stream", response.headers["content-type"])
+        self.assertIn("event: run.started", body)
+        self.assertIn("event: todo.updated", body)
+        self.assertIn("event: subagent.started", body)
+        self.assertIn("event: tool.completed", body)
+        self.assertIn("event: artifact.created", body)
+        self.assertIn("event: run.completed", body)
+        self.assertIn('"trade_decision":"submit_dry_run_open_long"', body)
+        self.assertNotIn("sk-", body)
+        self.assertNotIn("traceback", body.lower())
+
+    def test_agent_debug_unknown_fixture_uses_envelope(self) -> None:
+        self.client.post("/api/v1/auth/login", json={"password": self.settings.AUTH_ADMIN_PASSWORD})
+
+        response = self.client.post("/api/v1/debug/agent-runs/fixtures/missing/stream", json={"scenario": "primary"})
+        body = response.json()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(body["error"]["code"], "BAD_REQUEST")
+        self.assertEqual(body["msg"], "未知 Agent debug fixture")
+
+    def test_agent_debug_routes_disabled_in_production(self) -> None:
+        production_app = create_app(self._settings(APP_ENV="production"))
+        with TestClient(production_app) as client:
+            response = client.post(
+                "/api/v1/debug/agent-runs/fixtures/semiconductor-nvda-earnings/stream",
+                json={"scenario": "primary"},
+            )
+
+        self.assertEqual(response.status_code, 404)
+
     def test_production_rejects_disabled_auth(self) -> None:
         with self.assertRaisesRegex(ValueError, "AUTH_ENABLED=false"):
             self._settings(
@@ -3601,6 +3644,7 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertIn("/api/v1/wallet/accounts/{account_id}", schema["paths"])
         self.assertNotIn("/api/v1/debug/error", schema["paths"])
         self.assertNotIn("/api/v1/debug/success", schema["paths"])
+        self.assertNotIn("/api/v1/debug/agent-runs/fixtures/{fixture_id}/stream", schema["paths"])
         self.assertNotIn("/api/v1/auth/test-actions/runtime-inspect", schema["paths"])
 
     def test_create_app_does_not_configure_logging_before_lifespan(self) -> None:

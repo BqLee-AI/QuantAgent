@@ -9,6 +9,7 @@ dependencies = [
     "pynacl>=1.5.0",
     "pydantic-settings>=2.14.1",
     "python-dotenv>=1.2.2",
+    "quantagent-agent",
     "quantagent-core",
 ]
 
@@ -19,6 +20,7 @@ api-reset = "quantagent.api.main:reset"
 api-discord-approval-smoke = "quantagent.api.demo.discord_approval_smoke:main"
 
 [tool.uv.sources]
+quantagent-agent = { workspace = true }
 quantagent-core = { workspace = true }
 
 [tool.uv.build-backend]
