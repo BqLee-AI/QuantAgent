@@ -3631,6 +3631,12 @@ class ApiAppTestCase(unittest.TestCase):
         runtime_audit_news_data_schema = self._resolve_schema_ref(schema, runtime_audit_news_schema["properties"]["data"])
         self.assertTrue({"items", "next_cursor", "generated_at"}.issubset(runtime_audit_news_data_schema["properties"].keys()))
 
+        agent_debug_stream_content = schema["paths"]["/api/v1/debug/agent-runs/fixtures/{fixture_id}/stream"]["post"][
+            "responses"
+        ]["200"]["content"]
+        self.assertIn("text/event-stream", agent_debug_stream_content)
+        self.assertNotIn("application/json", agent_debug_stream_content)
+
     def test_production_openapi_excludes_debug_routes(self) -> None:
         production_app = create_app(self._settings(APP_ENV="production"))
         with TestClient(production_app) as client:

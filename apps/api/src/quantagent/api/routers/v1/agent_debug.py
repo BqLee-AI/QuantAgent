@@ -17,7 +17,23 @@ def list_agent_debug_fixtures(
     return ApiResponse.success(service.list_fixtures())
 
 
-@router.post("/fixtures/{fixture_id}/stream")
+@router.post(
+    "/fixtures/{fixture_id}/stream",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Server-sent AgentRunEvent stream.",
+            "content": {
+                "text/event-stream": {
+                    "schema": {
+                        "type": "string",
+                        "description": "SSE frames using event type as the event name and AgentDebugSseEvent JSON as data.",
+                    }
+                }
+            },
+        }
+    },
+)
 def stream_agent_debug_fixture(
     fixture_id: str,
     request: AgentDebugRunRequest,

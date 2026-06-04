@@ -27,5 +27,5 @@
 
 - [x] 5.1 运行 API unittest 和必要 agent tests。
 - [x] 5.2 运行 `openspec validate add-agent-debug-sse-api --type change --strict --json`。
-- [ ] 5.3 安排 SubAgent CR，重点检查 router/service 分层、production exclusion、SSE 安全和 runtime 边界。
-- [ ] 5.4 根据 CR 修复后创建实现 PR。
+- [x] 5.3 安排 SubAgent CR，重点检查 router/service 分层、production exclusion、SSE 安全和 runtime 边界。
+- [x] 5.4 根据 CR 修复后创建实现 PR。
