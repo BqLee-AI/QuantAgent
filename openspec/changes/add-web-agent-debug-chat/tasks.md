@@ -29,10 +29,10 @@
 ## 5. 测试 / 验证
 
 - [x] 5.1 为 SSE parser / event reducer 补 unit tests，覆盖 started、todo、tool、subagent、artifact、completed、failed 和敏感字段不展示。
-- [ ] 5.2 补 component 或 smoke test，使用 mock stream 验证页面 streaming 中间态、tool/subagent/artifact/final 内容和停止行为。
-- [ ] 5.3 运行 `bun run --cwd apps/web test:unit`。
-- [ ] 5.4 运行 `bun run --cwd apps/web build`，确认 route tree 和 production build 通过。
-- [ ] 5.5 运行 `git diff --check`。
+- [x] 5.2 补 component 或 smoke test，使用 mock stream 验证页面 streaming 中间态、tool/subagent/artifact/final 内容和停止行为。
+- [x] 5.3 运行 `bun run --cwd apps/web test:unit`。
+- [x] 5.4 运行 `bun run --cwd apps/web build`，确认 route tree 和 production build 通过。
+- [x] 5.5 运行 `git diff --check`。
 
 ## 6. Review / PR
 
