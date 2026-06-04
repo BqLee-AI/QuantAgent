@@ -14,6 +14,7 @@ function createApiClientMock(): ApiClient {
     put: vi.fn(),
     request: vi.fn(),
     requestEnvelope: vi.fn(),
+    stream: vi.fn(),
   };
 }
 

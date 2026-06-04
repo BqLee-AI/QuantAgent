@@ -38,6 +38,11 @@ export interface RequestOptions<TBody> extends RequestConfig {
   data?: TBody;
 }
 
+export interface StreamRequestOptions<TBody> extends RequestConfig {
+  data?: TBody;
+  method?: Extract<ApiMethod, "post">;
+}
+
 export interface InternalRequestConfig extends AxiosRequestConfig {
   dedupeKey?: false | string;
   _returnEnvelope?: boolean;

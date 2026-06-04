@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { useApis } from '@/app/runtime';
+import { useAppRuntime } from '@/app/runtime';
 import { ApiError } from '@/shared/api';
 
-import type { AgentDebugScenario } from '../api';
+import { createAgentDebugApi, type AgentDebugScenario } from '../api';
 import type { AgentRunChatPageModel, AgentRunChatState } from '../types';
 import { useAgentDebugFixturesQuery } from '../queries';
 import {
@@ -28,7 +28,8 @@ function formatRunError(error: unknown): string {
 }
 
 export function useAgentRunChatPage(): AgentRunChatPageModel {
-  const { agentDebug } = useApis();
+  const { apiClient } = useAppRuntime();
+  const agentDebug = useMemo(() => createAgentDebugApi(apiClient), [apiClient]);
   const fixturesQuery = useAgentDebugFixturesQuery();
   const [selectedFixtureId, setSelectedFixtureId] = useState(DEFAULT_FIXTURE_ID);
   const [selectedScenario, setSelectedScenario] = useState<AgentDebugScenario>('primary');

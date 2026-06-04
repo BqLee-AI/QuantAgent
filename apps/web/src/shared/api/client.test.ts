@@ -27,6 +27,7 @@ function createEnvelopeResponse<T>(
 describe("createApiClient", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("uses the expected default axios configuration", () => {
@@ -455,5 +456,71 @@ describe("createApiClient", () => {
       msg: "ok",
     });
     expect(vi.mocked(adapter)).toHaveBeenCalledTimes(2);
+  });
+
+  it("streams requests with csrf, credentials and safe error callbacks", async () => {
+    const onError = vi.fn();
+    const onUnauthorized = vi.fn();
+    const fetchMock = vi.fn(async () =>
+      new Response("event: run.started\nid: evt-1\ndata: {}\n\n", {
+        headers: { "content-type": "text/event-stream" },
+        status: 200,
+      }),
+    ) as unknown as typeof fetch;
+    const fetchSpy = vi.mocked(fetchMock);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = createApiClient({
+      baseURL: "http://debug-api.test/api/v1",
+      getCsrfToken: () => "csrf-stream-token",
+      onError,
+      onUnauthorized,
+    });
+
+    const response = await client.stream("/debug/agent-runs/fixtures/demo/stream", {
+      data: { scenario: "primary" },
+      signal: new AbortController().signal,
+    });
+
+    expect(response.ok).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "http://debug-api.test/api/v1/debug/agent-runs/fixtures/demo/stream",
+      expect.objectContaining({
+        body: JSON.stringify({ scenario: "primary" }),
+        credentials: "include",
+        method: "post",
+      }),
+    );
+    const headers = fetchSpy.mock.calls[0]?.[1]?.headers as Headers;
+    expect(headers.get("X-CSRF-Token")).toBe("csrf-stream-token");
+    expect(headers.get("Accept")).toBe("text/event-stream");
+    expect(onError).not.toHaveBeenCalled();
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it("turns unauthorized stream responses into ApiError and calls auth hooks", async () => {
+    const onError = vi.fn();
+    const onUnauthorized = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(JSON.stringify({ code: 401, data: null, msg: "unauthorized", request_id: "req-stream" }), {
+          headers: { "content-type": "application/json" },
+          status: 401,
+          statusText: "Unauthorized",
+        }),
+      ),
+    );
+
+    const client = createApiClient({ onError, onUnauthorized });
+
+    await expect(client.stream("/debug/agent-runs/fixtures/demo/stream")).rejects.toMatchObject({
+      code: 401,
+      msg: "unauthorized",
+      requestId: "req-stream",
+      status: 401,
+    });
+    expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    expect(onError).toHaveBeenCalledTimes(1);
   });
 });

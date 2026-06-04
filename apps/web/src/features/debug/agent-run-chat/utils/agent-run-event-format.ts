@@ -5,8 +5,12 @@ const SENSITIVE_PATTERN = /\b(secret|token|api[_-]?key|authorization|cookie|prom
 
 export function safeEventSummary(event: AgentDebugSseEvent): string {
   const summary = event.safe_summary?.trim() || fallbackSummary(event);
-  if (!SENSITIVE_PATTERN.test(summary)) {
-    return summary;
+  return safeDisplayText(summary);
+}
+
+export function safeDisplayText(value: string): string {
+  if (!SENSITIVE_PATTERN.test(value)) {
+    return value;
   }
   return '[已脱敏摘要]';
 }
@@ -17,7 +21,7 @@ export function fallbackSummary(event: AgentDebugSseEvent): string {
 
 export function readStringPayload(event: AgentDebugSseEvent, key: string): string | null {
   const value = event.payload[key];
-  return typeof value === 'string' && value.trim() ? value.trim() : null;
+  return typeof value === 'string' && value.trim() ? safeDisplayText(value.trim()) : null;
 }
 
 export function readTodos(event: AgentDebugSseEvent): AgentRunTodoItem[] {
@@ -30,7 +34,10 @@ export function readTodos(event: AgentDebugSseEvent): AgentRunTodoItem[] {
       const record = item as Record<string, unknown>;
       const content = typeof record.content === 'string' ? record.content : String(record.title ?? '');
       const status = typeof record.status === 'string' ? record.status : 'pending';
-      return content ? { content, status } satisfies AgentRunTodoItem : null;
+      return content ? {
+        content: safeDisplayText(content),
+        status: safeDisplayText(status),
+      } satisfies AgentRunTodoItem : null;
     })
     .filter((item): item is AgentRunTodoItem => item !== null);
 }

@@ -13,6 +13,8 @@ import {
 import { getDedupeKey } from "./dedupe";
 import { normalizeResponse } from "./envelope";
 import {
+  ApiError,
+  createApiErrorFromEnvelope,
   toApiError,
 } from "./errors";
 import type {
@@ -22,6 +24,7 @@ import type {
   InternalRequestConfig,
   RequestConfig,
   RequestOptions,
+  StreamRequestOptions,
 } from "./types";
 
 export interface ApiClient {
@@ -51,6 +54,10 @@ export interface ApiClient {
     url: string,
     options?: RequestOptions<TBody>,
   ): Promise<ApiResponse<TResponse>>;
+  stream<TBody = unknown>(
+    url: string,
+    options?: StreamRequestOptions<TBody>,
+  ): Promise<Response>;
 }
 
 export function createApiClient(config: ApiClientConfig = {}): ApiClient {
@@ -134,6 +141,41 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
     };
   }
 
+  async function stream<TBody = unknown>(
+    url: string,
+    options: StreamRequestOptions<TBody> = {},
+  ): Promise<Response> {
+    const { data, headers, method, params, signal, timeout: _timeout, dedupeKey: _dedupeKey, skipCsrf: _skipCsrf } = options;
+    const requestHeaders = new Headers(headers);
+    const csrfToken = config.getCsrfToken?.();
+    if (!_skipCsrf && csrfToken) {
+      requestHeaders.set(config.csrfHeaderName ?? DEFAULT_CSRF_HEADER_NAME, csrfToken);
+    }
+    requestHeaders.set("Accept", "text/event-stream");
+    requestHeaders.set("Content-Type", "application/json");
+
+    const response = await fetch(resolveFetchUrl(String(instance.defaults.baseURL ?? DEFAULT_API_BASE_URL), url, params), {
+      body: data === undefined ? undefined : JSON.stringify(data),
+      credentials: instance.defaults.withCredentials ? "include" : "same-origin",
+      headers: requestHeaders,
+      method: method ?? "post",
+      signal,
+    });
+
+    if (response.status === 401) {
+      const apiError = await responseToApiError(response);
+      config.onUnauthorized?.(apiError);
+      config.onError?.(apiError);
+      throw apiError;
+    }
+    if (!response.ok) {
+      const apiError = await responseToApiError(response);
+      config.onError?.(apiError);
+      throw apiError;
+    }
+    return response;
+  }
+
   return {
     instance,
     del<TResponse>(url: string, requestConfig?: RequestConfig): Promise<TResponse> {
@@ -201,7 +243,42 @@ export function createApiClient(config: ApiClientConfig = {}): ApiClient {
         _returnEnvelope: true,
       });
     },
+    stream,
   };
 }
 
 export type { ApiMethod };
+
+async function responseToApiError(response: Response): Promise<ApiError> {
+  try {
+    const body = (await response.json()) as ApiResponse<unknown>;
+    if (body && typeof body.code === "number" && typeof body.msg === "string") {
+      return createApiErrorFromEnvelope(body, response.status);
+    }
+  } catch {
+    // fall through to generic HTTP error
+  }
+  return new ApiError({
+    code: response.status,
+    msg: response.statusText || "Streaming request failed.",
+    status: response.status,
+  });
+}
+
+function resolveFetchUrl(
+  baseURL: string,
+  url: string,
+  params?: RequestConfig["params"],
+): string {
+  const normalizedBase = baseURL.replace(/\/+$/u, "");
+  const normalizedPath = url.startsWith("/") ? url : `/${url}`;
+  const query = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(params ?? {})) {
+    if (value === null || value === undefined) continue;
+    query.set(key, String(value));
+  }
+
+  const suffix = query.size > 0 ? `?${query.toString()}` : "";
+  return `${normalizedBase}${normalizedPath}${suffix}`;
+}

@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 
-import { useApis } from '@/app/runtime';
+import { useAppRuntime } from '@/app/runtime';
 
+import { createAgentDebugApi } from '../api';
 import { agentDebugQueryKeys } from './agent-debug.keys';
 
 export function useAgentDebugFixturesQuery() {
-  const { agentDebug } = useApis();
+  const { apiClient } = useAppRuntime();
+  const agentDebug = createAgentDebugApi(apiClient);
 
   return useQuery({
     queryFn: () => agentDebug.listFixtures(),

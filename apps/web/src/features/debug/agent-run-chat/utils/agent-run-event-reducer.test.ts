@@ -87,4 +87,42 @@ describe('agent run event reducer', () => {
     expect(state.errorSummary).toBe('[已脱敏摘要]');
     expect(JSON.stringify(state.messages)).not.toContain('sk-test');
   });
+
+  it('redacts sensitive payload strings before rendering display messages', () => {
+    let state = createInitialAgentRunChatState();
+    state = applyAgentRunEvent(state, event({
+      event_id: 'evt-todo-sensitive',
+      payload: { todos: [{ content: 'prompt raw_response sk-test-token', status: 'secret' }] },
+      safe_summary: 'Todo updated.',
+      seq: 2,
+      type: 'todo.updated',
+    }));
+    state = applyAgentRunEvent(state, event({
+      event_id: 'evt-tool-sensitive',
+      payload: { tool_name: 'search_web sk-test-token' },
+      safe_summary: 'Tool completed.',
+      seq: 3,
+      type: 'tool.completed',
+    }));
+    state = applyAgentRunEvent(state, event({
+      event_id: 'evt-artifact-sensitive',
+      payload: { artifact_id: 'artifact secret', kind: 'raw_response' },
+      safe_summary: 'Artifact created.',
+      seq: 4,
+      type: 'artifact.created',
+    }));
+    state = applyAgentRunEvent(state, event({
+      event_id: 'evt-output-sensitive',
+      payload: { trade_decision: 'submit_dry_run_open_long traceback sk-test-token' },
+      safe_summary: 'Run output.',
+      seq: 5,
+      type: 'run.output',
+    }));
+
+    const serialized = JSON.stringify(state.messages);
+    expect(serialized).not.toContain('sk-test-token');
+    expect(serialized).not.toContain('raw_response');
+    expect(serialized).not.toContain('traceback');
+    expect(serialized).toContain('[已脱敏摘要]');
+  });
 });

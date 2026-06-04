@@ -36,5 +36,5 @@
 
 ## 6. Review / PR
 
-- [ ] 6.1 安排 SubAgent CR，重点检查 route 是否变厚、feature 是否拆分、stream adapter 是否裸 fetch 泄漏到组件、debug 是否进入 production、敏感信息是否展示。
-- [ ] 6.2 根据 CR 修复后创建实现 PR，并在 PR 说明中写清 DeepAgents docs/examples 参考点、验证结果和残余风险。
+- [x] 6.1 安排 SubAgent CR，重点检查 route 是否变厚、feature 是否拆分、stream adapter 是否裸 fetch 泄漏到组件、debug 是否进入 production、敏感信息是否展示。
+- [x] 6.2 根据 CR 修复后创建实现 PR，并在 PR 说明中写清 DeepAgents docs/examples 参考点、验证结果和残余风险。
