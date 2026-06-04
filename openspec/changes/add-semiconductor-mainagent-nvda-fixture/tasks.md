@@ -30,4 +30,4 @@
 - [x] 5.1 实现后运行与范围匹配的 unittest 命令，例如 `uv run --package quantagent-agent python -m unittest discover -s packages/agent/tests`，并记录结果。
 - [x] 5.2 运行 `openspec validate add-semiconductor-mainagent-nvda-fixture --type change --strict --json`。
 - [x] 5.3 安排 SubAgent CR，重点检查 SubAgent 数量、工具权限、schema 通用性、账户上下文隔离、submit_action_plan 唯一行动入口和二手报道去重。
-- [ ] 5.4 根据 CR finding 修复后再创建实现 PR；PR 说明写清 DeepAgents docs/examples、本地版本确认、验证命令、未验证风险和非目标。
+- [x] 5.4 根据 CR finding 修复后再创建实现 PR；PR 说明写清 DeepAgents docs/examples、本地版本确认、验证命令、未验证风险和非目标。
