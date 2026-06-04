@@ -115,7 +115,13 @@ class AgentRuntime:
     async def _run_deep_agent(self, request: AgentRunRequest, sequencer: EventSequencer) -> AsyncIterator[AgentRunEvent]:
         factory = self._deps.deep_agent_factory or self._default_deep_agent_factory
         tool_events: list[AgentRunEvent] = []
-        graph = factory(request, self._build_langchain_tools(request, sequencer, tool_events))
+        all_tool_ids = _ordered_unique(
+            [
+                *request.agent_definition.tool_ids,
+                *(tool_id for subagent in request.agent_definition.subagents for tool_id in subagent.tool_ids),
+            ]
+        )
+        graph = factory(request, self._build_langchain_tools(request, sequencer, tool_events, tool_ids=all_tool_ids))
         config = {"configurable": {"thread_id": request.agent_run_id}}
         input_data = {"messages": [{"role": "user", "content": request.input_message}]}
 
@@ -154,16 +160,29 @@ class AgentRuntime:
         if request.runtime_policy.model is None:
             raise DeepAgentsUnavailableError("runtime_policy.model is required when no scripted_runner is provided")
 
-        subagents = [
-            {
-                "name": subagent.name,
-                "description": subagent.description,
-                "system_prompt": subagent.system_prompt,
-                "tools": [],
-                "skills": subagent.skill_paths or None,
-            }
-            for subagent in request.agent_definition.subagents
+        tool_by_name = {getattr(tool, "name", ""): tool for tool in tools}
+        binding_by_tool_id = {binding.tool_id: binding for binding in request.tool_profile.tool_bindings}
+        main_tools = [
+            tool_by_name[binding_by_tool_id[tool_id].name]
+            for tool_id in request.agent_definition.tool_ids
+            if tool_id in binding_by_tool_id and binding_by_tool_id[tool_id].name in tool_by_name
         ]
+        subagents = []
+        for subagent in request.agent_definition.subagents:
+            subagent_tools = [
+                tool_by_name[binding_by_tool_id[tool_id].name]
+                for tool_id in subagent.tool_ids
+                if tool_id in binding_by_tool_id and binding_by_tool_id[tool_id].name in tool_by_name
+            ]
+            subagents.append(
+                {
+                    "name": subagent.name,
+                    "description": subagent.description,
+                    "system_prompt": subagent.system_prompt,
+                    "tools": subagent_tools,
+                    "skills": subagent.skill_paths or None,
+                }
+            )
 
         required_interrupts = {
             binding.name: True
@@ -183,7 +202,7 @@ class AgentRuntime:
         # DeepAgents 负责 planner、tool loop、task/subagent 和 backend；这里仅做平台边界配置。
         return create_deep_agent(
             model=request.runtime_policy.model,
-            tools=list(tools),
+            tools=main_tools,
             system_prompt=request.agent_definition.system_prompt,
             subagents=subagents or None,
             skills=request.agent_definition.skill_paths or None,
@@ -196,6 +215,9 @@ class AgentRuntime:
         request: AgentRunRequest,
         sequencer: EventSequencer,
         event_buffer: list[AgentRunEvent] | None = None,
+        *,
+        tool_ids: Sequence[str] | None = None,
+        subagent_id: str | None = None,
     ) -> list[Any]:
         if not self._deps.tools:
             return []
@@ -205,10 +227,10 @@ class AgentRuntime:
         except Exception as exc:  # noqa: BLE001
             raise AgentRuntimeError("langchain_core StructuredTool is unavailable") from exc
 
-        runtime_context = self.tool_runtime_context(request)
+        runtime_context = self.tool_runtime_context(request, subagent_id=subagent_id)
         adapter = self._tool_adapter(runtime_context=runtime_context, sequencer=sequencer)
         allowed_bindings = {binding.tool_id: binding for binding in request.tool_profile.tool_bindings}
-        requested_tool_ids = set(request.agent_definition.tool_ids)
+        requested_tool_ids = set(tool_ids or request.agent_definition.tool_ids)
         injected_tools = {tool.binding.tool_id: tool for tool in self._deps.tools}
 
         unauthorized = requested_tool_ids - set(allowed_bindings)
@@ -220,7 +242,7 @@ class AgentRuntime:
 
         wrapped_tools = []
 
-        for tool_id in request.agent_definition.tool_ids:
+        for tool_id in tool_ids or request.agent_definition.tool_ids:
             platform_tool = injected_tools[tool_id]
             async def _call_tool(_platform_tool: PlatformTool[Any] = platform_tool, **kwargs: Any) -> Mapping[str, Any]:
                 result, events = await adapter.invoke(_platform_tool, kwargs)
@@ -239,6 +261,22 @@ class AgentRuntime:
 
         return wrapped_tools
 
+    def _build_subagent_langchain_tools(
+        self,
+        request: AgentRunRequest,
+        sequencer: EventSequencer,
+        subagent_id: str,
+        tool_ids: Sequence[str],
+        event_buffer: list[AgentRunEvent] | None = None,
+    ) -> list[Any]:
+        return self._build_langchain_tools(
+            request,
+            sequencer,
+            event_buffer,
+            tool_ids=tool_ids,
+            subagent_id=subagent_id,
+        )
+
     @staticmethod
     def _tool_adapter(*, runtime_context: ToolRuntimeContext, sequencer: EventSequencer) -> Any:
         from quantagent.agent.tools.adapter import ToolAdapter
@@ -250,3 +288,14 @@ def _safe_runtime_error_summary(exc: Exception) -> str:
     """Runtime 失败事件不能包含 provider/prompt/secret 原文，只暴露错误类别。"""
 
     return f"{type(exc).__name__}: agent runtime failed"
+
+
+def _ordered_unique(items: Sequence[str]) -> list[str]:
+    seen: set[str] = set()
+    unique: list[str] = []
+    for item in items:
+        if item in seen:
+            continue
+        seen.add(item)
+        unique.append(item)
+    return unique
