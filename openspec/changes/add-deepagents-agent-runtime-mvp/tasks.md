@@ -33,4 +33,4 @@
 - [x] 5.2 运行 `git diff --check`。
 - [x] 5.3 安排 SubAgent CR，重点检查：是否重复造 DeepAgents 能力、是否出现大 State、是否越过 ToolAdapter/hidden context、是否泄露敏感内容、是否违反 package 依赖方向。
 - [x] 5.4 修复 CR finding 后再次运行相关测试。
-- [ ] 5.5 PR 说明关联 #284 和本 change，列出 DeepAgents 官方文档/examples 查阅记录、采用的内置能力、验证结果、未验证风险和后续 issue 依赖。
+- [x] 5.5 PR 说明关联 #284 和本 change，列出 DeepAgents 官方文档/examples 查阅记录、采用的内置能力、验证结果、未验证风险和后续 issue 依赖。
