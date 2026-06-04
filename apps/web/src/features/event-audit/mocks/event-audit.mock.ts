@@ -3,7 +3,7 @@ import type { EventAuditTimelineResponse } from '../api'
 export const eventAuditMockTimelines: Record<string, EventAuditTimelineResponse> = {
   'evt-semiconductor-export': {
     availability: {
-      message: '后端事件审计接口未接通，当前展示结构化占位数据。',
+      message: '接口未接通 · 占位数据',
       state: 'degraded',
     },
     eventId: 'evt-semiconductor-export',
@@ -100,7 +100,7 @@ export const eventAuditMockTimelines: Record<string, EventAuditTimelineResponse>
   },
   'evt-semiconductor-memory': {
     availability: {
-      message: '后端事件审计接口未接通，当前展示结构化占位数据。',
+      message: '接口未接通 · 占位数据',
       state: 'degraded',
     },
     eventId: 'evt-semiconductor-memory',
@@ -125,7 +125,7 @@ export const eventAuditMockTimelines: Record<string, EventAuditTimelineResponse>
   },
   'evt-semiconductor-foundry': {
     availability: {
-      message: '后端事件审计接口未接通，当前展示结构化占位数据。',
+      message: '接口未接通 · 占位数据',
       state: 'degraded',
     },
     eventId: 'evt-semiconductor-foundry',
@@ -168,7 +168,7 @@ export function createEmptyEventAuditTimeline(eventId: string): EventAuditTimeli
 export function createUnavailableEventAuditTimeline(eventId: string): EventAuditTimelineResponse {
   return {
     availability: {
-      message: '后端事件审计接口未接通，当前没有可用占位数据。',
+      message: '接口未接通 · 无占位数据',
       state: 'unavailable',
     },
     eventId,

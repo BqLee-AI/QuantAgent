@@ -36,11 +36,11 @@ export function useEventAuditPage(eventId: string) {
     availability: queryError
       ? queryError.status === 403
         ? {
-            message: `当前账号无权查看事件审计详情。${queryError.requestId ? ` Request ID: ${queryError.requestId}` : ''}`,
+            message: '无权查看',
             state: 'forbidden',
           }
         : {
-            message: `后端事件审计接口读取失败，当前展示结构化占位数据。${queryError.requestId ? ` Request ID: ${queryError.requestId}` : ''}`,
+            message: '读取失败 · 占位数据',
             state: timeline.availability.state,
           }
       : timeline.availability,

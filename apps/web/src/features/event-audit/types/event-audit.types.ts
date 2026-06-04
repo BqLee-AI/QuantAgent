@@ -13,6 +13,7 @@ export type EventAuditSuggestionChange = EventAuditSuggestionChangeContract
 export type { EventAuditNodeKind }
 
 export type EventAuditNodeGroup = 'human' | 'system'
+export type EventAuditNodeFilter = 'all' | 'changes' | 'human' | 'reanalysis' | 'system'
 
 export interface EventAuditPageModel {
   availability: EventAuditAvailability
