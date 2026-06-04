@@ -6,7 +6,8 @@ from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
 from quantagent.agent.definitions.models import RuntimePolicy
 from quantagent.agent.runtime import AgentRuntime
-from quantagent.agent.testing import build_echo_run_request
+from quantagent.agent.streaming.adapter import EventSequencer
+from quantagent.agent.testing import build_echo_platform_tool, build_echo_run_request
 
 
 class DeepAgentsFactoryTest(TestCase):
@@ -21,3 +22,12 @@ class DeepAgentsFactoryTest(TestCase):
 
         self.assertTrue(hasattr(graph, "invoke"))
         self.assertTrue(hasattr(graph, "stream"))
+
+    def test_runtime_builds_langchain_tools_from_platform_tools(self) -> None:
+        runtime = AgentRuntime(tools=[build_echo_platform_tool()])
+        request = build_echo_run_request()
+
+        tools = runtime._build_langchain_tools(request, EventSequencer())
+
+        self.assertEqual(len(tools), 1)
+        self.assertEqual(tools[0].name, "echo")

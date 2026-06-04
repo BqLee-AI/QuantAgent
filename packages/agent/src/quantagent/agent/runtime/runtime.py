@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import inspect
-from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -20,7 +20,7 @@ class DeepAgentGraph(Protocol):
     def stream(self, input_data: Mapping[str, Any], config: Mapping[str, Any] | None = None) -> Iterable[Any]: ...
 
 
-DeepAgentFactory = Callable[[AgentRunRequest, list[PlatformTool[Any]]], DeepAgentGraph]
+DeepAgentFactory = Callable[[AgentRunRequest, Sequence[Any]], DeepAgentGraph]
 ScriptedRunner = Callable[[AgentRunRequest, EventSequencer, ArtifactStore], AsyncIterator[AgentRunEvent]]
 
 
@@ -115,12 +115,15 @@ class AgentRuntime:
 
     async def _run_deep_agent(self, request: AgentRunRequest, sequencer: EventSequencer) -> AsyncIterator[AgentRunEvent]:
         factory = self._deps.deep_agent_factory or self._default_deep_agent_factory
-        graph = factory(request, self._deps.tools)
+        tool_events: list[AgentRunEvent] = []
+        graph = factory(request, self._build_langchain_tools(request, sequencer, tool_events))
         config = {"configurable": {"thread_id": request.agent_run_id}}
         input_data = {"messages": [{"role": "user", "content": request.input_message}]}
 
         stream = graph.stream(input_data, config=config)
         for chunk in stream:
+            while tool_events:
+                yield tool_events.pop(0)
             summary = chunk_to_safe_summary(chunk)
             yield sequencer.next(
                 agent_run_id=request.agent_run_id,
@@ -133,6 +136,8 @@ class AgentRuntime:
         result = graph.invoke(input_data, config=config)
         if inspect.isawaitable(result):
             result = await result
+        while tool_events:
+            yield tool_events.pop(0)
         yield sequencer.next(
             agent_run_id=request.agent_run_id,
             trace_id=request.trace_id,
@@ -142,7 +147,7 @@ class AgentRuntime:
         )
 
     @staticmethod
-    def _default_deep_agent_factory(request: AgentRunRequest, tools: list[PlatformTool[Any]]) -> DeepAgentGraph:
+    def _default_deep_agent_factory(request: AgentRunRequest, tools: Sequence[Any]) -> DeepAgentGraph:
         try:
             from deepagents import create_deep_agent
         except Exception as exc:  # noqa: BLE001
@@ -165,9 +170,51 @@ class AgentRuntime:
         # DeepAgents 负责 planner、tool loop、task/subagent 和 backend；这里仅做平台边界配置。
         return create_deep_agent(
             model=request.runtime_policy.model,
-            tools=[],
+            tools=list(tools),
             system_prompt=request.agent_definition.system_prompt,
             subagents=subagents or None,
             skills=request.agent_definition.skill_paths or None,
             interrupt_on=request.runtime_policy.interrupt_on or None,
         )
+
+    def _build_langchain_tools(
+        self,
+        request: AgentRunRequest,
+        sequencer: EventSequencer,
+        event_buffer: list[AgentRunEvent] | None = None,
+    ) -> list[Any]:
+        if not self._deps.tools:
+            return []
+
+        try:
+            from langchain_core.tools import StructuredTool
+        except Exception as exc:  # noqa: BLE001
+            raise AgentRuntimeError("langchain_core StructuredTool is unavailable") from exc
+
+        runtime_context = self.tool_runtime_context(request)
+        adapter = self._tool_adapter(runtime_context=runtime_context, sequencer=sequencer)
+        wrapped_tools = []
+
+        for platform_tool in self._deps.tools:
+            async def _call_tool(_platform_tool: PlatformTool[Any] = platform_tool, **kwargs: Any) -> Mapping[str, Any]:
+                result, events = await adapter.invoke(_platform_tool, kwargs)
+                if event_buffer is not None:
+                    event_buffer.extend(events)
+                return result
+
+            wrapped_tools.append(
+                StructuredTool.from_function(
+                    coroutine=_call_tool,
+                    name=platform_tool.binding.name,
+                    description=platform_tool.binding.description,
+                    args_schema=platform_tool.input_model,
+                )
+            )
+
+        return wrapped_tools
+
+    @staticmethod
+    def _tool_adapter(*, runtime_context: ToolRuntimeContext, sequencer: EventSequencer) -> Any:
+        from quantagent.agent.tools.adapter import ToolAdapter
+
+        return ToolAdapter(runtime_context=runtime_context, sequencer=sequencer)
