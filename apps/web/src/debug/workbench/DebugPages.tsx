@@ -59,6 +59,10 @@ export function DebugWorkbenchIndexPage() {
           title="插件配置表单"
           copy="验证 schema-driven form、敏感字段掩码和 Zod 来源 schema 兼容边界。"
         />
+        <PlaceholderPanel
+          title="Agent Debug Chat"
+          copy="启动 NVDA fixture，用对话流观察 MainAgent、SubAgent、tool、artifact 和最终输出。"
+        />
       </section>
 
       <section style={actionRowStyle} aria-label="调试路由快捷入口">
@@ -76,6 +80,9 @@ export function DebugWorkbenchIndexPage() {
         </Button>
         <Button onPress={() => void navigate({ to: '/debug/plugin-config-form' })} size="sm" type="button" variant="outline">
           打开插件配置表单
+        </Button>
+        <Button onPress={() => void navigate({ to: '/debug/agent-run-chat' })} size="sm" type="button" variant="outline">
+          打开 Agent Debug Chat
         </Button>
       </section>
     </>
