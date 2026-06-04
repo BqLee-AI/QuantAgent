@@ -3,6 +3,7 @@ members = [
   "apps/api",
   "apps/scheduler",
   "apps/worker",
+  "packages/agent",
   "packages/core",
   "packages/plugin-sdk",
 ]

@@ -1,0 +1,173 @@
+from __future__ import annotations
+
+import inspect
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping
+from dataclasses import dataclass
+from typing import Any, Protocol
+
+from quantagent.agent.artifacts import ArtifactStore, InMemoryArtifactStore
+from quantagent.agent.runtime.context import ToolRuntimeContext
+from quantagent.agent.runtime.errors import AgentRuntimeError, DeepAgentsUnavailableError
+from quantagent.agent.runtime.requests import AgentRunRequest, AgentRunResult
+from quantagent.agent.streaming.adapter import EventSequencer, chunk_to_safe_summary
+from quantagent.agent.streaming.events import AgentRunEvent, AgentRunEventType
+from quantagent.agent.tools.adapter import PlatformTool
+
+
+class DeepAgentGraph(Protocol):
+    def invoke(self, input_data: Mapping[str, Any], config: Mapping[str, Any] | None = None) -> Any: ...
+
+    def stream(self, input_data: Mapping[str, Any], config: Mapping[str, Any] | None = None) -> Iterable[Any]: ...
+
+
+DeepAgentFactory = Callable[[AgentRunRequest, list[PlatformTool[Any]]], DeepAgentGraph]
+ScriptedRunner = Callable[[AgentRunRequest, EventSequencer, ArtifactStore], AsyncIterator[AgentRunEvent]]
+
+
+@dataclass(frozen=True)
+class AgentRuntimeDependencies:
+    tools: list[PlatformTool[Any]]
+    artifact_store: ArtifactStore
+    deep_agent_factory: DeepAgentFactory | None = None
+    scripted_runner: ScriptedRunner | None = None
+
+
+class AgentRuntime:
+    def __init__(
+        self,
+        *,
+        tools: list[PlatformTool[Any]] | None = None,
+        artifact_store: ArtifactStore | None = None,
+        deep_agent_factory: DeepAgentFactory | None = None,
+        scripted_runner: ScriptedRunner | None = None,
+    ) -> None:
+        self._deps = AgentRuntimeDependencies(
+            tools=tools or [],
+            artifact_store=artifact_store or InMemoryArtifactStore(),
+            deep_agent_factory=deep_agent_factory,
+            scripted_runner=scripted_runner,
+        )
+
+    async def run(self, request: AgentRunRequest) -> AgentRunResult:
+        events: list[AgentRunEvent] = []
+        async for event in self.run_stream(request):
+            events.append(event)
+        status = "completed" if events and events[-1].type == AgentRunEventType.RUN_COMPLETED else "failed"
+        output = next((event.safe_summary or "" for event in reversed(events) if event.type == AgentRunEventType.RUN_OUTPUT), "")
+        return AgentRunResult(
+            agent_run_id=request.agent_run_id,
+            status=status,
+            output_summary=output,
+            artifact_refs=self._deps.artifact_store.list_for_run(),
+            events=events,
+        )
+
+    async def run_stream(self, request: AgentRunRequest) -> AsyncIterator[AgentRunEvent]:
+        sequencer = EventSequencer()
+        yield sequencer.next(
+            agent_run_id=request.agent_run_id,
+            trace_id=request.trace_id,
+            event_type=AgentRunEventType.RUN_STARTED,
+            payload={
+                "event_id": request.event_id,
+                "industry_id": request.industry_id,
+                "agent_id": request.agent_definition.agent_id,
+                "agent_version": request.agent_definition.version,
+            },
+            safe_summary=f"AgentRun {request.agent_run_id} started.",
+        )
+
+        try:
+            if self._deps.scripted_runner is not None:
+                async for event in self._deps.scripted_runner(request, sequencer, self._deps.artifact_store):
+                    yield event
+            else:
+                async for event in self._run_deep_agent(request, sequencer):
+                    yield event
+
+            yield sequencer.next(
+                agent_run_id=request.agent_run_id,
+                trace_id=request.trace_id,
+                event_type=AgentRunEventType.RUN_COMPLETED,
+                payload={"artifact_ids": [ref.artifact_id for ref in self._deps.artifact_store.list_for_run()]},
+                safe_summary=f"AgentRun {request.agent_run_id} completed.",
+            )
+        except Exception as exc:  # noqa: BLE001
+            safe_error = f"{type(exc).__name__}: {str(exc)[:200]}"
+            yield sequencer.next(
+                agent_run_id=request.agent_run_id,
+                trace_id=request.trace_id,
+                event_type=AgentRunEventType.RUN_FAILED,
+                payload={"error": safe_error},
+                safe_summary=f"AgentRun {request.agent_run_id} failed.",
+            )
+
+    def tool_runtime_context(self, request: AgentRunRequest, *, subagent_id: str | None = None) -> ToolRuntimeContext:
+        return ToolRuntimeContext(
+            agent_run_id=request.agent_run_id,
+            event_id=request.event_id,
+            industry_id=request.industry_id,
+            agent_id=request.agent_definition.agent_id,
+            subagent_id=subagent_id,
+            trace_id=request.trace_id,
+            tool_profile_id=request.tool_profile.profile_id,
+        )
+
+    async def _run_deep_agent(self, request: AgentRunRequest, sequencer: EventSequencer) -> AsyncIterator[AgentRunEvent]:
+        factory = self._deps.deep_agent_factory or self._default_deep_agent_factory
+        graph = factory(request, self._deps.tools)
+        config = {"configurable": {"thread_id": request.agent_run_id}}
+        input_data = {"messages": [{"role": "user", "content": request.input_message}]}
+
+        stream = graph.stream(input_data, config=config)
+        for chunk in stream:
+            summary = chunk_to_safe_summary(chunk)
+            yield sequencer.next(
+                agent_run_id=request.agent_run_id,
+                trace_id=request.trace_id,
+                event_type=AgentRunEventType.MODEL_DELTA,
+                payload={"summary": summary},
+                safe_summary=summary,
+            )
+
+        result = graph.invoke(input_data, config=config)
+        if inspect.isawaitable(result):
+            result = await result
+        yield sequencer.next(
+            agent_run_id=request.agent_run_id,
+            trace_id=request.trace_id,
+            event_type=AgentRunEventType.RUN_OUTPUT,
+            payload={"result_type": type(result).__name__},
+            safe_summary=chunk_to_safe_summary(result),
+        )
+
+    @staticmethod
+    def _default_deep_agent_factory(request: AgentRunRequest, tools: list[PlatformTool[Any]]) -> DeepAgentGraph:
+        try:
+            from deepagents import create_deep_agent
+        except Exception as exc:  # noqa: BLE001
+            raise DeepAgentsUnavailableError("deepagents dependency is unavailable") from exc
+
+        if request.runtime_policy.model is None:
+            raise DeepAgentsUnavailableError("runtime_policy.model is required when no scripted_runner is provided")
+
+        subagents = [
+            {
+                "name": subagent.name,
+                "description": subagent.description,
+                "system_prompt": subagent.system_prompt,
+                "tools": [],
+                "skills": subagent.skill_paths or None,
+            }
+            for subagent in request.agent_definition.subagents
+        ]
+
+        # DeepAgents 负责 planner、tool loop、task/subagent 和 backend；这里仅做平台边界配置。
+        return create_deep_agent(
+            model=request.runtime_policy.model,
+            tools=[],
+            system_prompt=request.agent_definition.system_prompt,
+            subagents=subagents or None,
+            skills=request.agent_definition.skill_paths or None,
+            interrupt_on=request.runtime_policy.interrupt_on or None,
+        )
