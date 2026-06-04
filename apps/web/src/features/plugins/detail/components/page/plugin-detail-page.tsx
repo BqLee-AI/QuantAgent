@@ -9,9 +9,10 @@ import {
 import type { PluginDetailResponse } from "../../api/plugin-detail.contracts";
 import {
   formatApiError,
+  formatAvailability,
   formatConfigState,
-  formatKeyLabel,
   formatOptional,
+  formatPluginDescription,
   formatPluginStatus,
   formatPluginType,
 } from "../../utils/plugin-detail-format";
@@ -46,11 +47,9 @@ export function PluginDetailPage({ pluginId }: { pluginId: string }) {
     <div className="grid gap-5">
       <section className="page-header">
         <div className="min-w-0">
-          <p className="page-kicker">插件详情</p>
-          <h1 className="page-title">{detail.overview.name}</h1>
+          <h1 className="page-title font-extrabold">{detail.overview.name}</h1>
           <p className="page-description">
-            {detail.overview.description ??
-              "插件治理详情：配置、依赖、能力、健康、审计与操作边界。"}
+            {formatPluginDescription(detail.overview.plugin_id, detail.overview.description)}
           </p>
         </div>
       </section>
@@ -98,17 +97,9 @@ function PluginDetailHero({ detail }: { detail: PluginDetailResponse }) {
           </div>
           <div className="grid gap-2 text-body-sm sm:grid-cols-3 xl:min-w-[32rem]">
             <HeroMetric label="安装版本" value={formatOptional(overview.installed_version)} />
-            <HeroMetric label="运行版本" value={formatOptional(overview.active_version)} />
-            <HeroMetric label="可操作状态" value={detail.ops_summary.operable_state} />
+            <HeroMetric label="依赖状态" value={formatAvailability(detail.dependency_summary.availability)} />
+            <HeroMetric label="健康状态" value={formatAvailability(detail.health_summary.availability)} />
           </div>
-        </div>
-
-        <div className="grid gap-2 border-t border-hairline pt-3 text-body-sm text-muted md:grid-cols-2 xl:grid-cols-4">
-          {Object.entries(detail.related_resources).map(([key, value]) => (
-            <p key={key} className="m-0 min-w-0 truncate">
-              {formatKeyLabel(key)}: <span className="font-semibold text-ink">{value}</span>
-            </p>
-          ))}
         </div>
       </Card.Content>
     </Card>

@@ -5,6 +5,7 @@ import { LinkButton } from "@/shared/ui";
 import {
   formatErrorSummary,
   formatOptional,
+  formatPluginDescription,
   formatPluginStatus,
   formatPluginType,
 } from "../../utils/plugin-detail-format";
@@ -25,11 +26,11 @@ export function PluginListCard({ plugin }: PluginListCardProps) {
   return (
     <Card
       className={[
-        "min-h-[8.75rem] border bg-surface shadow-sm transition-colors",
+        "border bg-surface shadow-sm transition-colors",
         hasError ? "border-warning/40" : "border-hairline hover:border-primary/50",
       ].join(" ")}
     >
-      <Card.Content className="grid h-full gap-2.5 p-3">
+      <Card.Content className="grid gap-1.5 p-2.5">
         <div className="flex min-w-0 items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -46,7 +47,7 @@ export function PluginListCard({ plugin }: PluginListCardProps) {
         </div>
 
         <p className="m-0 line-clamp-1 text-body-sm leading-5 text-muted">
-          {manifest?.description ?? "manifest 暂不可用，详情页会展示受控失败态。"}
+          {formatPluginDescription(plugin.id, manifest?.description)}
         </p>
 
         <div className="grid gap-x-3 gap-y-1 text-body-sm text-muted sm:grid-cols-2">
@@ -65,25 +66,21 @@ export function PluginListCard({ plugin }: PluginListCardProps) {
           </p>
         </div>
 
-        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-hairline pt-2">
+        <div className="flex flex-wrap items-center gap-2 border-t border-hairline pt-1">
           <div className="flex flex-wrap gap-1.5">
-            {manifest?.config_schema ? (
-              <Chip color="success" size="sm" variant="soft">
-                已声明配置 Schema
-              </Chip>
-            ) : (
-              <Chip color="warning" size="sm" variant="soft">
-                未声明配置 Schema
-              </Chip>
-            )}
             {manifest?.permissions?.length ? (
               <Chip color="warning" size="sm" variant="soft">
                 权限 {manifest.permissions.length} 项
               </Chip>
             ) : null}
           </div>
-          <LinkButton params={{ pluginId: plugin.id }} to="/plugins/$pluginId">
-            详情
+          <LinkButton
+            className="gap-1 px-2 text-primary hover:bg-primary/8"
+            params={{ pluginId: plugin.id }}
+            to="/plugins/$pluginId"
+            variant="ghost"
+          >
+            查看
           </LinkButton>
         </div>
       </Card.Content>

@@ -1,4 +1,20 @@
-import { Button, Chip, Input } from "@heroui/react";
+import {
+  Button,
+  SearchFieldClearButton,
+  SearchFieldGroup,
+  SearchFieldInput,
+  SearchFieldRoot,
+  SearchFieldSearchIcon,
+} from "@heroui/react";
+import {
+  Bell,
+  Boxes,
+  Database,
+  Factory,
+  LineChart,
+  ShieldCheck,
+  RefreshCw,
+} from "lucide-react";
 
 import type { PluginRecordResponse } from "../../../api/contracts";
 import { formatPluginType } from "../../utils/plugin-detail-format";
@@ -8,7 +24,6 @@ type PluginListToolbarProps = {
   onRefresh: () => void;
   onSearchChange: (value: string) => void;
   onTypeChange: (type: string) => void;
-  pluginCount: number;
   searchValue: string;
   types: string[];
 };
@@ -18,7 +33,6 @@ export function PluginListToolbar({
   onRefresh,
   onSearchChange,
   onTypeChange,
-  pluginCount,
   searchValue,
   types,
 }: PluginListToolbarProps) {
@@ -26,41 +40,46 @@ export function PluginListToolbar({
     <section className="rounded-lg border border-hairline bg-surface p-3 shadow-sm">
       <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <Button size="sm" type="button" variant="primary" onPress={onRefresh}>
+          {types.map((type) => (
+            <Button
+              key={type}
+              className="shrink-0"
+              size="sm"
+              type="button"
+              variant={activeType === type ? "primary" : "secondary"}
+              onPress={() => {
+                onTypeChange(type);
+              }}
+            >
+              <PluginTypeIcon type={type} />
+              {type === "all" ? "全部" : formatPluginType(type)}
+            </Button>
+          ))}
+        </div>
+
+        <div className="flex w-full items-center gap-2 xl:max-w-[28rem]">
+          <SearchFieldRoot
+            aria-label="搜索插件"
+            className="w-full"
+          >
+            <SearchFieldGroup className="w-full">
+              <SearchFieldSearchIcon />
+              <SearchFieldInput
+                className="w-full"
+                placeholder="搜索名称、ID、描述"
+                value={searchValue}
+                onChange={(event) => {
+                  onSearchChange(event.target.value);
+                }}
+              />
+              <SearchFieldClearButton />
+            </SearchFieldGroup>
+          </SearchFieldRoot>
+          <Button className="shrink-0" size="sm" type="button" variant="secondary" onPress={onRefresh}>
+            <RefreshCw className="size-4" />
             刷新
           </Button>
-          <Chip color="default" size="sm" variant="soft">
-            共 {pluginCount} 个插件
-          </Chip>
         </div>
-        <Input
-          aria-label="搜索插件"
-          className="w-full xl:max-w-80"
-          onChange={(event) => {
-            onSearchChange(event.target.value);
-          }}
-          placeholder="搜索名称、ID、描述"
-          type="search"
-          value={searchValue}
-          variant="secondary"
-        />
-      </div>
-
-      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-        {types.map((type) => (
-          <Button
-            key={type}
-            className="shrink-0"
-            size="sm"
-            type="button"
-            variant={activeType === type ? "primary" : "secondary"}
-            onPress={() => {
-              onTypeChange(type);
-            }}
-          >
-            {type === "all" ? "全部" : formatPluginType(type)}
-          </Button>
-        ))}
       </div>
     </section>
   );
@@ -73,5 +92,40 @@ export function collectPluginTypes(plugins: PluginRecordResponse[]) {
     typeSet.add(plugin.manifest?.type ?? "unknown");
   }
 
-  return ["all", ...Array.from(typeSet).sort()];
+  const preferredOrder = [
+    "all",
+    "source",
+    "industry",
+    "strategy",
+    "notification",
+    "broker",
+    "unknown",
+  ];
+
+  const extraTypes = Array.from(typeSet).filter((type) => !preferredOrder.includes(type)).sort();
+
+  return [...preferredOrder, ...extraTypes];
+}
+
+function PluginTypeIcon({ type }: { type: string }) {
+  if (type === "all") {
+    return <Boxes className="size-4" />;
+  }
+  if (type === "industry") {
+    return <Factory className="size-4" />;
+  }
+  if (type === "notification") {
+    return <Bell className="size-4" />;
+  }
+  if (type === "source") {
+    return <Database className="size-4" />;
+  }
+  if (type === "strategy") {
+    return <LineChart className="size-4" />;
+  }
+  if (type === "broker") {
+    return <ShieldCheck className="size-4" />;
+  }
+
+  return <Boxes className="size-4" />;
 }

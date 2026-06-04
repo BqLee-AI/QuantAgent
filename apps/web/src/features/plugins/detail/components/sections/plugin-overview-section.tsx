@@ -18,8 +18,6 @@ export function PluginOverviewSection({ detail }: { detail: PluginDetailResponse
 
   return (
     <DetailSectionCard
-      description="先判断插件是否可用，以及阻塞来自配置、依赖、权限还是运行错误。"
-      eyebrow="概览"
       title="插件治理摘要"
     >
       <div className="grid gap-4">

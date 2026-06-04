@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Card, Fieldset, Form, Tabs } from "@heroui/react";
+import { Fieldset, Form, Tabs } from "@heroui/react";
 
 import {
   parseConfigDraftPayload,
@@ -76,77 +76,73 @@ export function PluginConfigForm({
   return (
     <div ref={formViewportRef} className="w-full">
       <Form className="grid w-full gap-4">
-        <Card className="overflow-visible border border-hairline bg-surface shadow-sm">
-          <Card.Content className="overflow-visible p-0">
-            <Tabs
-              className="w-full"
-              orientation={isCompactLayout ? "horizontal" : "vertical"}
-              selectedKey={selectedGroupKey ?? undefined}
-              onSelectionChange={(key) => {
-                setSelectedGroupKey(String(key));
-              }}
+        <Tabs
+          className="w-full"
+          orientation={isCompactLayout ? "horizontal" : "vertical"}
+          selectedKey={selectedGroupKey ?? undefined}
+          onSelectionChange={(key) => {
+            setSelectedGroupKey(String(key));
+          }}
+        >
+          <div
+            className={
+              isCompactLayout
+                ? "grid gap-4"
+                : "grid w-full items-start grid-cols-[184px_minmax(0,1fr)]"
+            }
+          >
+            <div
+              className={
+                isCompactLayout
+                  ? "w-full overflow-x-auto border-b border-hairline px-3 pt-3"
+                  : "sticky top-4 self-start border-r border-hairline pr-3"
+              }
             >
-              <div
-                className={
-                  isCompactLayout
-                    ? "grid gap-4"
-                    : "grid w-full items-start grid-cols-[184px_minmax(0,1fr)]"
-                }
-              >
-                <div
+              <Tabs.ListContainer>
+                <Tabs.List
+                  aria-label="配置分类"
                   className={
                     isCompactLayout
-                      ? "w-full overflow-x-auto border-b border-hairline px-3 pt-3"
-                      : "sticky top-4 self-start border-r border-hairline bg-surface-soft/80 p-3"
+                      ? "flex w-max min-w-full gap-1"
+                      : "grid w-full gap-1.5"
                   }
                 >
-                  <Tabs.ListContainer>
-                    <Tabs.List
-                      aria-label="配置分类"
-                      className={
-                        isCompactLayout
-                          ? "flex w-max min-w-full gap-1"
-                          : "grid w-full gap-1.5"
-                      }
+                  {fieldGroups.map((group) => (
+                    <Tabs.Tab
+                      key={group.key}
+                      id={group.key}
+                      className={[
+                        "h-auto min-h-0 items-center rounded-md px-3 py-2.5",
+                        isCompactLayout ? "min-w-[152px]" : "justify-start",
+                      ].join(" ")}
                     >
-                      {fieldGroups.map((group) => (
-                        <Tabs.Tab
-                          key={group.key}
-                          id={group.key}
-                          className={[
-                            "h-auto min-h-0 items-center rounded-md px-3 py-2.5",
-                            isCompactLayout ? "min-w-[152px]" : "justify-start",
-                          ].join(" ")}
-                        >
-                          <span className="text-left text-body-sm font-semibold leading-5">
-                            {group.title}
-                          </span>
-                          <Tabs.Indicator />
-                        </Tabs.Tab>
-                      ))}
-                    </Tabs.List>
-                  </Tabs.ListContainer>
-                </div>
+                      <span className="text-left text-body-sm font-semibold leading-5">
+                        {group.title}
+                      </span>
+                      <Tabs.Indicator />
+                    </Tabs.Tab>
+                  ))}
+                </Tabs.List>
+              </Tabs.ListContainer>
+            </div>
 
-                {/* 只挂载当前分组，避免大 schema 的隐藏字段参与滚动期重渲染。 */}
-                {selectedGroup ? (
-                  <Tabs.Panel
-                    id={selectedGroup.key}
-                    className={isCompactLayout ? "min-w-0 p-3 pt-0" : "min-w-0 p-4"}
-                  >
-                    <SelectedGroupPanel
-                      group={selectedGroup}
-                      isCompactLayout={isCompactLayout}
-                      issueLookup={issueLookup}
-                      onValueChange={onValueChange}
-                      values={values}
-                    />
-                  </Tabs.Panel>
-                ) : null}
-              </div>
-            </Tabs>
-          </Card.Content>
-        </Card>
+            {/* 只挂载当前分组，避免大 schema 的隐藏字段参与滚动期重渲染。 */}
+            {selectedGroup ? (
+              <Tabs.Panel
+                id={selectedGroup.key}
+                className={isCompactLayout ? "min-w-0 p-3 pt-0" : "min-w-0 p-1 pl-4"}
+              >
+                <SelectedGroupPanel
+                  group={selectedGroup}
+                  isCompactLayout={isCompactLayout}
+                  issueLookup={issueLookup}
+                  onValueChange={onValueChange}
+                  values={values}
+                />
+              </Tabs.Panel>
+            ) : null}
+          </div>
+        </Tabs>
 
         {showSupportMatrix ? (
           <PluginConfigSupportMatrix supportMatrix={schema.supportMatrix} />

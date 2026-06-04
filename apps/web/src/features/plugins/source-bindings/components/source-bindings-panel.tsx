@@ -26,8 +26,6 @@ export function SourceBindingsPanel({ overview }: { overview: PluginOverview }) 
   if (!isIndustryPlugin) {
     return (
       <DetailSectionCard
-        description="SourceBinding 是 Industry 插件与 Source 插件之间的连接关系，不作为顶层导航或普通依赖字符串。"
-        eyebrow="SourceBinding"
         title="仅 Industry 插件展示内嵌绑定管理面"
       >
         <p className="m-0 rounded-lg border border-hairline bg-surface-soft px-3 py-4 text-body-sm text-muted">
@@ -40,8 +38,6 @@ export function SourceBindingsPanel({ overview }: { overview: PluginOverview }) 
   if (bindingsQuery.isError) {
     return (
       <DetailSectionCard
-        description="后端 SourceBinding API 不可用、权限不足或数据库未配置时，本面板降级为 unavailable，不伪造绑定数据。"
-        eyebrow="SourceBinding"
         title="绑定关系暂不可用"
       >
         <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-4 text-body-sm text-warning">
@@ -55,8 +51,6 @@ export function SourceBindingsPanel({ overview }: { overview: PluginOverview }) 
 
   return (
     <DetailSectionCard
-      description="V1 只读展示绑定状态、调度摘要、阻塞原因和最近活动；pause/resume/run-now 等动作不在本轮前端落地。"
-      eyebrow="SourceBinding"
       title="Industry 内嵌 SourceBinding 管理面"
     >
       {bindingsQuery.isLoading ? (

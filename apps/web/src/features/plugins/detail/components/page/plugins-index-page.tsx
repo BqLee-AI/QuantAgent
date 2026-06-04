@@ -4,6 +4,7 @@ import { Spinner } from "@heroui/react";
 import { usePluginListQuery } from "../../queries/use-plugin-detail";
 import {
   formatApiError,
+  formatPluginDescription,
 } from "../../utils/plugin-detail-format";
 import { PluginListCard } from "../list/plugin-list-card";
 import { collectPluginTypes, PluginListToolbar } from "../list/plugin-list-toolbar";
@@ -31,15 +32,16 @@ export function PluginsIndexPage() {
         return true;
       }
 
-      return [
-        plugin.id,
-        plugin.status,
-        plugin.source,
-        manifest?.name,
-        manifest?.description,
-        manifest?.type,
-        manifest?.version,
-      ]
+        return [
+          plugin.id,
+          plugin.status,
+          plugin.source,
+          manifest?.name,
+          manifest?.description,
+          formatPluginDescription(plugin.id, manifest?.description),
+          manifest?.type,
+          manifest?.version,
+        ]
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(keyword));
     });
@@ -48,12 +50,7 @@ export function PluginsIndexPage() {
   return (
     <div className="grid gap-5">
       <section className="page-header">
-        <p className="page-kicker">插件注册表</p>
-        <h1 className="page-title">插件治理</h1>
-        <p className="page-description">
-          统一管理 source、industry、strategy、notification、broker
-          五类插件；列表页只负责入口、筛选视角和详情跳转。
-        </p>
+        <h1 className="m-0 text-[30px] font-extrabold leading-[1.15] text-ink">插件治理</h1>
       </section>
 
       <PluginListToolbar
@@ -63,7 +60,6 @@ export function PluginsIndexPage() {
         }}
         onSearchChange={setSearchValue}
         onTypeChange={setActiveType}
-        pluginCount={plugins.length}
         searchValue={searchValue}
         types={pluginTypes}
       />

@@ -1,4 +1,5 @@
 import { Button, Card, Chip, Spinner, Surface } from "@heroui/react";
+import { Check, RotateCcw, Save } from "lucide-react";
 
 import { PluginConfigForm } from "@/features/plugins/config-form";
 
@@ -73,18 +74,18 @@ export function PluginConfigEditorPanel({ pluginId }: PluginConfigEditorPanelPro
                   {isDirty ? "有未保存改动" : "无改动"}
                 </Chip>
               </div>
-              <p className="m-0 mt-1 text-body-sm text-muted">
-                当前页面先复用真实 `config-schema` 渲染编辑表单，读取、校验与保存仍使用前端 Mock 数据源。
-              </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <Button isDisabled={savePending} size="sm" type="button" variant="secondary" onPress={() => void validateDraft()}>
+                <Check className="size-4" />
                 校验
               </Button>
               <Button isDisabled={savePending || !canReset} size="sm" type="button" variant="secondary" onPress={resetDraft}>
+                <RotateCcw className="size-4" />
                 重置
               </Button>
               <Button isDisabled={savePending || !isDirty} size="sm" type="button" variant="primary" onPress={() => void saveDraft()}>
+                <Save className="size-4" />
                 {savePending ? "保存中" : "模拟保存"}
               </Button>
             </div>

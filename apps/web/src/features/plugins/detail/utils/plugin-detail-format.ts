@@ -153,6 +153,23 @@ const schemaSourceLabels: Record<string, string> = {
   "registry-api": "插件注册表",
 };
 
+const pluginDescriptionLabels: Record<string, string> = {
+  "quantagent.official.industry.example":
+    "官方示例行业包，用于演示 source binding 的资源组织方式。",
+  "quantagent.official.industry.semiconductor":
+    "官方半导体行业包，内置 RSS 基线与行业观察样例。",
+  "quantagent.official.notification.discord":
+    "官方 Discord 通知插件试验版，提供低风险发送与接收能力。",
+  "quantagent.official.source.placeholder":
+    "最小可运行的数据源插件，用于验证插件基础链路。",
+  "quantagent.official.source.readability":
+    "读取单个网页链接并提取可读文章正文。",
+  "quantagent.official.source.rss":
+    "轮询 RSS/Atom 订阅源，并将条目标准化为 source item。",
+  "quantagent.official.source.tavily":
+    "基于 Tavily API 的证据型搜索与摘要提取工具。",
+};
+
 export function formatPluginType(value?: string | null): string {
   return value ? (pluginTypeLabels[value] ?? value) : "-";
 }
@@ -187,4 +204,15 @@ export function formatKeyLabel(value: string): string {
 
 export function formatSchemaSource(value?: string | null): string {
   return value ? (schemaSourceLabels[value] ?? value) : "-";
+}
+
+export function formatPluginDescription(
+  pluginId: string,
+  description?: string | null,
+): string {
+  return (
+    pluginDescriptionLabels[pluginId] ??
+    description ??
+    "manifest 暂不可用，详情页会展示受控失败态。"
+  );
 }
