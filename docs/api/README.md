@@ -16,6 +16,8 @@
 | 模块 | 文档 | 说明 |
 | --- | --- | --- |
 | Auth | [auth/auth_frontend_routes.md](auth/auth_frontend_routes.md) | 登录、当前用户、刷新 session、登出 |
+| Dashboard | [dashboard/dashboard_frontend_routes.md](dashboard/dashboard_frontend_routes.md) | Dashboard 首屏聚合摘要 |
+| Events | [events/events_frontend_routes.md](events/events_frontend_routes.md) | 标准事件列表、事件详情和 summary buckets |
 | Approval | [approvals/approvals_frontend_routes.md](approvals/approvals_frontend_routes.md) | Approval 队列、详情和 approve / reject / request-reanalysis actions |
 | Plugins | [plugins/plugins_frontend_routes.md](plugins/plugins_frontend_routes.md) | 插件列表、详情、配置、依赖、健康、审计和重扫 |
 | Source Bindings | [source_bindings/source_bindings_frontend_routes.md](source_bindings/source_bindings_frontend_routes.md) | SourceBinding 列表、详情、关联运行记录和 pause / resume / run-now actions |
@@ -98,7 +100,15 @@
 | PUT | `/models/presets/{preset_key}` | 是 | 更新 preset 绑定 |
 | GET | `/models/invocations` | 否 | Model invocation 记录 |
 
-### Runtime / Events
+### Dashboard / Events
+
+| 方法 | 路径 | Capability | 说明 |
+| --- | --- | --- | --- |
+| GET | `/dashboard/summary` | `runtime.inspect` | Dashboard 首屏聚合摘要 |
+| GET | `/events` | `runtime.inspect` | 标准事件列表、筛选回显、summary buckets 和分页 |
+| GET | `/events/{event_id}` | `runtime.inspect` | 标准事件详情摘要和状态流转 |
+
+### Runtime / Inspect
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
