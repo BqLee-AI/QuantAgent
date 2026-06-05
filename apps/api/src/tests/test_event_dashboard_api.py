@@ -97,9 +97,16 @@ class EventDashboardApiTestCase(unittest.TestCase):
         self.assertIn("/api/v1/events/{event_id}", schema["paths"])
         self.assertIn("/api/v1/dashboard/summary", schema["paths"])
         self.assertIn("events", schema["paths"]["/api/v1/events"]["get"]["tags"])
+        self.assertIn("events", schema["paths"]["/api/v1/events/{event_id}"]["get"]["tags"])
         self.assertIn("dashboard", schema["paths"]["/api/v1/dashboard/summary"]["get"]["tags"])
         response_schema = schema["paths"]["/api/v1/events"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
         self.assertTrue("$ref" in response_schema or "allOf" in response_schema or "anyOf" in response_schema)
+        detail_schema = schema["paths"]["/api/v1/events/{event_id}"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+        self.assertTrue("$ref" in detail_schema or "allOf" in detail_schema or "anyOf" in detail_schema)
+        dashboard_schema = (
+            schema["paths"]["/api/v1/dashboard/summary"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+        )
+        self.assertTrue("$ref" in dashboard_schema or "allOf" in dashboard_schema or "anyOf" in dashboard_schema)
         self.assertEqual(list_response.headers["X-Request-ID"], "req-events-ok")
         self.assertTrue(csrf)
 

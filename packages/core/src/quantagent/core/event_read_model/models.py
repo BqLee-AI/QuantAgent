@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -318,10 +319,12 @@ def encode_event_cursor(payload: Mapping[str, object]) -> str:
 def decode_event_cursor(cursor: str | None) -> dict[str, object] | None:
     if cursor is None:
         return None
+    if not isinstance(cursor, str):
+        raise ValueError("event cursor is invalid")
     try:
         decoded = base64.urlsafe_b64decode(cursor.encode("ascii")).decode("utf-8")
         payload = json.loads(decoded)
-    except (ValueError, json.JSONDecodeError) as exc:
+    except (binascii.Error, UnicodeDecodeError, ValueError, json.JSONDecodeError) as exc:
         raise ValueError("event cursor is invalid") from exc
     if not isinstance(payload, dict):
         raise ValueError("event cursor is invalid")
