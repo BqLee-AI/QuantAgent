@@ -12,6 +12,7 @@ import {
 export type WorkspaceRoutePath =
   | '/'
   | '/approvals'
+  | '/debug'
   | '/events'
   | '/models'
   | '/plugins'
@@ -42,6 +43,7 @@ const DEFAULT_FORBIDDEN_REASON = '当前账号没有执行该操作的权限。'
 export const WORKSPACE_ROUTE_POLICY: Record<WorkspaceRoutePath, readonly Capability[]> = {
   '/': [],
   '/approvals': [APPROVAL_APPROVE_CAPABILITY, APPROVAL_AMEND_CAPABILITY],
+  '/debug': [RUNTIME_INSPECT_CAPABILITY],
   '/events': [RUNTIME_INSPECT_CAPABILITY],
   '/models': [SECRET_MANAGE_CAPABILITY],
   '/plugins': [PLUGIN_CONFIGURE_CAPABILITY, PLUGIN_INSTALL_CAPABILITY],
@@ -57,6 +59,7 @@ export const NAV_POLICY: readonly NavPolicyEntry[] = [
   { label: '插件', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/plugins'], to: '/plugins' },
   { label: '模型', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/models'], to: '/models' },
   { label: '设置', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/settings'], to: '/settings' },
+  ...(import.meta.env.DEV ? [{ label: '调试', requiredAnyOf: WORKSPACE_ROUTE_POLICY['/debug'], to: '/debug' } as const] : []),
 ] as const
 
 export const ACTION_POLICY = {

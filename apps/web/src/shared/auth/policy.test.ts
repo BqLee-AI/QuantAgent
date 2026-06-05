@@ -44,6 +44,7 @@ describe('capability policy', () => {
       '/approvals',
       '/runtime',
       '/settings',
+      '/debug',
     ])
   })
 
@@ -56,6 +57,7 @@ describe('capability policy', () => {
   it('maps nested workspace routes back to their guarded family path', () => {
     expect(resolveWorkspaceRoutePath('/events/event-1')).toBe('/events')
     expect(resolveWorkspaceRoutePath('/approvals/ap-1')).toBe('/approvals')
+    expect(resolveWorkspaceRoutePath('/debug/agent-run-chat')).toBe('/debug')
     expect(resolveWorkspaceRoutePath('/approval-link/token')).toBeNull()
   })
 

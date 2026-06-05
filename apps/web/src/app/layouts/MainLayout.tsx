@@ -13,6 +13,7 @@ const routeLabels = new Map<string, string>([
   ['runtime', '运行态'],
   ['settings', '设置'],
   ['debug', '调试工作台'],
+  ['agent-run-chat', 'Agent Debug Chat'],
   ['page-states', '页面状态'],
   ['runtime-config', '运行时配置'],
   ['error-fallback', '错误兜底'],
