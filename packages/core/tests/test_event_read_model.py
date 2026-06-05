@@ -192,6 +192,29 @@ class EventReadModelTestCase(unittest.TestCase):
         self.assertGreaterEqual(snapshot.entry_metrics.new_count, 1)
         self.assertGreaterEqual(snapshot.entry_metrics.featured_count, 1)
 
+    def test_dashboard_snapshot_filters_featured_events_by_time_range(self) -> None:
+        self._seed_events()
+        self.materializer.materialize(
+            self._input(
+                identity_value="seed-old",
+                raw_event_id="seed-old",
+                title="Old featured event",
+                current_status=EventCurrentStatus.CAPTURED,
+                analysis_status=EventAnalysisStatus.PENDING,
+                priority_score=0.99,
+                source_type=EventSourceType.RSS,
+                industries=("semiconductor",),
+                is_featured=True,
+                featured_reason="old high priority",
+                captured_at=self.now - timedelta(days=2),
+            )
+        )
+        self.session.commit()
+
+        snapshot = self.service.get_dashboard_snapshot(featured_limit=5, time_range=EventTimeRange.LAST_24H)
+
+        self.assertNotIn("Old featured event", {item.title for item in snapshot.featured_events})
+
     def test_unknown_event_raises_service_error(self) -> None:
         with self.assertRaises(EventReadModelNotFoundError):
             self.service.get_event_detail("evt_missing")

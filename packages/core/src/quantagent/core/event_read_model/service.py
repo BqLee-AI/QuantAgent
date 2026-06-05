@@ -44,7 +44,7 @@ class EventReadModelService:
         time_range: EventTimeRange = EventTimeRange.LAST_24H,
     ) -> EventDashboardSnapshot:
         query = self._normalize_query(EventListQuery(time_range=time_range, limit=20))
-        featured_events = self.repository.list_featured_events(limit=featured_limit)
+        featured_events = self.repository.list_featured_events(query, limit=featured_limit)
         metrics = self.repository.get_summary_buckets(query)
         return EventDashboardSnapshot(
             featured_events=featured_events,

@@ -20,10 +20,13 @@ from quantagent.api.schemas.events import (
 )
 from quantagent.core.db.repositories.event_repository import SqlAlchemyEventReadModelRepository
 from quantagent.core.event_read_model import (
+    EventAnalysisStatus,
+    EventCredibility,
     EventListQuery,
     EventReadModelNotFoundError,
     EventReadModelService,
     EventSortMode,
+    EventSourceType,
     EventTimeRange,
 )
 
@@ -48,14 +51,19 @@ class EventApiService:
         cursor: str | None,
         limit: int,
     ) -> EventListResponse:
+        normalized_time_range = EventTimeRange(time_range)
+        normalized_credibility = _optional_enum_value(EventCredibility, credibility)
+        normalized_analysis_status = _optional_enum_value(EventAnalysisStatus, analysis_status)
+        normalized_source_type = _optional_enum_value(EventSourceType, source_type)
+        normalized_sort = EventSortMode(sort)
         page = self._service.list_events(
             EventListQuery(
-                time_range=EventTimeRange(time_range),
+                time_range=normalized_time_range,
                 industries=tuple(industries),
-                credibility=credibility,
-                analysis_status=analysis_status,
-                source_type=source_type,
-                sort=EventSortMode(sort),
+                credibility=normalized_credibility,
+                analysis_status=normalized_analysis_status,
+                source_type=normalized_source_type,
+                sort=normalized_sort,
                 cursor=cursor,
                 limit=limit,
             )
@@ -64,7 +72,14 @@ class EventApiService:
             items=[_to_list_item(item) for item in page.items],
             next_cursor=page.next_cursor,
             filters=EventListFiltersResponse(
-                time_range=time_range, industry=industries, credibility=credibility, analysis_status=analysis_status, source_type=source_type, sort=sort, limit=limit, cursor=cursor
+                time_range=normalized_time_range.value,
+                industry=industries,
+                credibility=normalized_credibility,
+                analysis_status=normalized_analysis_status,
+                source_type=normalized_source_type,
+                sort=normalized_sort.value,
+                limit=limit,
+                cursor=cursor,
             ),
             summary_buckets=EventSummaryBucketsResponse(
                 new_count=page.buckets.new_count,
@@ -193,3 +208,9 @@ def _float_value(value: object) -> float | None:
     if isinstance(value, int | float):
         return float(value)
     return None
+
+
+def _optional_enum_value(enum_type, value: str | None) -> str | None:
+    if value is None:
+        return None
+    return enum_type(value).value

@@ -103,10 +103,10 @@ class SqlAlchemyEventReadModelRepository(EventReadModelRepository):
             generated_at=datetime.now(UTC),
         )
 
-    def list_featured_events(self, *, limit: int) -> tuple[EventRecord, ...]:
+    def list_featured_events(self, query: EventListQuery, *, limit: int) -> tuple[EventRecord, ...]:
+        statement = self._apply_filters(select(EventORM), query)
         statement: Select[tuple[EventORM]] = (
-            select(EventORM)
-            .where(EventORM.is_featured.is_(True))
+            statement.where(EventORM.is_featured.is_(True))
             .order_by(
                 desc(func.coalesce(EventORM.priority_score, -1.0)),
                 desc(EventORM.captured_at),

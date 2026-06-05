@@ -129,16 +129,22 @@ class EventDashboardApiTestCase(unittest.TestCase):
         settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
         app = create_app(settings)
 
+        invalid_cases = (
+            {"sort": "bad"},
+            {"credibility": "bad"},
+            {"analysis_status": "bad"},
+            {"source_type": "bad"},
+        )
         with TestClient(app) as client:
             Base.metadata.create_all(client.app.state.db_engine)
             self._login(client, settings)
-            response = client.get("/api/v1/events", params={"sort": "bad"}, headers={"X-Request-ID": "req-events-bad"})
-
-        body = response.json()
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(body["error"]["code"], "BAD_REQUEST")
-        self.assertEqual(response.headers["X-Request-ID"], "req-events-bad")
-        self.assertEqual(body["error"]["request_id"], "req-events-bad")
+            for params in invalid_cases:
+                response = client.get("/api/v1/events", params=params, headers={"X-Request-ID": "req-events-bad"})
+                body = response.json()
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(body["error"]["code"], "BAD_REQUEST")
+                self.assertEqual(response.headers["X-Request-ID"], "req-events-bad")
+                self.assertEqual(body["error"]["request_id"], "req-events-bad")
 
     def test_dashboard_summary_uses_empty_sections_without_seed_data(self) -> None:
         database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
