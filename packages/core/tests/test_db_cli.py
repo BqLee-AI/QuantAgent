@@ -103,11 +103,20 @@ class DatabaseCliTestCase(unittest.TestCase):
         upgrade.assert_called_once()
         self.assertEqual(upgrade.call_args.args[1], "head")
 
+    def test_downgrade_defaults_to_single_step(self) -> None:
+        with patch.object(settings, "DATABASE_URL", "sqlite:///:memory:"):
+            with patch("quantagent.core.db.cli.command.downgrade") as downgrade:
+                exit_code = cli.main(["downgrade"])
+
+        self.assertEqual(exit_code, 0)
+        downgrade.assert_called_once()
+        self.assertEqual(downgrade.call_args.args[1], "-1")
+
     def test_migration_graph_has_single_head(self) -> None:
         config = cli.create_alembic_config()
         script = ScriptDirectory.from_config(config)
 
-        self.assertEqual(script.get_heads(), ["20260604_0002"])
+        self.assertEqual(script.get_heads(), ["20260605_0001"])
 
     def test_upgrade_accepts_postgresql_url_override(self) -> None:
         with patch.object(settings, "DATABASE_URL", None):

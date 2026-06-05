@@ -55,6 +55,15 @@ class ApprovalRepository(Protocol):
 
     def list_audit_records(self, approval_id: str) -> tuple[ApprovalAuditRecord, ...]: ...
 
+    def count_approval_requests(
+        self,
+        *,
+        status: str | None = None,
+        risk_level: str | None = None,
+        required_confirmation_level: str | None = None,
+        expires_before: object | None = None,
+    ) -> int: ...
+
 
 class InMemoryApprovalRepository:
     def __init__(self) -> None:
@@ -188,3 +197,32 @@ class InMemoryApprovalRepository:
     def list_audit_records(self, approval_id: str) -> tuple[ApprovalAuditRecord, ...]:
         with self._lock:
             return tuple(self._audit_by_approval.get(approval_id, ()))
+
+    def count_approval_requests(
+        self,
+        *,
+        status: str | None = None,
+        risk_level: str | None = None,
+        required_confirmation_level: str | None = None,
+        expires_before: object | None = None,
+    ) -> int:
+        with self._lock:
+            approvals = self._approvals.values()
+            count = 0
+            for approval in approvals:
+                if status is not None and approval.status.value != status:
+                    continue
+                if risk_level is not None and approval.risk_level != risk_level:
+                    continue
+                if (
+                    required_confirmation_level is not None
+                    and approval.required_confirmation_level.value != required_confirmation_level
+                ):
+                    continue
+                if expires_before is not None:
+                    if approval.expires_at is None:
+                        continue
+                    if approval.expires_at > expires_before.isoformat():
+                        continue
+                count += 1
+            return count

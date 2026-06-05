@@ -6,6 +6,7 @@ from quantagent.core.db.models.approval import (
     ApprovalInputORM,
     ApprovalRequestORM,
 )
+from quantagent.core.db.models.event import EventORM, EventStateTransitionORM
 from quantagent.core.db.models.event_intake import EventIntakeRoutedEventORM
 from quantagent.core.db.models.raw_event_capture import RawEventCaptureORM
 from quantagent.core.db.models.raw_event import RawEventORM
@@ -19,6 +20,8 @@ __all__ = [
     "ApprovalEvaluationORM",
     "ApprovalInputORM",
     "ApprovalRequestORM",
+    "EventORM",
+    "EventStateTransitionORM",
     "EventIntakeRoutedEventORM",
     "RawEventCaptureORM",
     "RawEventORM",
