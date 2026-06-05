@@ -40,11 +40,25 @@
 - **AND** materializer 不依赖 FastAPI、API DTO、前端类型或具体插件实现
 - **AND** materializer seam 可以被 core 单元测试直接调用，不要求 #175 新增 worker、scheduler loop 或事件消费框架
 
+#### Scenario: Materializer is idempotent by stable identity
+- **WHEN** 相同 RawEvent、routed-event 或 analysis summary 因重试被重复 materialize
+- **THEN** 系统通过稳定 `identity_kind` / `identity_value` 找到同一个标准 Event
+- **AND** 非空 `raw_event_id` 或 `routed_event_id` 与标准 Event 的关系保持唯一，或使用数据库方言等价唯一约束实现
+- **AND** 唯一冲突后 repository 重读既有 Event 并合并摘要，不创建第二条标准 Event
+- **AND** 没有 `raw_event_id`、`routed_event_id` 或显式稳定外部 identity 的输入不得创建随机 Event
+
 #### Scenario: Materialization appends transition on status change
 - **WHEN** materializer 导致标准 Event 当前状态变化
 - **THEN** repository 在同一事务内更新 `events.current_status` 并追加 `event_state_transitions`
 - **AND** transition 包含状态变化原因、actor 或模块、source ref、request id 或 trace id
 - **AND** 失败时不得用 mock 或 sample provider 补齐标准 Event 数据
+
+#### Scenario: Concurrent or duplicate state updates are controlled
+- **WHEN** 多个 materializer、analysis、approval 或 runtime 摘要并发更新同一标准 Event
+- **THEN** repository 按 `event_id` 使用 row lock、version 条件更新或等价机制串行化状态写入
+- **AND** 相同 `to_status` 与相同 `source_ref` / `request_id` 的重试写入为幂等 no-op 或返回既有 transition
+- **AND** 状态不得无序回退，除非 `reason_code` 明确表达人工复核、重新分析或回滚语义
+- **AND** `events.current_status` 与 `event_state_transitions` history 保持一致
 
 #### Scenario: Historical backfill is explicit follow-up
 - **WHEN** 仓库已有历史 RawEvent 或 routed-event 需要补入标准 Event
@@ -116,13 +130,16 @@
 
 #### Scenario: Dashboard sections degrade independently
 - **WHEN** Approval 或 Runtime 相关依赖不可用
-- **THEN** 对应 `approval_summary` 或 `health_summary` 分区返回 `unavailable` 或 `error`
+- **THEN** 在认证和请求校验成功时，API 返回 HTTP 200 + 成功 `ApiResponse` envelope
+- **AND** 对应 `approval_summary` 或 `health_summary` 分区返回 `unavailable` 或 `error`
 - **AND** `featured_events` 和 `entry_metrics` 仍可在 Event read model 可用时返回 `ok` 或 `empty`
-- **AND** 单个分区失败不会导致整个 Dashboard summary 响应失败，除非基础认证或请求校验不可恢复
+- **AND** 单个分区失败不会导致整个 Dashboard summary 响应失败，除非基础认证、请求校验、数据库 session 或 Dashboard service 本身不可恢复
+- **AND** 局部失败只体现在 section `status`、`reason` 和 `updated_at` 中，不把整体 `ApiResponse.code` 改为失败
 
 #### Scenario: Event read model unavailable does not hide independent sections
 - **WHEN** Event read model 查询不可用，但基础认证和请求解析成功
-- **THEN** `featured_events` 与 `entry_metrics` 分区返回 `unavailable` 或 `error`
+- **THEN** API 返回 HTTP 200 + 成功 `ApiResponse` envelope
+- **AND** `featured_events` 与 `entry_metrics` 分区返回 `unavailable` 或 `error`
 - **AND** `approval_summary` 与 `health_summary` 仍尽量返回真实摘要或各自的 `empty`、`unavailable`、`error` 状态
 - **AND** API 不用 RawEvent、Runtime Audit fixture、WebSocket 或 sample provider 静默填充 Event 分区
 

@@ -100,6 +100,9 @@ events
   routed_event_id: string | null
   trace_id: string | null
   correlation_id: string | null
+  identity_kind: string
+  identity_value: string
+  version: integer
   latest_agent_run_id: string | null
   latest_tool_invocation_id: string | null
   approval_id: string | null
@@ -145,12 +148,21 @@ event_state_transitions
 - `events(raw_event_id)`
 - `events(routed_event_id)`
 - `events(trace_id)`
+- unique `events(identity_kind, identity_value)`
+- partial unique `events(raw_event_id) WHERE raw_event_id IS NOT NULL` 或当前数据库方言等价约束。
+- partial unique `events(routed_event_id) WHERE routed_event_id IS NOT NULL` 或当前数据库方言等价约束。
 - `event_state_transitions(event_id, created_at, transition_id)`
 
 关键约束：
 
 - `event_state_transitions` MUST append-only；不得通过 update 覆盖历史状态。
 - 状态更新必须在同一事务内更新 `events.current_status` / `updated_at` 并追加 transition。
+- `events.identity_kind` / `identity_value` 是标准 Event 幂等身份，不是展示字段；首版 identity 选择顺序固定为：非空 `raw_event_id` 优先，其次非空 `routed_event_id`，最后才允许使用 materializer 输入中显式提供的稳定外部 identity。不得用 request_id、trace_id、当前时间或随机数作为唯一身份来源。
+- `event_id` 必须由稳定 identity 派生，或在首次创建后通过 unique identity 重读复用；同一 RawEvent / routed-event / analysis summary 重复 materialize 必须返回同一个标准 Event。
+- materializer 遇到 `identity_kind` / `identity_value`、`raw_event_id` 或 `routed_event_id` 唯一冲突时，必须在同一事务语义下重读既有 Event 并按幂等规则合并摘要，不得创建第二条标准 Event。
+- repository 更新同一 Event 状态时必须按 `event_id` 串行化：优先使用 `SELECT ... FOR UPDATE`；若目标数据库或测试方言不支持行锁，必须使用 `version` 条件更新或等价乐观锁重试，避免并发写入导致 `current_status` 与 transition history 不一致。
+- 相同 `event_id`、`to_status`、`source_ref` / `request_id` 的重复状态写入是幂等 no-op 或返回既有 transition，不得追加无意义重复 transition。
+- 状态流转不得无序回退；只有 `reason_code` 明确表达人工复核、重新分析或回滚语义时，才允许从较后阶段回到较早阶段，并必须记录 transition reason。
 - `dry_run_executed` 只允许作为兼容历史数据的状态名保留，不作为 #175 新增状态流转目标；#175 不实现 broker、dry-run 执行或真实交易执行。
 - 首版允许 `best_action_summary`、`industry_impact_summary`、`evidence_summary` 等 JSON 摘要字段承载 read model 快照，避免把完整 Decision / Policy Gate / provider raw response 拉进本 issue。
 - 所有 JSON 摘要字段只保存可公开摘要、引用和降级原因；不得保存完整 prompt、完整模型推理链、provider raw response、secret、broker credential 或私有策略。
@@ -173,6 +185,7 @@ packages/core/src/quantagent/core/event_read_model/
 - `EventReadModelMaterializer` 接收已经持久化的 RawEvent、`event_intake` routed-event、analysis summary、approval ref 或 runtime summary 输入，生成或更新标准 Event read model。
 - materializer 只依赖 core repository / domain model，不依赖 FastAPI、API DTO、前端类型或具体插件实现。
 - materializer upsert `events` 当前状态时，状态变化必须通过 repository 在同一事务内追加 `event_state_transitions`。
+- materializer 调用 repository 时必须传入稳定 identity；没有 `raw_event_id`、`routed_event_id` 或显式稳定外部 identity 的输入应被拒绝或标记为不可 materialize，不得创建随机 Event。
 - 首版必须提供显式可测试的 materializer service seam；只有在当前 RawEvent capture / `event_intake` routed-event 持久化链路已有清晰 service 调用点时才接入同步 materialization，不为接入 materializer 新增 worker / scheduler loop 或事件消费框架。
 - 如果实现阶段发现现有写入链路接入会扩大范围，应保留 materializer service 与 repository 测试，Events / Dashboard API 仍只读取标准 Event read model；未 materialized 的历史数据表现为真实空态或分区降级，不能回退到 RawEvent / Runtime Audit 临时拼装。
 - 历史 RawEvent / routed-event backfill 不在 #175 默认执行；如需要批量补历史 Event，另开 backfill / replay issue，单独定义分批、幂等和回滚策略。
@@ -181,6 +194,8 @@ packages/core/src/quantagent/core/event_read_model/
 
 ```text
 EventMaterializationInput
+  identity_kind
+  identity_value
   raw_event_ref
   routed_event_ref
   fact_summary
@@ -205,6 +220,7 @@ EventMaterializationResult
 
 - RawEvent 存在但 routed-event 缺失时，materializer 可创建 `current_status=captured`、`analysis_status=pending` 的标准 Event，并通过 `degradation_notices` 表达分析未接通。
 - routed-event 标记 discard 时，materializer 可以不生成 featured Event，但若生成标准 Event，必须以受控状态和原因摘要表达 discard / review。
+- 相同输入重复 materialize 时，如果核心摘要无变化且状态未变化，materializer 返回既有 Event 与既有状态摘要，不追加 transition。
 - materializer 不得吞掉写入失败；调用方应记录错误并让 Dashboard / Events API 对未 materialized 数据保持真实空态或 unavailable，不用 mock 补齐。
 
 替代方案是由 `/events` 查询时组合 RawEvent + routed-event。该方案无法建立稳定状态流转，也会让读 API 临时承担业务 materialization，因此不采用。
@@ -413,7 +429,9 @@ DashboardEntryMetrics
 - `approval_summary` 复用已存在 Approval persistence / repository / service 查询边界；若当前没有专用 summary 方法，实现可以在 API service 内做薄聚合，或在依赖不可用时返回受控 `unavailable` / `error`，但不得重新实现 approve / reject / request-reanalysis actions。
 - `health_summary` 只聚合影响判断质量的最小摘要，可来自现有 runtime health、runtime errors、AgentRun / ToolInvocation 摘要查询；缺少某个查询入口时对应 item 缺省或分区降级，不把完整 Runtime dashboard 搬进 Dashboard summary。
 - 任一分区依赖不可用时，该分区返回 `unavailable` 或 `error`，其他分区仍可返回 `ok` 或 `empty`。
-- 基础认证和请求解析通过后，即使 Event read model 不可用，也优先返回 Dashboard envelope；`featured_events` 与 `entry_metrics` 分区标记为 `unavailable` 或 `error`，`approval_summary` 与 `health_summary` 仍尽量独立返回真实摘要或自身降级状态。
+- 基础认证和请求解析通过后，即使 Event read model、Approval 或 Runtime 的局部分区查询不可用，也优先返回 HTTP 200 + `ApiResponse.success(DashboardSummaryResponse)`；局部失败只体现在对应 `DashboardSection.status`、`reason` 和 `updated_at` 中。
+- 只有认证失败、请求参数校验失败、响应 DTO 无法构造、数据库 session 完全不可用或 Dashboard service 自身不可恢复时，才返回错误 envelope；不得因为单个分区失败把整个 Dashboard summary 返回 500 或 `ApiResponse.code != 0`。
+- Event read model 不可用时，`featured_events` 与 `entry_metrics` 分区标记为 `unavailable` 或 `error`，`approval_summary` 与 `health_summary` 仍尽量独立返回真实摘要或自身降级状态。
 
 替代方案是让 Dashboard 直接调用多个现有 API 并在前端拼装。该方案会让前端继续发明 DTO，且无法统一局部分区降级语义，因此不采用。
 

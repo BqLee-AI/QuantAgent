@@ -5,17 +5,17 @@
 
 ## 2. Blocking Contract And Persistence Path
 
-- [ ] 2.1 固化标准 Event V1 字段与受控枚举。输入：design Decisions 2/3/4、spec Event requirements。输出：Event read model 字段、`current_status`、`analysis_status`、`credibility`、`source_type`、`risk_level`、`risk_direction`、sort mode、section status 的实现前契约清单；不得把枚举留到 router 或前端临场发明。写入边界：实现阶段 core model / API schema。依赖：1.2。
-- [ ] 2.2 新增 `events` 与 `event_state_transitions` ORM 和 migration。输入：2.1 字段清单。输出：SQLAlchemy ORM、Alembic migration、索引、唯一约束、append-only transition schema。写入边界：`packages/core/src/quantagent/core/db/models/*`、`packages/core/alembic/versions/*`。依赖：2.1。验证：migration import、数据库可用时 upgrade / downgrade。
-- [ ] 2.3 建立 Event repository Protocol 与 SQLAlchemy repository。输入：2.2 schema、query params、summary buckets。输出：list/detail/featured/buckets/state transitions 查询方法，分页和排序在 repository 中稳定实现。写入边界：`packages/core/src/quantagent/core/event_read_model/*`、`packages/core/src/quantagent/core/db/repositories/*`。依赖：2.2。
-- [ ] 2.4 建立 Event materializer seam。输入：RawEvent、`event_intake` routed-event、analysis summary、approval ref、runtime refs。输出：upsert `events`、append `event_state_transitions`、返回 materialization result；提供可测试 service seam，不新增 worker / scheduler loop，不做历史 backfill。写入边界：`packages/core/src/quantagent/core/event_read_model/materializer.py` 或等价职责文件。依赖：2.3。
+- [ ] 2.1 固化标准 Event V1 字段、受控枚举和幂等 identity。输入：design Decisions 2/3/4、spec Event requirements。输出：Event read model 字段、`identity_kind` / `identity_value`、`version`、`current_status`、`analysis_status`、`credibility`、`source_type`、`risk_level`、`risk_direction`、sort mode、section status 的实现前契约清单；不得把 identity 或枚举留到 router 或前端临场发明。写入边界：实现阶段 core model / API schema。依赖：1.2。
+- [ ] 2.2 新增 `events` 与 `event_state_transitions` ORM 和 migration。输入：2.1 字段清单。输出：SQLAlchemy ORM、Alembic migration、索引、`identity_kind` / `identity_value` unique、非空 `raw_event_id` / `routed_event_id` partial unique 或等价唯一约束、append-only transition schema。写入边界：`packages/core/src/quantagent/core/db/models/*`、`packages/core/alembic/versions/*`。依赖：2.1。验证：migration import、数据库可用时 upgrade / downgrade。
+- [ ] 2.3 建立 Event repository Protocol 与 SQLAlchemy repository。输入：2.2 schema、query params、summary buckets。输出：list/detail/featured/buckets/state transitions 查询方法，分页和排序在 repository 中稳定实现；upsert 唯一冲突后重读既有 Event；状态更新使用 row lock、version 条件更新或等价机制串行化。写入边界：`packages/core/src/quantagent/core/event_read_model/*`、`packages/core/src/quantagent/core/db/repositories/*`。依赖：2.2。
+- [ ] 2.4 建立 Event materializer seam。输入：RawEvent、`event_intake` routed-event、analysis summary、approval ref、runtime refs、稳定 identity。输出：幂等 upsert `events`、append `event_state_transitions`、重复输入 no-op 或返回既有 transition、返回 materialization result；提供可测试 service seam，不新增 worker / scheduler loop，不做历史 backfill。写入边界：`packages/core/src/quantagent/core/event_read_model/materializer.py` 或等价职责文件。依赖：2.3。
 - [ ] 2.5 建立 Event read model service。输入：2.3 repository、2.4 materializer 输出语义。输出：Events list、Event detail、Dashboard featured events、entry metrics、状态摘要和受控降级模型。写入边界：`packages/core/src/quantagent/core/event_read_model/*`。依赖：2.3；若 service 需要复用 materializer result 类型则依赖 2.4。
 
 ## 3. Parallel API And Aggregation Slices
 
 - [ ] 3.1 API Events DTO 与 router skeleton。输入：2.1 契约清单、spec Events requirements。输出：`schemas/events.py`、`routers/v1/events.py`、response_model、query DTO、OpenAPI tags；query wire shape 固定 `time_range=today|24h|7d|30d`、repeated `industry`、`limit` 默认 20 最大 100。写入边界：`apps/api/src/quantagent/api/schemas/events.py`、`apps/api/src/quantagent/api/routers/v1/events.py`。依赖：2.1；接通真实 service 依赖 2.5。
 - [ ] 3.2 API Dashboard DTO 与 router skeleton。输入：design Dashboard section 草案、spec Dashboard requirements。输出：`schemas/dashboard.py`、`routers/v1/dashboard.py`、section status DTO、OpenAPI tags。写入边界：`apps/api/src/quantagent/api/schemas/dashboard.py`、`apps/api/src/quantagent/api/routers/v1/dashboard.py`。依赖：2.1；接通真实 service 依赖 2.5。
-- [ ] 3.3 API service seam。输入：2.5 core service、3.1/3.2 DTO、现有 Approval / Runtime / AgentRun / ToolInvocation 查询入口。输出：`event_api.py` 与 `dashboard_api.py`，负责请求级 Session 组装、core read model 到 API DTO 映射、分区 unavailable / error 归一化；Event read model 不可用时 Dashboard 仍返回 envelope 和独立分区状态。写入边界：`apps/api/src/quantagent/api/services/*`。依赖：2.5、3.1、3.2。
+- [ ] 3.3 API service seam。输入：2.5 core service、3.1/3.2 DTO、现有 Approval / Runtime / AgentRun / ToolInvocation 查询入口。输出：`event_api.py` 与 `dashboard_api.py`，负责请求级 Session 组装、core read model 到 API DTO 映射、分区 unavailable / error 归一化；认证和请求校验成功后的局部分区失败返回 HTTP 200 + `ApiResponse.success`，失败只体现在 section status / reason。写入边界：`apps/api/src/quantagent/api/services/*`。依赖：2.5、3.1、3.2。
 - [ ] 3.4 API v1 protected registration。输入：3.1/3.2 router。输出：Events 与 Dashboard routers 通过 `STANDARD_API_V1_ROUTER_REGISTRATIONS` 注册 protected routes。写入边界：`apps/api/src/quantagent/api/routers/v1/register.py`。依赖：3.1、3.2。
 
 ## 4. Integration And Boundary Reviews
@@ -27,8 +27,8 @@
 
 ## 5. Tests And Documentation
 
-- [ ] 5.1 Core tests。输入：2.2-2.5。输出：覆盖 Event materialization seam、Event list/detail、featured sorting、summary buckets、未知事件、append-only state transition、repository pagination、JSON 摘要脱敏边界。写入边界：`packages/core/tests/*`。依赖：2.5。验证：`cd packages/core && uv run python -m unittest discover -s tests`。
-- [ ] 5.2 API runtime tests。输入：4.1。输出：覆盖 401 protected boundary、200 list/detail/dashboard、404 unknown event、request_id、query params、section `ok` / `empty` / `unavailable` / `error`、OpenAPI envelope。写入边界：`apps/api/src/tests/*`。依赖：4.1。验证：`cd apps/api && uv run python -m unittest discover -s src`。
+- [ ] 5.1 Core tests。输入：2.2-2.5。输出：覆盖 Event materialization seam、稳定 identity 重复 materialize、唯一冲突重读、重复状态 no-op、并发状态更新串行化或乐观锁重试、Event list/detail、featured sorting、summary buckets、未知事件、append-only state transition、repository pagination、JSON 摘要脱敏边界。写入边界：`packages/core/tests/*`。依赖：2.5。验证：`cd packages/core && uv run python -m unittest discover -s tests`。
+- [ ] 5.2 API runtime tests。输入：4.1。输出：覆盖 401 protected boundary、200 list/detail/dashboard、404 unknown event、request_id、query params、section `ok` / `empty` / `unavailable` / `error`、局部分区失败仍为 HTTP 200 + 成功 envelope、OpenAPI envelope。写入边界：`apps/api/src/tests/*`。依赖：4.1。验证：`cd apps/api && uv run python -m unittest discover -s src`。
 - [ ] 5.3 README / usage note。输入：实现后的 route、core read model 边界和验证结果。输出：更新 `apps/api/README.md` 与 core Event read model README 或等价 usage note；不更新 Web feature README。写入边界：API/core 文档。依赖：4.1。
 - [ ] 5.4 Migration validation。输入：2.2 migration。输出：数据库可用时验证 upgrade / downgrade；不可用时在 PR 中说明原因。依赖：2.2。命令：`uv run quantagent-db upgrade`、`uv run quantagent-db downgrade -1`。
 
