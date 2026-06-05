@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 import unittest
 
 from sqlalchemy import create_engine
@@ -20,6 +20,7 @@ from quantagent.core.approval.models import (
     ExpirationAction,
     PolicyGateStatus,
 )
+from quantagent.core.approval.repository import InMemoryApprovalRepository
 from quantagent.core.db.base import Base
 from quantagent.core.db.models.approval import ApprovalRequestORM
 from quantagent.core.db.repositories.approval_repository import SQLAlchemyApprovalRepository
@@ -254,6 +255,33 @@ class SQLAlchemyApprovalRepositoryTestCase(unittest.TestCase):
             1,
         )
 
+    def test_in_memory_count_uses_datetime_for_expiry_comparison(self) -> None:
+        repository = InMemoryApprovalRepository()
+        repository.save_action_request(_action(action_id="action-expiring"))
+        repository.save_approval_request(
+            _approval(
+                approval_id="approval-expiring",
+                action_id="action-expiring",
+                expires_at="2026-06-04T20:30:00+05:00",
+            )
+        )
+        repository.save_action_request(_action(action_id="action-later"))
+        repository.save_approval_request(
+            _approval(
+                approval_id="approval-later",
+                action_id="action-later",
+                expires_at="2026-06-04T20:30:00+00:00",
+            )
+        )
+        service = ApprovalQueryService(repository)
+
+        count = service.count_approvals(
+            status="pending",
+            expires_before=datetime(2026, 6, 4, 18, 0, tzinfo=UTC),
+        )
+
+        self.assertEqual(count.total, 1)
+
     def test_query_detail_uses_redacted_payload_summaries(self) -> None:
         self.repository.save_action_request(
             _action(
@@ -342,6 +370,7 @@ def _approval(
     action_id: str = "action-1",
     risk_level: str = "high",
     proposed_payload: dict[str, object] | None = None,
+    expires_at: str | None = None,
 ) -> ApprovalRequest:
     return ApprovalRequest(
         id=approval_id,
@@ -355,7 +384,7 @@ def _approval(
         summary="adjust_strategy increase_risk for strategy:strategy-1",
         proposed_payload=proposed_payload or {"summary": "masked"},
         required_confirmation_level=ConfirmationLevel.SOFT_CONFIRM,
-        expires_at=None,
+        expires_at=expires_at,
         expiration_action=ExpirationAction.EXPIRE_REJECT,
         policy_source="unit_test",
         allowed_channels=("web",),
