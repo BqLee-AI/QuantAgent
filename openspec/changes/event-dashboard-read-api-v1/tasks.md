@@ -1,7 +1,7 @@
 ## 1. OpenSpec Review Gate
 
 - [x] 1.1 提交 OpenSpec-only PR。输入：issue #175、proposal、design、spec。输出：只包含 `openspec/changes/event-dashboard-read-api-v1/**` 的 PR。写入边界：OpenSpec artifacts。依赖：无。验证：`openspec validate event-dashboard-read-api-v1 --type change --strict --json`。
-- [ ] 1.2 等待维护者明确评论“没问题”或批准后再进入实现代码。输入：OpenSpec-only PR review。输出：可实施的 core/API 实现范围确认。写入边界：无实现代码。依赖：1.1。
+- [x] 1.2 等待维护者明确评论“没问题”或批准后再进入实现代码。输入：OpenSpec-only PR review。输出：可实施的 core/API 实现范围确认。写入边界：无实现代码。依赖：1.1。
 
 ## 2. Blocking Contract And Persistence Path
 
@@ -35,8 +35,8 @@
 ## 6. Final Validation And PR Readiness
 
 - [x] 6.1 OpenSpec validation。输入：任意 OpenSpec artifact 修改。输出：strict validate 通过。命令：`openspec validate event-dashboard-read-api-v1 --type change --strict --json`。
-- [ ] 6.2 后端验证汇总。输入：5.1、5.2、5.4。输出：PR 说明列出实际运行命令、结果、未验证项和原因。依赖：5.1、5.2、5.4。
-- [ ] 6.3 实现 PR 证据链。输入：issue #175、OpenSpec change、设计文档、测试结果。输出：PR 说明写清为什么新增标准 Event read model、如何复用 RawEvent / routed-event / Approval / Runtime、非目标、风险边界和后续 Web issue。依赖：6.2。
+- [x] 6.2 后端验证汇总。输入：5.1、5.2、5.4。输出：PR 说明列出实际运行命令、结果、未验证项和原因。依赖：5.1、5.2、5.4。
+- [x] 6.3 实现 PR 证据链。输入：issue #175、OpenSpec change、设计文档、测试结果。输出：PR 说明写清为什么新增标准 Event read model、如何复用 RawEvent / routed-event / Approval / Runtime、非目标、风险边界和后续 Web issue。依赖：6.2。
 
 ## 7. Optional Parallelization
 

@@ -18,6 +18,7 @@ from quantagent.core.scheduling import (
 
 
 PLACEHOLDER_PLUGIN_ID = "quantagent.official.source.placeholder"
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class PluginFoundationDemoStagesTestCase(unittest.IsolatedAsyncioTestCase):
@@ -32,7 +33,7 @@ class PluginFoundationDemoStagesTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNotNone(record)
         self.assertEqual(record.status, PluginStatus.VALID)
-        self.assertEqual(record.path, Path("plugins/sources/placeholder-source").resolve())
+        self.assertEqual(record.path, (REPO_ROOT / "plugins/sources/placeholder-source").resolve())
         self.assertIsNotNone(record.manifest)
         self.assertEqual(record.manifest.type, PluginType.SOURCE)
         self.assertEqual(record.manifest.entrypoint, "placeholder_source:plugin")
@@ -127,8 +128,8 @@ class PluginFoundationDemoStagesTestCase(unittest.IsolatedAsyncioTestCase):
     def _registry(self) -> PluginRegistry:
         return PluginRegistry(
             RegistryScanner(
-                official_root=Path("plugins"),
-                runtime_root=Path("runtime/plugin-foundation-demo-missing"),
+                official_root=REPO_ROOT / "plugins",
+                runtime_root=REPO_ROOT / "runtime/plugin-foundation-demo-missing",
             )
         )
 
