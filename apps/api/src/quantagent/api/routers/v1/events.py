@@ -41,7 +41,7 @@ def list_events(
             limit=limit,
         )
     except ValueError as exc:
-        raise BadRequestError("Invalid event query", details={"reason": str(exc)}) from exc
+        raise BadRequestError("Invalid event query", details={"reason": "invalid_event_query"}) from exc
     return ApiResponse.success(payload)
 
 

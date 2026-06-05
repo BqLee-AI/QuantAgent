@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+import logging
 
 from fastapi import Request
 from sqlalchemy.orm import Session
@@ -11,6 +12,8 @@ from quantagent.core.approval import ApprovalListQuery, ApprovalQueryService
 from quantagent.core.db.repositories.approval_repository import SQLAlchemyApprovalRepository
 from quantagent.core.db.repositories.event_repository import SqlAlchemyEventReadModelRepository
 from quantagent.core.event_read_model import EventReadModelService, EventTimeRange
+
+logger = logging.getLogger("quantagent.api")
 
 
 class DashboardApiService:
@@ -48,9 +51,10 @@ class DashboardApiService:
                 "pending_approval_count": snapshot.entry_metrics.pending_approval_count,
             }
             metrics_meta = {"status": "ok", "reason": None, "updated_at": snapshot.generated_at}
-        except Exception as exc:
-            featured_meta = {"status": "error", "reason": f"event_read_model:{exc.__class__.__name__}", "updated_at": now}
-            metrics_meta = {"status": "error", "reason": f"event_read_model:{exc.__class__.__name__}", "updated_at": now}
+        except Exception:
+            logger.exception("dashboard event read model summary failed")
+            featured_meta = {"status": "error", "reason": "event_read_model_error", "updated_at": now}
+            metrics_meta = {"status": "error", "reason": "event_read_model_error", "updated_at": now}
 
         approval_payload = {"pending_count": 0, "expiring_soon_count": 0, "items": []}
         approval_meta = {"status": "empty", "reason": None, "updated_at": now}
@@ -81,8 +85,9 @@ class DashboardApiService:
                 "reason": None,
                 "updated_at": now,
             }
-        except Exception as exc:
-            approval_meta = {"status": "unavailable", "reason": f"approval_summary:{exc.__class__.__name__}", "updated_at": now}
+        except Exception:
+            logger.exception("dashboard approval summary failed")
+            approval_meta = {"status": "unavailable", "reason": "approval_summary_unavailable", "updated_at": now}
 
         # V1 只返回影响判断质量的最小健康摘要；没有稳定 runtime read model 时明确降级。
         health_payload = {"status": "unavailable", "items": []}

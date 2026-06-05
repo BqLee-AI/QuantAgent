@@ -26,10 +26,10 @@
 
 | 分区 | 说明 |
 | --- | --- |
-| `featured_events` | 重点事件预览，最多 5 条，item 结构复用 Events list item |
+| `featured_events` | 最近 24 小时重点事件预览，最多 5 条，item 结构复用 Events list item |
 | `approval_summary` | pending approval 计数、24 小时内到期计数和最多 5 条预览 |
 | `health_summary` | 运行健康摘要；PR #295 V1 暂未接通稳定 runtime summary，返回受控 `unavailable` |
-| `entry_metrics` | 事件入口指标，字段与 Events `summary_buckets` 对齐 |
+| `entry_metrics` | 最近 24 小时事件入口指标，字段与 Events `summary_buckets` 对齐 |
 
 每个分区结构一致：
 
@@ -119,6 +119,7 @@
 
 - 页面不能因为某个分区 `unavailable` 或 `error` 就丢弃整个 summary；应按分区展示降级、空态或错误态。
 - `featured_events.data.items` 使用 Events list item 结构，可跳转到 `/events/{event_id}` 并通过 Events detail API 恢复详情。
+- Dashboard V1 当前不提供查询参数，`featured_events` 与 `entry_metrics` 统一使用最近 24 小时窗口；需要其他窗口时应调用 Events list API。
 - `approval_summary.data.pending_count` 和 `expiring_soon_count` 是独立计数，不受预览列表最多 5 条限制。
 - `health_summary` 在 V1 明确返回 `unavailable`，前端不能用 mock 或 runtime fixture 静默填成真实健康数据。
 - Dashboard 不承接交易执行语义；事件推荐、审批摘要和健康摘要只用于导航和判断入口。

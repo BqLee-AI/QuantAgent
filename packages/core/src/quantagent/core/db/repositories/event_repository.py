@@ -238,13 +238,30 @@ class SqlAlchemyEventReadModelRepository(EventReadModelRepository):
     def _update_event(self, row: EventORM, input_data: EventMaterializationInput) -> EventMaterializationResult:
         latest_transition = self._latest_transition(row.event_id)
         if _is_duplicate_transition(latest_transition, input_data):
-            self._merge_mutable_fields(row, input_data, update_status=False)
+            previous_status = row.current_status
+            current_version = row.version
+            updated_at = datetime.now(UTC)
+            values = self._materialized_values(input_data, version=current_version + 1, updated_at=updated_at)
+            result = self.session.execute(
+                update(EventORM)
+                .where(EventORM.event_id == row.event_id, EventORM.version == current_version)
+                .values(**values)
+            )
+            if result.rowcount != 1:
+                self.session.expire_all()
+                fresh = self.session.get(EventORM, row.event_id)
+                if fresh is None:
+                    raise ValueError(f"event disappeared during update: {row.event_id}")
+                return self._update_event(fresh, input_data)
             self.session.flush()
+            refreshed = self.session.get(EventORM, row.event_id)
+            if refreshed is None:
+                raise ValueError(f"event disappeared after update: {row.event_id}")
             return EventMaterializationResult(
                 event_id=row.event_id,
                 created=False,
-                previous_status=row.current_status,
-                current_status=row.current_status,
+                previous_status=previous_status,
+                current_status=refreshed.current_status,
                 transition_id=latest_transition.transition_id if latest_transition is not None else None,
                 degradation_notices=input_data.degradation_notices,
             )

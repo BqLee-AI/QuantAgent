@@ -143,6 +143,7 @@ class EventDashboardApiTestCase(unittest.TestCase):
                 body = response.json()
                 self.assertEqual(response.status_code, 400)
                 self.assertEqual(body["error"]["code"], "BAD_REQUEST")
+                self.assertEqual(body["error"]["details"]["reason"], "invalid_event_query")
                 self.assertEqual(response.headers["X-Request-ID"], "req-events-bad")
                 self.assertEqual(body["error"]["request_id"], "req-events-bad")
 
@@ -215,7 +216,9 @@ class EventDashboardApiTestCase(unittest.TestCase):
         self.assertEqual(empty_response.status_code, 200)
         self.assertEqual(empty_body["code"], 0)
         self.assertEqual(empty_body["data"]["featured_events"]["meta"]["status"], "error")
+        self.assertEqual(empty_body["data"]["featured_events"]["meta"]["reason"], "event_read_model_error")
         self.assertEqual(empty_body["data"]["entry_metrics"]["meta"]["status"], "error")
+        self.assertEqual(empty_body["data"]["entry_metrics"]["meta"]["reason"], "event_read_model_error")
         self.assertEqual(empty_body["data"]["approval_summary"]["meta"]["status"], "empty")
         self.assertEqual(empty_body["data"]["health_summary"]["meta"]["status"], "unavailable")
         self.assertEqual(empty_response.headers["X-Request-ID"], "req-dashboard-empty-approval")
@@ -245,6 +248,10 @@ class EventDashboardApiTestCase(unittest.TestCase):
         self.assertEqual(unavailable_body["data"]["featured_events"]["meta"]["status"], "error")
         self.assertEqual(unavailable_body["data"]["entry_metrics"]["meta"]["status"], "error")
         self.assertEqual(unavailable_body["data"]["approval_summary"]["meta"]["status"], "unavailable")
+        self.assertEqual(
+            unavailable_body["data"]["approval_summary"]["meta"]["reason"],
+            "approval_summary_unavailable",
+        )
         self.assertEqual(unavailable_body["data"]["health_summary"]["meta"]["status"], "unavailable")
         self.assertEqual(unavailable_response.headers["X-Request-ID"], "req-dashboard-unavailable")
 

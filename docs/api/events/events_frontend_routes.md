@@ -29,9 +29,9 @@
 | --- | --- | --- | --- |
 | `time_range` | `today` / `24h` / `7d` / `30d` | `24h` | 时间范围 |
 | `industry` | string[] | `[]` | 行业筛选，可重复传参 |
-| `credibility` | string | `null` | 可信度筛选 |
-| `analysis_status` | string | `null` | 分析状态筛选 |
-| `source_type` | string | `null` | 来源类型筛选 |
+| `credibility` | `high` / `medium` / `low` / `conflict` / `unknown` | `null` | 可信度筛选 |
+| `analysis_status` | `pending` / `analyzing` / `scored` / `decision_ready` / `pending_approval` / `failed` / `review_required` / `unavailable` | `null` | 分析状态筛选 |
+| `source_type` | `rss` / `api` / `webhook` / `manual` / `unknown` | `null` | 来源类型筛选 |
 | `sort` | `mixed` / `latest` / `priority` | `mixed` | 排序方式 |
 | `cursor` | string | `null` | 游标分页 |
 | `limit` | integer | `20` | 范围 1-100 |
@@ -143,7 +143,7 @@
 
 | HTTP 状态码 | `code` | 场景 |
 | --- | --- | --- |
-| 400 | `40000` | 查询参数非法，例如不支持的 `sort` |
+| 400 | `40000` | 查询参数非法，例如不支持的 `time_range`、`credibility`、`analysis_status`、`source_type`、`sort` 或非法 `cursor` |
 | 401 | `40100` | 未登录或登录态失效 |
 | 403 | `40300` | 缺少 `runtime.inspect` |
 | 404 | `40400` | `event_id` 不存在 |

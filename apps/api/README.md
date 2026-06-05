@@ -292,9 +292,9 @@ GET /api/v1/dashboard/summary
 实现约束：
 
 - 标准 Event 与 Dashboard 只读取 `packages/core` 的 Event read model，不回退到 RawEvent API、runtime audit fixture 或 sample provider。
-- `GET /api/v1/events` 支持 `time_range=today|24h|7d|30d`、repeated `industry`、`credibility`、`analysis_status`、`source_type`、`sort=mixed|latest|priority`、`cursor`、`limit`。
+- `GET /api/v1/events` 支持 `time_range=today|24h|7d|30d`、repeated `industry`、`credibility=high|medium|low|conflict|unknown`、`analysis_status=pending|analyzing|scored|decision_ready|pending_approval|failed|review_required|unavailable`、`source_type=rss|api|webhook|manual|unknown`、`sort=mixed|latest|priority`、`cursor`、`limit`。
 - `GET /api/v1/events/{event_id}` 只返回事实摘要、评分摘要、行业影响、最佳动作摘要、approval 引用、runtime 引用、证据摘要、降级提醒和状态摘要；不返回完整 prompt、provider raw response、secret 或 broker credential。
-- `GET /api/v1/dashboard/summary` 返回 `featured_events`、`approval_summary`、`health_summary`、`entry_metrics` 四个 section；runtime 健康摘要在首版未接通时明确返回 `unavailable`，不会静默造真数据。
+- `GET /api/v1/dashboard/summary` 返回 `featured_events`、`approval_summary`、`health_summary`、`entry_metrics` 四个 section；`featured_events` 与 `entry_metrics` 使用最近 24 小时 Event read model 窗口；runtime 健康摘要在首版未接通时明确返回 `unavailable`，不会静默造真数据。
 - API router 只负责 query/body、依赖注入、`ApiResponse[T]` envelope 和错误映射；Events 查询、排序、分页、summary buckets 与 Dashboard 聚合在 core/API service 内完成。
 
 ### Auth 基础闭环

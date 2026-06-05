@@ -92,6 +92,7 @@ class EventReadModelTestCase(unittest.TestCase):
 
         detail = self.service.get_event_detail(first.event_id)
         self.assertEqual(detail.event.title, "TSMC capacity check newer summary")
+        self.assertEqual(detail.state_summary.version, 2)
         self.assertEqual(len(detail.state_summary.transitions), 1)
 
     def test_materialize_status_change_appends_transition_and_increments_version(self) -> None:
