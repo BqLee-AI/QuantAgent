@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import UTC, datetime
 from threading import RLock
 from typing import Protocol
 
@@ -54,6 +55,15 @@ class ApprovalRepository(Protocol):
     def save_audit_record(self, record: ApprovalAuditRecord) -> None: ...
 
     def list_audit_records(self, approval_id: str) -> tuple[ApprovalAuditRecord, ...]: ...
+
+    def count_approval_requests(
+        self,
+        *,
+        status: str | None = None,
+        risk_level: str | None = None,
+        required_confirmation_level: str | None = None,
+        expires_before: datetime | None = None,
+    ) -> int: ...
 
 
 class InMemoryApprovalRepository:
@@ -188,3 +198,47 @@ class InMemoryApprovalRepository:
     def list_audit_records(self, approval_id: str) -> tuple[ApprovalAuditRecord, ...]:
         with self._lock:
             return tuple(self._audit_by_approval.get(approval_id, ()))
+
+    def count_approval_requests(
+        self,
+        *,
+        status: str | None = None,
+        risk_level: str | None = None,
+        required_confirmation_level: str | None = None,
+        expires_before: datetime | None = None,
+    ) -> int:
+        with self._lock:
+            approvals = self._approvals.values()
+            count = 0
+            for approval in approvals:
+                if status is not None and approval.status.value != status:
+                    continue
+                if risk_level is not None and approval.risk_level != risk_level:
+                    continue
+                if (
+                    required_confirmation_level is not None
+                    and approval.required_confirmation_level.value != required_confirmation_level
+                ):
+                    continue
+                if expires_before is not None:
+                    if approval.expires_at is None:
+                        continue
+                    approval_expires_at = _parse_approval_expiry(approval.expires_at)
+                    if approval_expires_at is None or approval_expires_at > _normalize_datetime(expires_before):
+                        continue
+                count += 1
+            return count
+
+
+def _parse_approval_expiry(value: str) -> datetime | None:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return _normalize_datetime(parsed)
+
+
+def _normalize_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)

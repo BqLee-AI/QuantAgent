@@ -52,6 +52,11 @@ class ApprovalPage:
 
 
 @dataclass(frozen=True)
+class ApprovalSummaryCounts:
+    total: int
+
+
+@dataclass(frozen=True)
 class ApprovalDecisionSummaryView:
     status: str
     intent: str | None
@@ -140,6 +145,23 @@ class ApprovalQueryService:
             evaluations=tuple(_evaluation_view(item) for item in self._repository.list_evaluations(approval.id)),
             decisions=tuple(_decision_view(item) for item in self._repository.list_decisions(approval.id)),
             audit_refs=tuple(_audit_ref(item) for item in self._repository.list_audit_records(approval.id)),
+        )
+
+    def count_approvals(
+        self,
+        *,
+        status: str | None = None,
+        risk_level: str | None = None,
+        required_confirmation_level: str | None = None,
+        expires_before: datetime | None = None,
+    ) -> ApprovalSummaryCounts:
+        return ApprovalSummaryCounts(
+            total=self._repository.count_approval_requests(
+                status=status,
+                risk_level=risk_level,
+                required_confirmation_level=required_confirmation_level,
+                expires_before=expires_before,
+            )
         )
 
     def _summary(

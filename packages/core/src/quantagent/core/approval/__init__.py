@@ -37,6 +37,7 @@ from quantagent.core.approval.query_service import (
     ApprovalPage,
     ApprovalQueryNotFoundError,
     ApprovalQueryService,
+    ApprovalSummaryCounts,
     ApprovalSummaryView,
 )
 from quantagent.core.approval.repository import ApprovalRepository, InMemoryApprovalRepository
@@ -69,6 +70,7 @@ __all__ = [
     "ApprovalRequestStatus",
     "ApprovalRuleEvaluator",
     "ApprovalServiceResult",
+    "ApprovalSummaryCounts",
     "ApprovalSummaryView",
     "ConfirmationLevel",
     "ExecutionStatus",

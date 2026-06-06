@@ -95,6 +95,9 @@ def _build_parser() -> argparse.ArgumentParser:
     upgrade_parser = subparsers.add_parser("upgrade", help="Run Alembic upgrade.")
     upgrade_parser.add_argument("revision", nargs="?", default="head")
 
+    downgrade_parser = subparsers.add_parser("downgrade", help="Run Alembic downgrade.")
+    downgrade_parser.add_argument("revision", nargs="?", default="-1")
+
     subparsers.add_parser("current", help="Show the current Alembic revision.")
     subparsers.add_parser("check", help="Check whether model metadata matches migrations.")
 
@@ -111,6 +114,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
             if args.command == "upgrade":
                 command.upgrade(config, args.revision)
+            elif args.command == "downgrade":
+                command.downgrade(config, args.revision)
             elif args.command == "current":
                 command.current(config)
             elif args.command == "check":

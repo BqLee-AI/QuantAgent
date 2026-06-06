@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from sqlalchemy import Select, and_, desc, or_, select
+from sqlalchemy import Select, and_, desc, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -308,6 +308,27 @@ class SQLAlchemyApprovalRepository:
             next_cursor = {"at": _isoformat_utc(value), "approval_id": last.approval_id}
             rows = rows[:bounded_limit]
         return [_approval_from_orm(row) for row in rows], next_cursor
+
+    def count_approval_requests(
+        self,
+        *,
+        status: str | None = None,
+        risk_level: str | None = None,
+        required_confirmation_level: str | None = None,
+        expires_before: datetime | None = None,
+    ) -> int:
+        statement = select(func.count()).select_from(ApprovalRequestORM)
+        if status is not None:
+            statement = statement.where(ApprovalRequestORM.status == status)
+        if risk_level is not None:
+            statement = statement.where(ApprovalRequestORM.risk_level == risk_level)
+        if required_confirmation_level is not None:
+            statement = statement.where(ApprovalRequestORM.required_confirmation_level == required_confirmation_level)
+        if expires_before is not None:
+            statement = statement.where(ApprovalRequestORM.expires_at.is_not(None)).where(
+                ApprovalRequestORM.expires_at <= expires_before
+            )
+        return int(self._session.execute(statement).scalar_one())
 
     def _latest_decision_row(self, approval_id: str) -> ApprovalDecisionORM | None:
         approval_row = self._session.get(ApprovalRequestORM, approval_id)

@@ -279,6 +279,24 @@ Action request body 可以提供 `input_id`、`reason` / `comment` 和非敏感 
 
 Approval response 和 audit refs 只返回脱敏摘要，不返回 secret、token、完整 prompt、私有策略、broker credential、真实账户凭证或完整敏感 proposed payload。`request-reanalysis` V1 只记录人工意图，不触发 AgentRuntime、worker、scheduler 或新的重分析事件桥接。
 
+### Event / Dashboard Read API V1
+
+当前已新增受保护只读 REST 资源：
+
+```text
+GET /api/v1/events
+GET /api/v1/events/{event_id}
+GET /api/v1/dashboard/summary
+```
+
+实现约束：
+
+- 标准 Event 与 Dashboard 只读取 `packages/core` 的 Event read model，不回退到 RawEvent API、runtime audit fixture 或 sample provider。
+- `GET /api/v1/events` 支持 `time_range=today|24h|7d|30d`、repeated `industry`、`credibility=high|medium|low|conflict|unknown`、`analysis_status=pending|analyzing|scored|decision_ready|pending_approval|failed|review_required|unavailable`、`source_type=rss|api|webhook|manual|unknown`、`sort=mixed|latest|priority`、`cursor`、`limit`。
+- `GET /api/v1/events/{event_id}` 只返回事实摘要、评分摘要、行业影响、最佳动作摘要、approval 引用、runtime 引用、证据摘要、降级提醒和状态摘要；不返回完整 prompt、provider raw response、secret 或 broker credential。
+- `GET /api/v1/dashboard/summary` 返回 `featured_events`、`approval_summary`、`health_summary`、`entry_metrics` 四个 section；`featured_events` 与 `entry_metrics` 使用最近 24 小时 Event read model 窗口；runtime 健康摘要在首版未接通时明确返回 `unavailable`，不会静默造真数据。
+- API router 只负责 query/body、依赖注入、`ApiResponse[T]` envelope 和错误映射；Events 查询、排序、分页、summary buckets 与 Dashboard 聚合在 core/API service 内完成。
+
 ### Auth 基础闭环
 
 - 当前 API 初版采用本地单用户 Cookie Session 鉴权，不实现注册、RBAC、多用户、多租户、OAuth 或 SSO。
