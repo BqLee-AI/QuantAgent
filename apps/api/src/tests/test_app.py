@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from nacl.encoding import HexEncoder
 from nacl.signing import SigningKey
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from quantagent.api.auth import (
@@ -2489,7 +2490,47 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(output["output_json"]["structured_news"]["reasoning_prompt"], "[REDACTED]")
         self.assertEqual(output["output_json"]["routing"]["provider_raw_response"], "[REDACTED]")
         self.assertEqual(output["output_json"]["routing"]["api_token"], "[REDACTED]")
+        self.assertNotIn("rss_summary", detail["safe_details"]["article_snapshot"])
         self.assertNotIn("full HBM body", json.dumps(output, ensure_ascii=False))
+
+    def test_events_detail_article_snapshot_does_not_leak_long_rss_summary(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
+        app = create_app(settings)
+        sentinel = "SENTINEL_FULL_RSS_BODY_" + ("x" * 2000)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            session = client.app.state.db_session_factory()
+            try:
+                self._seed_runtime_audit_news(session)
+                session.flush()
+                routed = session.scalars(
+                    select(EventIntakeRoutedEventORM).where(EventIntakeRoutedEventORM.event_id == "evt-routed-runtime-001")
+                ).first()
+                assert routed is not None
+                routed.article_snapshot = {
+                    **routed.article_snapshot,
+                    "rss_summary": sentinel,
+                    "preview": "safe-preview",
+                    "body_content_available": True,
+                    "content_length_chars": len(sentinel),
+                }
+                session.commit()
+            finally:
+                session.close()
+            self._login_with_client(client, settings)
+            response = client.get("/api/v1/events/rawevt-runtime-001")
+
+        self.assertEqual(response.status_code, 200)
+        serialized = json.dumps(response.json()["data"], ensure_ascii=False)
+        article_snapshot = response.json()["data"]["safe_details"]["article_snapshot"]
+        self.assertEqual(article_snapshot["preview"], "safe-preview")
+        self.assertEqual(article_snapshot["content_length_chars"], len(sentinel))
+        self.assertNotIn("rss_summary", article_snapshot)
+        self.assertNotIn("SENTINEL_FULL_RSS_BODY", serialized)
 
     def test_events_default_excludes_discard_and_explicit_filter_includes_it(self) -> None:
         database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
@@ -2605,6 +2646,53 @@ class ApiAppTestCase(unittest.TestCase):
             [item["routed_event_id"] for item in industry_response.json()["data"]["items"]],
             ["evt-routed-runtime-002", "evt-routed-runtime-001"],
         )
+
+    def test_events_filters_are_applied_before_pagination(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            session = client.app.state.db_session_factory()
+            try:
+                self._seed_runtime_audit_news(session)
+                session.add(
+                    self._event_routed_row(
+                        event_id="evt-routed-noise-new",
+                        raw_event_id="rawevt-runtime-001",
+                        owner_id="semiconductor",
+                        summary="较新的非 memory 事件。",
+                        priority="low",
+                        target_topics=["non-memory"],
+                        created_at=datetime(2026, 6, 5, 9, 0, 0, tzinfo=UTC),
+                    )
+                )
+                session.commit()
+            finally:
+                session.close()
+            self._login_with_client(client, settings)
+            topic_response = client.get("/api/v1/events", params={"target_topic": "memory", "limit": 1})
+            priority_response = client.get("/api/v1/events", params={"priority": "high", "limit": 1})
+            trace_response = client.get("/api/v1/events", params={"trace_id": "corr-runtime-001", "limit": 1})
+            request_response = client.get("/api/v1/events", params={"request_id": "req-1", "limit": 1})
+            source_response = client.get(
+                "/api/v1/events",
+                params={"source_plugin_id": "quantagent.official.source.rss", "limit": 1},
+            )
+
+        self.assertEqual(topic_response.status_code, 200)
+        self.assertEqual(priority_response.status_code, 200)
+        self.assertEqual(trace_response.status_code, 200)
+        self.assertEqual(request_response.status_code, 200)
+        self.assertEqual(source_response.status_code, 200)
+        self.assertEqual(topic_response.json()["data"]["items"][0]["routed_event_id"], "evt-routed-runtime-001")
+        self.assertEqual(priority_response.json()["data"]["items"][0]["routed_event_id"], "evt-routed-runtime-001")
+        self.assertEqual(trace_response.json()["data"]["items"][0]["routed_event_id"], "evt-routed-runtime-001")
+        self.assertEqual(request_response.json()["data"]["items"][0]["routed_event_id"], "evt-routed-runtime-001")
+        self.assertEqual(source_response.json()["data"]["items"][0]["source_plugin_id"], "quantagent.official.source.rss")
 
     def test_events_require_event_inspect_not_runtime_inspect(self) -> None:
         database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)

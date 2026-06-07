@@ -79,9 +79,15 @@ class EventReadModelQueryService:
         raw_items = self._repository.list_for_events_read_model(
             decisions=decisions,
             binding_id=_clean(binding_id),
+            source_plugin_id=_clean(source_plugin_id),
             industry_id=_clean(industry_id),
             keyword=_clean(keyword),
+            target_topic=_clean(target_topic),
+            priority=_clean(priority),
+            relationship=_clean(relationship),
             status=_clean(status),
+            trace_id=_clean(trace_id),
+            request_id=_clean(request_id),
             sort=normalized_sort,
             time_from=time_from,
             time_to=time_to,
@@ -99,20 +105,6 @@ class EventReadModelQueryService:
             )
             raw_items = raw_items[:page_limit]
         response_items = [_to_list_item(item, raw_events.get(item.raw_event_id or "")) for item in raw_items]
-        response_items = [
-            item
-            for item in response_items
-            if _matches_filters(
-                item,
-                keyword=None,
-                source_plugin_id=_clean(source_plugin_id),
-                target_topic=_clean(target_topic),
-                priority=_clean(priority),
-                relationship=_clean(relationship),
-                trace_id=_clean(trace_id),
-                request_id=_clean(request_id),
-            )
-        ]
         return EventListResponse(items=response_items, next_cursor=next_cursor, generated_at=datetime.now(UTC))
 
     def get_event_detail(self, raw_event_id: str) -> EventDetailResponse:
@@ -251,11 +243,7 @@ def _safe_details(routed_event: EventIntakeRoutedEventORM, raw_event: RawEventOR
             "provider_invocation_count": routed_event.provider_invocation_count,
             "invocation_metadata": routed_event.invocation_metadata,
             "source_snapshot": routed_event.source_snapshot,
-            "article_snapshot": {
-                key: value
-                for key, value in _mapping(routed_event.article_snapshot).items()
-                if key not in {"body_excerpt", "raw_payload", "content"}
-            },
+            "article_snapshot": _safe_article_snapshot(routed_event.article_snapshot),
             "raw_event": {
                 "dedupe_strategy": raw_event.dedupe_strategy if raw_event else None,
                 "duplicate_capture_count": raw_event.duplicate_capture_count if raw_event else None,
@@ -264,36 +252,6 @@ def _safe_details(routed_event: EventIntakeRoutedEventORM, raw_event: RawEventOR
             },
         }
     )
-
-
-def _matches_filters(
-    item: EventListItemResponse,
-    *,
-    keyword: str | None,
-    source_plugin_id: str | None,
-    target_topic: str | None,
-    priority: str | None,
-    relationship: str | None,
-    trace_id: str | None,
-    request_id: str | None,
-) -> bool:
-    if keyword:
-        haystack = " ".join(str(part or "").lower() for part in (item.title, item.summary, item.url, item.source_name))
-        if keyword.lower() not in haystack:
-            return False
-    if source_plugin_id and item.source_plugin_id != source_plugin_id:
-        return False
-    if target_topic and target_topic not in item.target_topics:
-        return False
-    if priority and item.priority != priority:
-        return False
-    if relationship and (item.relationship_summary is None or relationship not in item.relationship_summary):
-        return False
-    if trace_id and item.trace.correlation_id != trace_id:
-        return False
-    if request_id and item.trace.request_id != request_id:
-        return False
-    return True
 
 
 def _decision_filter(decision: str | None, *, include_discard: bool) -> frozenset[str]:
@@ -358,6 +316,25 @@ def _relationship_summary(first_relevance: Mapping[str, object] | None, key_fiel
         str(first_relevance.get("relevance_score")) if first_relevance.get("relevance_score") is not None else None,
     ]
     return " / ".join(part for part in parts if part)
+
+
+def _safe_article_snapshot(value: object) -> dict[str, object]:
+    snapshot = _mapping(value)
+    safe_keys = {
+        "body_content_available",
+        "content_completeness",
+        "content_length_chars",
+        "excerpt_end",
+        "excerpt_start",
+        "language",
+        "title",
+    }
+    safe = {key: snapshot[key] for key in safe_keys if key in snapshot}
+    preview = _optional_string(snapshot.get("preview"))
+    if preview:
+        # 审计详情只允许有限预览；RSS summary 可能就是全文，不能作为安全摘要透出。
+        safe["preview"] = preview[:500]
+    return _sanitize_json(safe)
 
 
 def _first_mapping(value: object) -> Mapping[str, object] | None:

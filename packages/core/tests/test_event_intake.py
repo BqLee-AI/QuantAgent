@@ -170,6 +170,27 @@ class EventIntakeTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.decision.decision, IntakeDecision.DISCARD)
         self.assertEqual(result.decision.discard_reason, DiscardReason.UNSUPPORTED_LANGUAGE)
+        self.assertIn("语言", result.decision.audit.reason_summary)
+        self.assertEqual(result.provider_invocation_count, 0)
+        self.assertEqual(invoker.invocation_count, 0)
+
+    async def test_malformed_item_discards_with_chinese_summary_without_provider_invocation(self) -> None:
+        invoker = FakeStructuredModelInvoker([self._route_output()])
+        runner = SingleCallEventIntakeRunner(invoker=invoker)
+        result = await runner.run(
+            self._build_single_context(
+                item={
+                    "title": "",
+                    "summary_or_content": "",
+                    "url": "",
+                    "enrichment_status": "succeeded",
+                }
+            )
+        )
+
+        self.assertEqual(result.decision.decision, IntakeDecision.DISCARD)
+        self.assertEqual(result.decision.discard_reason, DiscardReason.MALFORMED)
+        self.assertIn("缺少可用标题", result.decision.audit.reason_summary)
         self.assertEqual(result.provider_invocation_count, 0)
         self.assertEqual(invoker.invocation_count, 0)
 
@@ -209,8 +230,31 @@ class EventIntakeTestCase(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result.decision.decision, IntakeDecision.REVIEW)
         self.assertEqual(result.decision.audit.failure_code, "EVENT_INTAKE_VALIDATION_FAILED")
+        self.assertIn("未通过 Router Agent schema 校验", result.decision.audit.reason_summary)
         self.assertFalse(result.decision.routing.requires_deep_analysis)
         self.assertEqual(invoker.invocation_count, 1)
+
+    async def test_provider_failure_becomes_review_with_chinese_summary(self) -> None:
+        class FailingInvoker:
+            async def invoke(self, *, context, output_schema):  # type: ignore[no-untyped-def]
+                raise RuntimeError("boom")
+
+        result = await SingleCallEventIntakeRunner(invoker=FailingInvoker()).run(self._build_single_context())
+
+        self.assertEqual(result.decision.decision, IntakeDecision.REVIEW)
+        self.assertEqual(result.decision.audit.failure_code, "PROVIDER_UNAVAILABLE")
+        self.assertIn("结构化模型服务暂时不可用", result.decision.audit.reason_summary)
+        self.assertEqual(result.provider_invocation_count, 1)
+
+    async def test_review_only_invoker_outputs_chinese_user_visible_fields(self) -> None:
+        result = await SingleCallEventIntakeRunner(invoker=__import__(
+            "quantagent.core.event_intake.runner",
+            fromlist=["ReviewOnlyStructuredModelInvoker"],
+        ).ReviewOnlyStructuredModelInvoker()).run(self._build_single_context())
+
+        self.assertEqual(result.decision.decision, IntakeDecision.REVIEW)
+        self.assertIn("未配置 Router Agent 模型服务", result.decision.structured_news.short_summary)
+        self.assertIn("worker 未配置结构化模型 provider", result.decision.audit.reason_summary)
 
     async def test_publisher_emits_event_routed_without_full_content(self) -> None:
         bus = InMemoryEventBus()

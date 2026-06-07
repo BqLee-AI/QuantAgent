@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Select, and_, desc, func, or_, select
+from sqlalchemy import Select, String, and_, cast, desc, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -73,9 +73,15 @@ class EventIntakeRoutedEventRepository:
         *,
         decisions: frozenset[str],
         binding_id: str | None = None,
+        source_plugin_id: str | None = None,
         industry_id: str | None = None,
         keyword: str | None = None,
+        target_topic: str | None = None,
+        priority: str | None = None,
+        relationship: str | None = None,
         status: str | None = None,
+        trace_id: str | None = None,
+        request_id: str | None = None,
         sort: str = "routed_at_desc",
         time_from: datetime | None = None,
         time_to: datetime | None = None,
@@ -95,6 +101,15 @@ class EventIntakeRoutedEventRepository:
             statement = statement.where(EventIntakeRoutedEventORM.decision.in_(sorted(decisions)))
         if binding_id:
             statement = statement.where(EventIntakeRoutedEventORM.binding_id == binding_id)
+        if source_plugin_id:
+            statement = statement.where(
+                or_(
+                    EventIntakeRoutedEventORM.raw_event_id.in_(
+                        select(RawEventORM.raw_event_id).where(RawEventORM.source_plugin_id == source_plugin_id)
+                    ),
+                    _json_string(EventIntakeRoutedEventORM.source_snapshot, "plugin_id") == source_plugin_id,
+                )
+            )
         if industry_id:
             # 中文注释：行业包筛选优先使用 routed read model 的 owner_id，避免把某个行业的 topic 硬编码成全局筛选项。
             statement = statement.where(EventIntakeRoutedEventORM.owner_id == industry_id)
@@ -119,6 +134,30 @@ class EventIntakeRoutedEventRepository:
             )
         if status:
             statement = statement.where(EventIntakeRoutedEventORM.status == status)
+        if target_topic:
+            # JSON array membership across SQLite/Postgres is not uniform here；使用 read model JSON 文本预筛选，
+            # 避免分页后再过滤导致第一页遗漏后续匹配项。
+            topic_pattern = f'%"{target_topic}"%'
+            statement = statement.where(cast(EventIntakeRoutedEventORM.key_fields, String).like(topic_pattern))
+        if priority:
+            statement = statement.where(
+                or_(
+                    _json_string(EventIntakeRoutedEventORM.key_fields, "priority") == priority,
+                    _json_string(EventIntakeRoutedEventORM.output_json["routing"], "priority") == priority,
+                )
+            )
+        if relationship:
+            relationship_pattern = f"%{relationship}%"
+            statement = statement.where(
+                or_(
+                    _json_string(EventIntakeRoutedEventORM.key_fields, "relevance").like(relationship_pattern),
+                    cast(EventIntakeRoutedEventORM.output_json, String).like(relationship_pattern),
+                )
+            )
+        if trace_id:
+            statement = statement.where(EventIntakeRoutedEventORM.correlation_id == trace_id)
+        if request_id:
+            statement = statement.where(EventIntakeRoutedEventORM.request_id == request_id)
         if time_from:
             statement = statement.where(EventIntakeRoutedEventORM.created_at >= time_from)
         if time_to:
@@ -135,3 +174,7 @@ class EventIntakeRoutedEventRepository:
             )
         statement = statement.order_by(desc(sort_expr), desc(EventIntakeRoutedEventORM.id)).limit(safe_limit + 1)
         return list(self._session.scalars(statement).all())
+
+
+def _json_string(column: object, key: str) -> object:
+    return column[key].as_string()  # type: ignore[index, no-any-return]

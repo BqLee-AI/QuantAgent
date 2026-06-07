@@ -80,7 +80,7 @@ class SingleCallEventIntakeRunner:
         except Exception as exc:
             decision = build_review_decision(
                 trace=trace,
-                reason_summary="Structured model provider was unavailable for AI intake.",
+                reason_summary="结构化模型服务暂时不可用，Router Agent 将该新闻保留为待复核。",
                 failure_code="PROVIDER_UNAVAILABLE",
                 content_completeness=context.article.content_completeness,
                 enrichment_status=context.source.enrichment_status,
@@ -104,7 +104,7 @@ class SingleCallEventIntakeRunner:
         except EventIntakeValidationError as exc:
             decision = build_review_decision(
                 trace=trace,
-                reason_summary="Structured model output failed EventIntakeDecisionV1 validation.",
+                reason_summary="结构化模型输出未通过 Router Agent schema 校验，已降级为待复核。",
                 failure_code=exc.reason_code,
                 content_completeness=context.article.content_completeness,
                 enrichment_status=context.source.enrichment_status,
@@ -139,7 +139,7 @@ class SingleCallEventIntakeRunner:
             return build_discard_decision(
                 trace=trace,
                 reason=DiscardReason.UNSUPPORTED_LANGUAGE,
-                reason_summary="Article language is unsupported by V1 intake policy.",
+                reason_summary="文章语言不在当前 Router Agent 支持范围内，已按规则丢弃。",
                 content_completeness=context.article.content_completeness,
                 enrichment_status=context.source.enrichment_status,
             )
@@ -155,7 +155,7 @@ class SingleCallEventIntakeRunner:
             return build_discard_decision(
                 trace=trace,
                 reason=DiscardReason.MALFORMED,
-                reason_summary="Article item has no usable title, URL, summary, or body snapshot.",
+                reason_summary="新闻缺少可用标题、URL、摘要或正文片段，无法进行有效路由。",
                 content_completeness=ContentCompleteness.UNKNOWN,
                 enrichment_status=context.source.enrichment_status or EnrichmentStatus.UNKNOWN,
             )
@@ -184,7 +184,7 @@ class ReviewOnlyStructuredModelInvoker:
                 "industry_relevance": (),
                 "structured_news": {
                     "canonical_title": context.article.title,
-                    "short_summary": "AI intake provider is not configured; keep the item in review.",
+                    "short_summary": "当前未配置 Router Agent 模型服务，该新闻保留为待复核。",
                     "bullet_summary": (),
                     "event_type": "provider_not_configured",
                     "entities": (),
@@ -207,7 +207,7 @@ class ReviewOnlyStructuredModelInvoker:
                     "dedupe_key_hint": context.source.url,
                 },
                 "audit": {
-                    "reason_summary": "No structured model provider is configured for worker AI intake.",
+                    "reason_summary": "worker 未配置结构化模型 provider，Router Agent 无法完成自动路由。",
                     "evidence_field_refs": ("trace", "source.url", "article.title"),
                     "schema_validation_status": "valid",
                     "failure_code": "PROVIDER_NOT_CONFIGURED",

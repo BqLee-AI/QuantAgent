@@ -7,7 +7,7 @@ import {
   getPriorityTone,
   getReliabilityTone,
   scoreNeutralTone,
-} from '@/features/event-scoring/utils/event-score-tones';
+} from '@/features/events/utils/event-score-tones';
 import { InfoTag, LinkButton, PageHeader, PageSectionCard, SectionHeader } from '@/shared/ui';
 
 import { useEventListPage } from '../../hooks';
