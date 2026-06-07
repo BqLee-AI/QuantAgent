@@ -328,22 +328,22 @@ route 文件只做 `createFileRoute`、search/path params 和页面组合。生�
 
 ## Risks / Trade-offs
 
-- [Risk] v1 和 v2 routed record 同时存在，字段形状不一致。  
+- [Risk] v1 和 v2 routed record 同时存在，字段形状不一致。
   → Mitigation：API mapper 明确 v1 fallback，缺失字段用 `not_provided/unavailable`，并在详情中显示 `schema_version`。
 
-- [Risk] 默认只展示 routed 事件会让用户误以为没有新抓取新闻。  
+- [Risk] 默认只展示 routed 事件会让用户误以为没有新抓取新闻。
   → Mitigation：空态说明“只有 Router Agent 处理后的新闻进入事件页”，并提供进入 `/runtime` 的排障入口。
 
-- [Risk] 中文输出依赖 prompt，模型可能仍返回英文。  
+- [Risk] 中文输出依赖 prompt，模型可能仍返回英文。
   → Mitigation：schema 不因英文直接失败，但 tests 使用 fake provider 覆盖中文字段要求；prompt 与 acceptance 明确关键用户可读字段应为中文，后续可加语言质量检查。
 
-- [Risk] `output_json` 体积可能较大。  
+- [Risk] `output_json` 体积可能较大。
   → Mitigation：列表不返回完整 JSON；详情按需拉取；API 对 output JSON 继续执行 safe allowlist / size guard。
 
-- [Risk] 抽共享 `agent-audit` 可能影响 runtime 已有页面。  
+- [Risk] 抽共享 `agent-audit` 可能影响 runtime 已有页面。
   → Mitigation：先抽展示模型和纯组件，再由 runtime/events 各自 mapper；不改变 runtime API 契约作为前置条件。
 
-- [Risk] `/events/:eventId/audit` 旧 mock 审计页与新业务 Agent stage 语义冲突。  
+- [Risk] `/events/:eventId/audit` 旧 mock 审计页与新业务 Agent stage 语义冲突。
   → Mitigation：生产 route 改接真实 business read model；旧 mock 只能留在 tests/demo/debug，不进入正式导航。
 
 ## Migration Plan

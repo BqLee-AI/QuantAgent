@@ -35,11 +35,34 @@ SECRET_KEYS = frozenset(
         "api_key",
         "api_token",
         "authorization",
+        "body_excerpt",
+        "chain_of_thought",
+        "content",
         "cookie",
         "password",
+        "prompt",
         "provider_raw_response",
+        "provider_raw_request",
+        "raw_payload",
+        "raw_prompt",
         "raw_response",
         "reasoning_prompt",
+        "secret",
+        "token",
+    }
+)
+SECRET_KEY_FRAGMENTS = frozenset(
+    {
+        "api_key",
+        "api_token",
+        "authorization",
+        "chain_of_thought",
+        "cookie",
+        "password",
+        "prompt",
+        "provider_raw",
+        "raw_payload",
+        "reasoning",
         "secret",
         "token",
     }
@@ -403,12 +426,19 @@ def _sanitize_json(value: object) -> dict[str, object]:
 def _sanitize_value(value: object) -> object:
     if isinstance(value, Mapping):
         return {
-            str(key): "[REDACTED]" if str(key).lower() in SECRET_KEYS else _sanitize_value(child)
+            str(key): "[REDACTED]" if _is_secret_key(str(key)) else _sanitize_value(child)
             for key, child in value.items()
         }
     if isinstance(value, list | tuple):
         return [_sanitize_value(item) for item in value]
     return value
+
+
+def _is_secret_key(key: str) -> bool:
+    normalized = key.lower()
+    if normalized in SECRET_KEYS:
+        return True
+    return any(fragment in normalized for fragment in SECRET_KEY_FRAGMENTS)
 
 
 def _decode_cursor(value: str | None) -> dict[str, str] | None:

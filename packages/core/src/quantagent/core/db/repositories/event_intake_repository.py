@@ -147,11 +147,12 @@ class EventIntakeRoutedEventRepository:
                 )
             )
         if relationship:
-            relationship_pattern = f"%{relationship}%"
+            relationship_pattern = f"% / {relationship} / %"
             statement = statement.where(
                 or_(
+                    _json_string(EventIntakeRoutedEventORM.key_fields, "relationship") == relationship,
                     _json_string(EventIntakeRoutedEventORM.key_fields, "relevance").like(relationship_pattern),
-                    cast(EventIntakeRoutedEventORM.output_json, String).like(relationship_pattern),
+                    cast(EventIntakeRoutedEventORM.output_json, String).like(f'%"relationship": "{relationship}"%'),
                 )
             )
         if trace_id:

@@ -2490,8 +2490,17 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(output["output_json"]["structured_news"]["reasoning_prompt"], "[REDACTED]")
         self.assertEqual(output["output_json"]["routing"]["provider_raw_response"], "[REDACTED]")
         self.assertEqual(output["output_json"]["routing"]["api_token"], "[REDACTED]")
+        self.assertEqual(output["output_json"]["audit"]["raw_prompt"], "[REDACTED]")
+        self.assertEqual(output["output_json"]["audit"]["chain_of_thought"], "[REDACTED]")
+        self.assertEqual(output["output_json"]["provider_raw_request"], "[REDACTED]")
+        self.assertEqual(output["output_json"]["raw_payload"], "[REDACTED]")
+        self.assertEqual(detail["safe_details"]["invocation_metadata"]["provider_metadata"]["raw_prompt"], "[REDACTED]")
         self.assertNotIn("rss_summary", detail["safe_details"]["article_snapshot"])
-        self.assertNotIn("full HBM body", json.dumps(output, ensure_ascii=False))
+        serialized_detail = json.dumps(detail, ensure_ascii=False)
+        serialized_output = json.dumps(output, ensure_ascii=False)
+        self.assertNotIn("full HBM body", serialized_output)
+        self.assertNotIn("must redact", serialized_detail)
+        self.assertNotIn("must redact", serialized_output)
 
     def test_events_detail_article_snapshot_does_not_leak_long_rss_summary(self) -> None:
         database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
@@ -2693,6 +2702,42 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(trace_response.json()["data"]["items"][0]["routed_event_id"], "evt-routed-runtime-001")
         self.assertEqual(request_response.json()["data"]["items"][0]["routed_event_id"], "evt-routed-runtime-001")
         self.assertEqual(source_response.json()["data"]["items"][0]["source_plugin_id"], "quantagent.official.source.rss")
+
+    def test_events_relationship_filter_does_not_match_indirect_as_direct(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            session = client.app.state.db_session_factory()
+            try:
+                self._seed_runtime_audit_news(session)
+                session.add(
+                    self._event_routed_row(
+                        event_id="evt-routed-indirect-new",
+                        raw_event_id="rawevt-runtime-002",
+                        owner_id="semiconductor",
+                        summary="间接相关的 AI 基建新闻。",
+                        priority="high",
+                        target_topics=["ai-infra"],
+                        relationship="indirect",
+                        created_at=datetime(2026, 6, 5, 9, 0, 0, tzinfo=UTC),
+                    )
+                )
+                session.commit()
+            finally:
+                session.close()
+            self._login_with_client(client, settings)
+            response = client.get("/api/v1/events", params={"relationship": "direct", "limit": 10})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            [item["routed_event_id"] for item in response.json()["data"]["items"]],
+            ["evt-routed-runtime-001"],
+        )
 
     def test_events_require_event_inspect_not_runtime_inspect(self) -> None:
         database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
@@ -4234,7 +4279,11 @@ class ApiAppTestCase(unittest.TestCase):
                             "reason_summary": "Direct semiconductor memory relevance.",
                             "evidence_field_refs": ["article.title", "article.body_excerpt"],
                             "schema_validation_status": "valid",
+                            "raw_prompt": "must redact raw prompt",
+                            "chain_of_thought": "must redact chain of thought",
                         },
+                        "provider_raw_request": {"prompt": "must redact provider request"},
+                        "raw_payload": {"body": "must redact raw payload"},
                         "source": {
                             "plugin_id": "quantagent.official.source.rss",
                             "binding_id": "binding-runtime-001",
@@ -4265,6 +4314,7 @@ class ApiAppTestCase(unittest.TestCase):
                         "requires_human_review": False,
                         "confidence": 0.88,
                         "is_spam": False,
+                        "relationship": "direct",
                         "relevance": "semiconductor / direct / 0.91",
                         "schema_validation_status": "valid",
                     },
@@ -4293,7 +4343,10 @@ class ApiAppTestCase(unittest.TestCase):
                         "content_completeness": "full",
                     },
                     provider_invocation_count=1,
-                    invocation_metadata={"status": "succeeded", "provider_metadata": {"model": "router-preview"}},
+                    invocation_metadata={
+                        "status": "succeeded",
+                        "provider_metadata": {"model": "router-preview", "raw_prompt": "must redact metadata prompt"},
+                    },
                     created_at=datetime(2026, 6, 1, 9, 0, 6, tzinfo=UTC),
                 ),
                 RawEventORM(
@@ -4356,6 +4409,7 @@ class ApiAppTestCase(unittest.TestCase):
         target_topics: list[str],
         created_at: datetime,
         target_industries: list[str] | None = None,
+        relationship: str = "direct",
     ) -> EventIntakeRoutedEventORM:
         industries = target_industries or [owner_id]
         return EventIntakeRoutedEventORM(
@@ -4378,7 +4432,7 @@ class ApiAppTestCase(unittest.TestCase):
                 "decision": "route",
                 "discard_reason": "not_discarded",
                 "quality": {"is_spam": False, "confidence": 0.7, "reason_summary": summary},
-                "industry_relevance": [{"industry_id": owner_id, "relationship": "direct", "relevance_score": 0.7}],
+                "industry_relevance": [{"industry_id": owner_id, "relationship": relationship, "relevance_score": 0.7}],
                 "structured_news": {"canonical_title": summary, "short_summary": summary, "event_type": "test"},
                 "routing": {"target_industries": industries, "target_topics": target_topics, "priority": priority},
                 "audit": {"reason_summary": summary, "schema_validation_status": "valid"},
@@ -4390,7 +4444,8 @@ class ApiAppTestCase(unittest.TestCase):
                 "target_topics": target_topics,
                 "priority": priority,
                 "confidence": 0.7,
-                "relevance": f"{owner_id} / direct / 0.7",
+                "relationship": relationship,
+                "relevance": f"{owner_id} / {relationship} / 0.7",
                 "schema_validation_status": "valid",
             },
             source_snapshot={},

@@ -80,6 +80,7 @@ def _key_fields(payload: dict[str, object]) -> dict[str, object]:
         "confidence": _mapping_value(quality, "confidence"),
         "is_spam": _mapping_value(quality, "is_spam"),
         "quality_reason_summary": _mapping_value(quality, "reason_summary"),
+        "relationship": _mapping_value(first_relevance, "relationship"),
         "relevance": _relevance_summary(first_relevance),
         "schema_validation_status": _mapping_value(audit, "schema_validation_status"),
     }
