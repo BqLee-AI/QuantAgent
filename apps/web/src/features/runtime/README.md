@@ -1,6 +1,8 @@
 # Runtime 审计
 
-`features/runtime` 负责 `/runtime` 的 RawEvent 新闻审计视图。页面主对象是一篇新闻 / RawEvent，生产路径通过后端 `GET /api/v1/runtime/audit/news` 读取真实 read model，不使用前端 fixture 作为正常数据源。Router Agent 输出只来自后端持久化的 routed-event read model；没有真实记录时必须显示 unavailable。
+`features/runtime` 负责 `/runtime` 的 RawEvent 运行态排障视图。页面主对象是一篇新闻 / RawEvent，生产路径通过后端 `GET /api/v1/runtime/audit/news` 读取真实 read model，不使用前端 fixture 作为正常数据源。它回答“为什么没有形成业务事件”：RawEvent captured/pending、AI intake unavailable、模型失败、Kafka/worker/scheduler 断点和 trace 线索。
+
+业务用户阅读 AI 已筛选事件的入口是 `/events`。`/runtime` 可以展示已持久化 Router Agent output 作为排障证据，也可以跳转到 `/events/{raw_event_id}`，但不复制 `/events` 的业务筛选、阅读顺序或 mock 业务结果。
 
 ## 入口
 
@@ -15,7 +17,7 @@
 - `queries/`: TanStack Query key 和 query hook，通过 `useApis().runtimeAudit` 读取。
 - `hooks/`: 页面筛选、选中 RawEvent、刷新和派生状态。
 - `components/`: page、filter bar、news list、detail、health strip 和状态视图。
-- `components/agent/`: 可复用 Agent 处理详情组件。右侧详情只展示摘要和入口，Router Agent / 行业 MainAgent 的重内容放进独立弹窗。
+- `components/agent/`: Runtime 到共享 Agent 审计组件的适配器。实际 panel、modal、JSON view、key fields 和 trace refs 来自 `features/agent-audit/`。
 - `types/`: RawEvent 新闻审计 DTO、filter、timeline、trace 与安全详情类型。
 - `utils/`: 格式化、脱敏、测试 fixture 构造和筛选纯函数。
 
@@ -32,9 +34,9 @@
 
 ## Agent 详情组件
 
-`RuntimeAuditAgentStagePanel` 展示每个 Agent stage 的摘要、关键字段和详情入口；`RuntimeAuditAgentDetailModal` 展示新闻标题、URL、列表级内容预览、Agent 关键字段和完整结构化 `output_json`。
+`RuntimeAuditAgentStagePanel` 只把 `RuntimeAuditNewsItem.agent_stages` 转成 `AgentAuditSubject/AgentAuditStage`，再交给 `features/agent-audit` 渲染。Runtime 不维护第二套私有 Agent detail modal、JSON view 或 key fields 组件，避免 `/events` 与 `/runtime` 的审计展示分叉。
 
-后续行业 MainAgent 如果以 ChatAPP 形态输出 Markdown、消息流、toolcall 或 artifact，应继续扩展 `components/agent/` 下的详情弹窗族，不要把聊天渲染、toolcall 渲染和 JSON 展开逻辑塞回 `/runtime` page 或右侧详情主体。
+后续行业 MainAgent 如果以 ChatAPP 形态输出 Markdown、消息流、toolcall 或 artifact，应继续扩展 `features/agent-audit` 的共享详情边界，不要把聊天渲染、toolcall 渲染和 JSON 展开逻辑塞回 `/runtime` page 或右侧详情主体。
 
 ## 安全边界
 

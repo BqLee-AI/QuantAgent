@@ -3,12 +3,18 @@ from __future__ import annotations
 import asyncio
 import unittest
 
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from quantagent.core.db.base import Base
+from quantagent.core.db.repositories.event_intake_repository import EventIntakeRoutedEventRepository
 from quantagent.core.event_intake import (
     EVENT_INTAKE_DECISION_SCHEMA_VERSION,
     FakeStructuredModelInvoker,
     IndustryEventContextBuilder,
     EventIntakeRoutedPublisher,
     SingleCallEventIntakeRunner,
+    SqlAlchemyEventIntakeRoutedEventStore,
 )
 from quantagent.core.events import EventEnvelope, InMemoryEventBus
 from quantagent.worker.consumer import (
@@ -91,6 +97,50 @@ class AnalysisRequestHandlerTestCase(unittest.IsolatedAsyncioTestCase):
         _, stored_result = routed_store.records[0]
         self.assertEqual(stored_result.context.trace.raw_event_id, "rawevt-worker-001")
         self.assertEqual(stored_result.context.trace.source_event_id, "entry-worker-001")
+
+    async def test_handler_persists_v2_routed_read_model_with_real_store(self) -> None:
+        engine = create_engine("sqlite:///:memory:")
+        Base.metadata.create_all(engine)
+        session = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)()
+        bus = InMemoryEventBus()
+        recorder = _RecordingHandler()
+        await bus.subscribe(topics=("event.routed",), group_id="test", handler=recorder)
+        invoker = FakeStructuredModelInvoker([self._route_output()])
+        handler = IndustryAnalysisRequestHandler(
+            context_builder=IndustryEventContextBuilder(),
+            runner=SingleCallEventIntakeRunner(invoker=invoker),
+            routed_publisher=EventIntakeRoutedPublisher(bus, id_factory=lambda: "evt-routed-real-store"),
+            audit_sink=InMemoryAnalysisRequestIntakeAuditSink(),
+            routed_event_store=SqlAlchemyEventIntakeRoutedEventStore(
+                EventIntakeRoutedEventRepository(session)
+            ),
+            commit=session.commit,
+            rollback=session.rollback,
+        )
+
+        try:
+            await handler.handle(self._analysis_request_envelope())
+            await handler.handle(self._analysis_request_envelope())
+
+            repository = EventIntakeRoutedEventRepository(session)
+            stored = repository.get_by_event_id("evt-routed-real-store")
+            self.assertIsNotNone(stored)
+            assert stored is not None
+            self.assertEqual(invoker.invocation_count, 2)
+            self.assertEqual(len(recorder.seen), 2)
+            self.assertEqual(stored.schema_version, EVENT_INTAKE_DECISION_SCHEMA_VERSION)
+            self.assertEqual(stored.raw_event_id, "rawevt-worker-001")
+            self.assertEqual(stored.decision, "route")
+            self.assertEqual(stored.provider_invocation_count, 1)
+            self.assertEqual(stored.key_fields["title"], "HBM demand update")
+            self.assertEqual(stored.key_fields["short_summary"], "HBM demand is directly relevant.")
+            self.assertEqual(stored.key_fields["priority"], "high")
+            self.assertEqual(stored.output_json["schema_version"], EVENT_INTAKE_DECISION_SCHEMA_VERSION)
+            self.assertNotIn("provider_raw_response", stored.output_json)
+            self.assertNotIn("chain_of_thought", stored.output_json)
+        finally:
+            session.close()
+            engine.dispose()
 
     async def test_handler_publishes_discard_for_malformed_analysis_request(self) -> None:
         bus = InMemoryEventBus()

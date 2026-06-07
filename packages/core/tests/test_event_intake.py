@@ -92,8 +92,6 @@ class EventIntakeTestCase(unittest.IsolatedAsyncioTestCase):
             [
                 self._route_output(
                     relationship="direct",
-                    title="HBM supply tightens",
-                    summary="HBM and advanced packaging capacity remain constrained.",
                 )
             ]
         )
@@ -105,6 +103,12 @@ class EventIntakeTestCase(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.decision.decision, IntakeDecision.ROUTE)
         self.assertEqual(result.decision.industry_relevance[0].relationship.value, "direct")
         self.assertEqual(result.decision.routing.target_industries, ("semiconductor",))
+        self.assertEqual(result.decision.schema_version, EVENT_INTAKE_DECISION_SCHEMA_VERSION)
+        self.assertEqual(result.decision.structured_news.canonical_title, "HBM 需求变化影响存储供应链")
+        self.assertEqual(result.decision.structured_news.event_type_label, "供需变化")
+        self.assertEqual(result.decision.structured_news.tags[0]["label"], "存储")
+        self.assertEqual(result.decision.routing.next_step_hint, "交给半导体行业 MainAgent 做进一步分析。")
+        self.assertEqual(result.decision.audit.output_language, "zh-CN")
 
     async def test_indirect_ai_infra_fixture_is_not_discarded(self) -> None:
         invoker = FakeStructuredModelInvoker(
@@ -305,20 +309,24 @@ class EventIntakeTestCase(unittest.IsolatedAsyncioTestCase):
                 "content_completeness": "full",
                 "enrichment_status": "succeeded",
                 "confidence": 0.88,
+                "reason_summary": "内容信息量充足，适合进入半导体路由判断。",
+                "risk_flags": (),
             },
             "industry_relevance": (
                 {
                     "industry_id": "semiconductor",
                     "relationship": relationship,
                     "relevance_score": 0.91,
-                    "reason_summary": summary,
+                    "reason_summary": "文章直接涉及 HBM 与先进封装，和半导体存储链条直接相关。",
                 },
             ),
             "structured_news": {
-                "canonical_title": title,
-                "short_summary": summary,
-                "bullet_summary": (summary,),
+                "canonical_title": "HBM 需求变化影响存储供应链" if title == "HBM demand update" else title,
+                "short_summary": "HBM 需求和先进封装产能仍然紧张。" if summary == "HBM demand is relevant to semiconductor memory." else summary,
+                "bullet_summary": ("HBM 需求继续影响存储供应链。",),
                 "event_type": "supply_demand",
+                "event_type_label": "供需变化",
+                "tags": ({"code": "memory", "label": "存储"},),
                 "entities": ("HBM",),
                 "companies": ("SK hynix",),
                 "tickers": (),
@@ -337,11 +345,15 @@ class EventIntakeTestCase(unittest.IsolatedAsyncioTestCase):
                 "requires_deep_analysis": True,
                 "requires_human_review": False,
                 "dedupe_key_hint": "https://example.com/hbm",
+                "reason_summary": "该事件可能影响半导体存储链条的供需判断。",
+                "next_step_hint": "交给半导体行业 MainAgent 做进一步分析。",
             },
             "audit": {
-                "reason_summary": summary,
+                "reason_summary": "基于文章标题和正文中的 HBM 证据判定为相关。",
                 "evidence_field_refs": ("article.title", "article.body_excerpt"),
                 "schema_validation_status": "valid",
+                "source_language": "en",
+                "output_language": "zh-CN",
             },
         }
 

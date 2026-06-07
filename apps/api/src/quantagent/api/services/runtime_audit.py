@@ -26,6 +26,7 @@ from quantagent.core.db.models.scheduler_run import SchedulerRunORM
 from quantagent.core.db.repositories.event_intake_repository import EventIntakeRoutedEventRepository
 from quantagent.core.db.models.event_intake import EventIntakeRoutedEventORM
 from quantagent.core.events.codec import REDACTED, sanitize_mapping
+from quantagent.plugin_sdk.io import to_json_value
 
 _AUDIT_READ_MODEL_SENSITIVE_KEYWORDS = frozenset({"prompt", "raw_response"})
 
@@ -570,10 +571,12 @@ def _safe_output_json(value: object) -> dict[str, object]:
 def _json_safe_mapping(value: object) -> dict[str, object]:
     if not isinstance(value, Mapping):
         return {}
-    return {
+    normalized = {
         str(key): REDACTED if _is_audit_read_model_sensitive_key(str(key)) else _json_safe_value(item)
         for key, item in value.items()
     }
+    json_value = to_json_value(normalized)
+    return json_value if isinstance(json_value, dict) else {}
 
 
 def _json_safe_value(value: object) -> object:

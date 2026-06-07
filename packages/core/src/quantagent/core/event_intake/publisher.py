@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 from typing import Protocol
 from uuid import uuid4
 
-from quantagent.core.event_intake.decision import EVENT_INTAKE_DECISION_SCHEMA_VERSION
 from quantagent.core.event_intake.runner import EventIntakeRunResult
 from quantagent.core.events.envelope import EventEnvelope
 from quantagent.core.events.ports import EventBusPublisher
@@ -63,7 +62,7 @@ class EventIntakeRoutedPublisher:
             causation_id=_optional_string(trace.get("message_id")),
             headers=freeze_json_mapping(
                 {
-                    "schema_version": EVENT_INTAKE_DECISION_SCHEMA_VERSION,
+                    "schema_version": result.decision.schema_version,
                     "decision": result.decision.decision.value,
                     "discard_reason": result.decision.discard_reason.value,
                     "binding_id": context.trace.binding_id,

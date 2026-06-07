@@ -1,11 +1,11 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { EventsIndexPageContent } from '../../../../features/events/event-center'
+import { EventListPage } from '../../../../features/events'
 
 export const Route = createFileRoute('/_app/(workspace)/events/')({
   component: EventsPage,
 })
 
 function EventsPage() {
-  return <EventsIndexPageContent />
+  return <EventListPage />
 }

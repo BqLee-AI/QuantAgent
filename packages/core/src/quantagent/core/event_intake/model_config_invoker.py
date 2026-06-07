@@ -20,6 +20,9 @@ Do not call tools.
 Do not add markdown.
 Do not add any text before or after the JSON object.
 Use only evidence from the provided context.
+User-readable semantic text fields must be written in Simplified Chinese by default.
+Machine fields must keep the specified English enum/code values.
+Do not create a display object or any UI-only Chinese text bucket.
 Always include every required top-level field:
 - schema_version
 - decision
@@ -123,6 +126,9 @@ def _build_user_prompt(*, context: IndustryEventContextV1, output_schema: str) -
             "- If discard, use a concrete discard_reason, not not_discarded.",
             "- If review, set requires_human_review true or keep confidence below review threshold.",
             "- Preserve enrichment_status and content_completeness semantics from context.",
+            "- Write user-readable semantic fields in Simplified Chinese: structured_news.canonical_title, structured_news.short_summary, bullet_summary, tag labels, event_type_label, quality.reason_summary, industry_relevance.reason_summary, routing.reason_summary, routing.next_step_hint, audit.reason_summary.",
+            "- Keep machine fields in English enum/code form: decision, discard_reason, relationship, priority, schema_version, industry_id, ticker, URL, numeric values, and evidence refs.",
+            "- Do not output display, display.headline, display.summary_markdown, display.badges, or any UI-only text bucket.",
             "- Keep output compact and factual.",
             "required_output_shape_example:",
             json.dumps(
@@ -136,20 +142,24 @@ def _build_user_prompt(*, context: IndustryEventContextV1, output_schema: str) -
                         "content_completeness": "full",
                         "enrichment_status": "succeeded",
                         "confidence": 0.82,
+                        "reason_summary": "内容信息量充足，且与半导体供需判断相关。",
+                        "risk_flags": [],
                     },
                     "industry_relevance": [
                         {
                             "industry_id": "semiconductor",
                             "relationship": "direct",
                             "relevance_score": 0.9,
-                            "reason_summary": "Short reason.",
+                            "reason_summary": "文章直接涉及半导体供应链和存储需求变化。",
                         }
                     ],
                     "structured_news": {
-                        "canonical_title": "Article title",
-                        "short_summary": "One sentence summary.",
-                        "bullet_summary": ["Bullet 1"],
+                        "canonical_title": "HBM 需求变化影响存储供应链",
+                        "short_summary": "文章指出 HBM 需求继续上升，可能影响存储厂商产能和先进封装供应。",
+                        "bullet_summary": ["HBM 需求上升。"],
                         "event_type": "supply_demand",
+                        "event_type_label": "供需变化",
+                        "tags": [{"code": "memory", "label": "存储"}],
                         "entities": ["HBM"],
                         "companies": [],
                         "tickers": [],
@@ -168,13 +178,17 @@ def _build_user_prompt(*, context: IndustryEventContextV1, output_schema: str) -
                         "requires_deep_analysis": True,
                         "requires_human_review": False,
                         "dedupe_key_hint": "https://example.com/article",
+                        "reason_summary": "该事件可能改变半导体存储链条的供需判断。",
+                        "next_step_hint": "交给半导体行业 MainAgent 做供需和标的影响分析。",
                     },
                     "audit": {
-                        "reason_summary": "Short audit reason.",
+                        "reason_summary": "基于标题和正文中的 HBM 需求证据判定为直接相关。",
                         "evidence_field_refs": ["article.title", "article.body_excerpt"],
                         "schema_validation_status": "valid",
                         "failure_code": None,
                         "safe_error_summary": None,
+                        "source_language": "en",
+                        "output_language": "zh-CN",
                     },
                 },
                 ensure_ascii=True,

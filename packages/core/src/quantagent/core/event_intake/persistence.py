@@ -61,18 +61,25 @@ def _key_fields(payload: dict[str, object]) -> dict[str, object]:
     audit = payload.get("audit")
 
     first_relevance = relevance[0] if isinstance(relevance, list | tuple) and relevance else None
+    tags = _mapping_value(structured_news, "tags")
     return {
         "decision": payload.get("decision"),
         "discard_reason": payload.get("discard_reason"),
+        "title": _mapping_value(structured_news, "canonical_title"),
         "short_summary": _mapping_value(structured_news, "short_summary"),
         "event_type": _mapping_value(structured_news, "event_type"),
+        "event_type_label": _mapping_value(structured_news, "event_type_label"),
+        "tags": tags if isinstance(tags, list | tuple) else [],
         "target_industries": _mapping_value(routing, "target_industries"),
         "target_topics": _mapping_value(routing, "target_topics"),
         "priority": _mapping_value(routing, "priority"),
         "requires_deep_analysis": _mapping_value(routing, "requires_deep_analysis"),
         "requires_human_review": _mapping_value(routing, "requires_human_review"),
+        "next_step_hint": _mapping_value(routing, "next_step_hint"),
+        "routing_reason_summary": _mapping_value(routing, "reason_summary"),
         "confidence": _mapping_value(quality, "confidence"),
         "is_spam": _mapping_value(quality, "is_spam"),
+        "quality_reason_summary": _mapping_value(quality, "reason_summary"),
         "relevance": _relevance_summary(first_relevance),
         "schema_validation_status": _mapping_value(audit, "schema_validation_status"),
     }

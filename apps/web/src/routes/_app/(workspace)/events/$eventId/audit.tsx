@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router'
 
-import { EventAuditPage } from '@/features/event-audit'
+import { EventAuditPage } from '@/features/events'
 
 export const Route = createFileRoute('/_app/(workspace)/events/$eventId/audit')({
   component: EventAuditRoutePage,
@@ -9,5 +9,5 @@ export const Route = createFileRoute('/_app/(workspace)/events/$eventId/audit')(
 function EventAuditRoutePage() {
   const { eventId } = Route.useParams()
 
-  return <EventAuditPage eventId={eventId} />
+  return <EventAuditPage rawEventId={eventId} />
 }

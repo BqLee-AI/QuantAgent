@@ -10,6 +10,7 @@ from quantagent.api.auth import get_current_actor
 from quantagent.api.config.settings import Settings
 from quantagent.api.routers.v1.auth import protected_router as auth_protected_router
 from quantagent.api.routers.v1.auth import public_router as auth_public_router
+from quantagent.api.routers.v1.events import router as events_router
 from quantagent.api.routers.v1.notification_ingress import router as notification_ingress_router
 from quantagent.api.routers.v1.health import router as health_router
 from quantagent.api.routers.v1.models import router as models_router
@@ -44,6 +45,7 @@ STANDARD_API_V1_ROUTER_REGISTRATIONS = (
     ApiV1RouterRegistration(router=notification_ingress_router, access="public"),
     ApiV1RouterRegistration(router=auth_protected_router, access="protected"),
     ApiV1RouterRegistration(router=approvals_router, access="protected"),
+    ApiV1RouterRegistration(router=events_router, access="protected"),
     ApiV1RouterRegistration(router=plugins_router, access="protected"),
     ApiV1RouterRegistration(router=source_bindings_router, access="protected"),
     ApiV1RouterRegistration(router=scheduler_runs_router, access="protected"),

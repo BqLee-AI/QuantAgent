@@ -9,6 +9,8 @@ from quantagent.core.event_intake.context import (
 )
 from quantagent.core.event_intake.decision import (
     EVENT_INTAKE_DECISION_SCHEMA_VERSION,
+    EVENT_INTAKE_DECISION_SCHEMA_VERSION_V1,
+    EVENT_INTAKE_DECISION_SCHEMA_VERSION_V2,
     DiscardReason,
     EventIntakeDecisionV1,
     EventIntakeValidationError,
@@ -30,6 +32,8 @@ from quantagent.core.event_intake.runner import (
 __all__ = [
     "DEFAULT_EVENT_INTAKE_BUDGET",
     "EVENT_INTAKE_DECISION_SCHEMA_VERSION",
+    "EVENT_INTAKE_DECISION_SCHEMA_VERSION_V1",
+    "EVENT_INTAKE_DECISION_SCHEMA_VERSION_V2",
     "ContentCompleteness",
     "DiscardReason",
     "EnrichmentStatus",

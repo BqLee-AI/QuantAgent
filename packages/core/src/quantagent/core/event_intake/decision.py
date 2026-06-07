@@ -8,7 +8,9 @@ from typing import Any
 from quantagent.core.event_intake.context import ContentCompleteness, EnrichmentStatus
 from quantagent.plugin_sdk.io import JsonObject, freeze_json_mapping
 
-EVENT_INTAKE_DECISION_SCHEMA_VERSION = "event_intake_decision.v1"
+EVENT_INTAKE_DECISION_SCHEMA_VERSION_V1 = "event_intake_decision.v1"
+EVENT_INTAKE_DECISION_SCHEMA_VERSION_V2 = "event_intake_decision.v2"
+EVENT_INTAKE_DECISION_SCHEMA_VERSION = EVENT_INTAKE_DECISION_SCHEMA_VERSION_V2
 
 
 class EventIntakeValidationError(ValueError):
@@ -54,6 +56,8 @@ class QualityAssessmentV1:
     content_completeness: ContentCompleteness
     enrichment_status: EnrichmentStatus
     confidence: float
+    reason_summary: str | None = None
+    risk_flags: tuple[str, ...] = field(default_factory=tuple)
 
     def to_mapping(self) -> dict[str, object]:
         return {
@@ -62,6 +66,8 @@ class QualityAssessmentV1:
             "content_completeness": self.content_completeness.value,
             "enrichment_status": self.enrichment_status.value,
             "confidence": self.confidence,
+            "reason_summary": self.reason_summary,
+            "risk_flags": list(self.risk_flags),
         }
 
 
@@ -87,6 +93,8 @@ class StructuredNewsV1:
     short_summary: str | None
     bullet_summary: tuple[str, ...] = field(default_factory=tuple)
     event_type: str | None = None
+    event_type_label: str | None = None
+    tags: tuple[dict[str, object], ...] = field(default_factory=tuple)
     entities: tuple[str, ...] = field(default_factory=tuple)
     companies: tuple[str, ...] = field(default_factory=tuple)
     tickers: tuple[str, ...] = field(default_factory=tuple)
@@ -104,6 +112,8 @@ class StructuredNewsV1:
             "short_summary": self.short_summary,
             "bullet_summary": list(self.bullet_summary),
             "event_type": self.event_type,
+            "event_type_label": self.event_type_label,
+            "tags": [dict(item) for item in self.tags],
             "entities": list(self.entities),
             "companies": list(self.companies),
             "tickers": list(self.tickers),
@@ -125,6 +135,8 @@ class RoutingOutcomeV1:
     requires_deep_analysis: bool = False
     requires_human_review: bool = False
     dedupe_key_hint: str | None = None
+    reason_summary: str | None = None
+    next_step_hint: str | None = None
 
     def to_mapping(self) -> dict[str, object]:
         return {
@@ -134,6 +146,8 @@ class RoutingOutcomeV1:
             "requires_deep_analysis": self.requires_deep_analysis,
             "requires_human_review": self.requires_human_review,
             "dedupe_key_hint": self.dedupe_key_hint,
+            "reason_summary": self.reason_summary,
+            "next_step_hint": self.next_step_hint,
         }
 
 
@@ -144,6 +158,8 @@ class AuditSummaryV1:
     schema_validation_status: str
     failure_code: str | None = None
     safe_error_summary: str | None = None
+    source_language: str | None = None
+    output_language: str | None = None
 
     def to_mapping(self) -> dict[str, object]:
         return {
@@ -152,6 +168,8 @@ class AuditSummaryV1:
             "schema_validation_status": self.schema_validation_status,
             "failure_code": self.failure_code,
             "safe_error_summary": self.safe_error_summary,
+            "source_language": self.source_language,
+            "output_language": self.output_language,
         }
 
 
@@ -184,7 +202,7 @@ class EventIntakeDecisionV1:
         if not isinstance(payload, Mapping):
             raise EventIntakeValidationError("Model output must be a JSON object.")
         schema_version = payload.get("schema_version")
-        if schema_version != EVENT_INTAKE_DECISION_SCHEMA_VERSION:
+        if schema_version not in {EVENT_INTAKE_DECISION_SCHEMA_VERSION_V1, EVENT_INTAKE_DECISION_SCHEMA_VERSION_V2}:
             raise EventIntakeValidationError("Model output schema_version is invalid.", reason_code="EVENT_INTAKE_SCHEMA_VERSION_INVALID")
 
         decision = _enum_value(IntakeDecision, payload.get("decision"), "decision")
@@ -210,6 +228,8 @@ class EventIntakeDecisionV1:
                 "quality.enrichment_status",
             ),
             confidence=_score(quality_payload.get("confidence"), "quality.confidence"),
+            reason_summary=_optional_string(quality_payload.get("reason_summary")),
+            risk_flags=_string_tuple(quality_payload.get("risk_flags")),
         )
         relevance_payloads = payload.get("industry_relevance", ())
         if not isinstance(relevance_payloads, tuple | list):
@@ -228,6 +248,7 @@ class EventIntakeDecisionV1:
             structured_news=structured_news,
             routing=routing,
             audit=audit,
+            schema_version=schema_version,
         )
         decision_model.validate_consistency(review_confidence_threshold=review_confidence_threshold)
         return decision_model
@@ -369,6 +390,8 @@ def _parse_structured_news(payload: Mapping[str, Any]) -> StructuredNewsV1:
         short_summary=_optional_string(payload.get("short_summary")),
         bullet_summary=_string_tuple(payload.get("bullet_summary")),
         event_type=_optional_string(payload.get("event_type")),
+        event_type_label=_optional_string(payload.get("event_type_label")),
+        tags=_tag_tuple(payload.get("tags")),
         entities=_string_tuple(payload.get("entities")),
         companies=_string_tuple(payload.get("companies")),
         tickers=_string_tuple(payload.get("tickers")),
@@ -390,6 +413,8 @@ def _parse_routing(payload: Mapping[str, Any]) -> RoutingOutcomeV1:
         requires_deep_analysis=_bool(payload.get("requires_deep_analysis"), "routing.requires_deep_analysis"),
         requires_human_review=_bool(payload.get("requires_human_review"), "routing.requires_human_review"),
         dedupe_key_hint=_optional_string(payload.get("dedupe_key_hint")),
+        reason_summary=_optional_string(payload.get("reason_summary")),
+        next_step_hint=_optional_string(payload.get("next_step_hint")),
     )
 
 
@@ -400,7 +425,28 @@ def _parse_audit(payload: Mapping[str, Any]) -> AuditSummaryV1:
         schema_validation_status=_required_string(payload.get("schema_validation_status"), "audit.schema_validation_status"),
         failure_code=_optional_string(payload.get("failure_code")),
         safe_error_summary=_optional_string(payload.get("safe_error_summary")),
+        source_language=_optional_string(payload.get("source_language")),
+        output_language=_optional_string(payload.get("output_language")),
     )
+
+
+def _tag_tuple(value: object) -> tuple[dict[str, object], ...]:
+    if value is None:
+        return ()
+    if not isinstance(value, tuple | list):
+        raise EventIntakeValidationError("structured_news.tags must be an array.")
+    result: list[dict[str, object]] = []
+    for item in value:
+        if isinstance(item, str) and item.strip():
+            result.append({"code": item.strip(), "label": item.strip()})
+            continue
+        if not isinstance(item, Mapping):
+            raise EventIntakeValidationError("structured_news.tags contains unsupported item.")
+        code = _optional_string(item.get("code"))
+        label = _optional_string(item.get("label"))
+        if code or label:
+            result.append({"code": code or label, "label": label or code})
+    return tuple(result)
 
 
 def _mapping(value: object, field_name: str) -> Mapping[str, Any]:

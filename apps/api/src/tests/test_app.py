@@ -26,6 +26,7 @@ from quantagent.api.auth import (
     APPROVAL_APPROVE_CAPABILITY,
     APPROVAL_READ_CAPABILITY,
     CurrentActor,
+    EVENT_INSPECT_CAPABILITY,
     RUNTIME_INSPECT_CAPABILITY,
     build_actor_audit_context,
     issue_session,
@@ -2381,6 +2382,249 @@ class ApiAppTestCase(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["error"]["code"], "UNAUTHORIZED")
 
+    def test_events_list_returns_only_routed_news_and_safe_summary(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            session = client.app.state.db_session_factory()
+            try:
+                self._seed_runtime_audit_news(session)
+                session.commit()
+            finally:
+                session.close()
+            self._login_with_client(client, settings)
+            response = client.get("/api/v1/events", params={"limit": 20})
+
+        body = response.json()
+        self.assertEqual(response.status_code, 200)
+        items = body["data"]["items"]
+        self.assertEqual([item["raw_event_id"] for item in items], ["rawevt-runtime-001"])
+        item = items[0]
+        serialized = json.dumps(item, ensure_ascii=False)
+        self.assertEqual(item["decision"], "route")
+        self.assertEqual(item["routed_event_id"], "evt-routed-runtime-001")
+        self.assertEqual(item["target_industries"], ["semiconductor"])
+        self.assertEqual(item["target_topics"], ["memory"])
+        self.assertEqual(item["router_stage_summary"]["key_fields"]["short_summary"], "HBM demand is directly relevant.")
+        self.assertNotIn("output_json", item)
+        self.assertNotIn("raw_payload", serialized)
+        self.assertNotIn("full HBM body", serialized)
+        self.assertNotIn("secret-token", serialized)
+        self.assertNotIn("provider_raw_response", serialized)
+
+    def test_events_and_runtime_seeded_smoke_keep_business_and_diagnostics_separate(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            session = client.app.state.db_session_factory()
+            try:
+                self._seed_runtime_audit_news(session)
+                session.commit()
+            finally:
+                session.close()
+            self._login_with_client(client, settings)
+            events_response = client.get("/api/v1/events", params={"limit": 20})
+            runtime_response = client.get("/api/v1/runtime/audit/news", params={"limit": 20})
+
+        self.assertEqual(events_response.status_code, 200)
+        self.assertEqual(runtime_response.status_code, 200)
+        events_items = events_response.json()["data"]["items"]
+        runtime_items = runtime_response.json()["data"]["items"]
+
+        self.assertEqual([item["raw_event_id"] for item in events_items], ["rawevt-runtime-001"])
+        self.assertEqual(events_items[0]["router_stage_summary"]["status"], "success")
+        self.assertTrue(events_items[0]["router_stage_summary"]["has_output_json"])
+
+        runtime_by_id = {item["raw_event_id"]: item for item in runtime_items}
+        self.assertIn("rawevt-runtime-001", runtime_by_id)
+        self.assertIn("rawevt-runtime-002", runtime_by_id)
+        self.assertEqual(runtime_by_id["rawevt-runtime-001"]["current_stage"], "route_decided")
+        self.assertEqual(runtime_by_id["rawevt-runtime-002"]["focus_stage"], "ai_intake_unavailable")
+        self.assertEqual(
+            next(stage for stage in runtime_by_id["rawevt-runtime-002"]["agent_stages"] if stage["stage_id"] == "router_agent")["status"],
+            "unavailable",
+        )
+
+    def test_events_detail_and_router_output_are_safe_and_on_demand(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            session = client.app.state.db_session_factory()
+            try:
+                self._seed_runtime_audit_news(session)
+                session.commit()
+            finally:
+                session.close()
+            self._login_with_client(client, settings)
+            detail_response = client.get("/api/v1/events/rawevt-runtime-001")
+            output_response = client.get(
+                "/api/v1/events/rawevt-runtime-001/router-output",
+                params={"routed_event_id": "evt-routed-runtime-001"},
+            )
+
+        detail = detail_response.json()["data"]
+        output = output_response.json()["data"]
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(output_response.status_code, 200)
+        self.assertEqual(detail["agent_stages"][0]["stage_id"], "router_agent")
+        self.assertTrue(detail["agent_stages"][0]["has_output_json"])
+        self.assertEqual(detail["agent_stages"][1]["stage_id"], "industry_main_agent")
+        self.assertEqual(detail["agent_stages"][1]["status"], "unavailable")
+        self.assertEqual(output["output_json"]["decision"], "route")
+        self.assertEqual(output["output_json"]["structured_news"]["reasoning_prompt"], "[REDACTED]")
+        self.assertEqual(output["output_json"]["routing"]["provider_raw_response"], "[REDACTED]")
+        self.assertEqual(output["output_json"]["routing"]["api_token"], "[REDACTED]")
+        self.assertNotIn("full HBM body", json.dumps(output, ensure_ascii=False))
+
+    def test_events_default_excludes_discard_and_explicit_filter_includes_it(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            session = client.app.state.db_session_factory()
+            try:
+                self._seed_runtime_audit_news(session)
+                session.add(
+                    EventIntakeRoutedEventORM(
+                        event_id="evt-routed-discard-001",
+                        schema_version="event_intake_decision.v2",
+                        raw_event_id="rawevt-runtime-002",
+                        source_message_id="evt-source-runtime-002",
+                        analysis_request_id="evt-analysis-runtime-002",
+                        binding_id="binding-runtime-002",
+                        owner_type="industry",
+                        owner_id="semiconductor",
+                        request_id="req-discard",
+                        correlation_id="corr-discard",
+                        decision="discard",
+                        discard_reason="irrelevant",
+                        status="success",
+                        summary="该新闻与半导体行业分析无关。",
+                        output_json={
+                            "schema_version": "event_intake_decision.v2",
+                            "decision": "discard",
+                            "discard_reason": "irrelevant",
+                            "quality": {"is_spam": False, "confidence": 0.8, "reason_summary": "信息无关。"},
+                            "industry_relevance": [],
+                            "structured_news": {"canonical_title": "无关新闻", "short_summary": "该新闻无关。"},
+                            "routing": {"target_industries": [], "target_topics": [], "priority": "low"},
+                            "audit": {"reason_summary": "不进入业务事件主列表。"},
+                        },
+                        key_fields={"decision": "discard", "short_summary": "该新闻与半导体行业分析无关。"},
+                        source_snapshot={},
+                        article_snapshot={},
+                        provider_invocation_count=1,
+                        invocation_metadata={"status": "succeeded"},
+                        created_at=datetime(2026, 6, 3, 9, 0, 0, tzinfo=UTC),
+                    )
+                )
+                session.commit()
+            finally:
+                session.close()
+            self._login_with_client(client, settings)
+            default_response = client.get("/api/v1/events")
+            discard_response = client.get("/api/v1/events", params={"decision": "discard"})
+
+        self.assertEqual([item["decision"] for item in default_response.json()["data"]["items"]], ["route"])
+        self.assertEqual([item["decision"] for item in discard_response.json()["data"]["items"]], ["discard"])
+
+    def test_events_filters_industry_package_and_sorts_on_server(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            session = client.app.state.db_session_factory()
+            try:
+                self._seed_runtime_audit_news(session)
+                session.add(
+                    self._event_routed_row(
+                        event_id="evt-routed-runtime-002",
+                        raw_event_id="rawevt-runtime-002",
+                        owner_id="semiconductor",
+                        summary="先进封装产能扩张会影响半导体供应链。",
+                        priority="normal",
+                        target_topics=["advanced-packaging"],
+                        created_at=datetime(2026, 6, 3, 9, 0, 0, tzinfo=UTC),
+                    )
+                )
+                session.add(
+                    self._event_routed_row(
+                        event_id="evt-routed-oil-001",
+                        raw_event_id="rawevt-runtime-001",
+                        owner_id="oil",
+                        summary="能源行业测试事件。",
+                        priority="low",
+                        target_industries=["oil"],
+                        target_topics=["shipping"],
+                        created_at=datetime(2026, 6, 4, 9, 0, 0, tzinfo=UTC),
+                    )
+                )
+                session.commit()
+            finally:
+                session.close()
+            self._login_with_client(client, settings)
+            default_response = client.get("/api/v1/events", params={"limit": 10})
+            published_response = client.get("/api/v1/events", params={"sort": "published_at_desc", "limit": 10})
+            industry_response = client.get("/api/v1/events", params={"industry_id": "semiconductor", "limit": 10})
+
+        self.assertEqual(default_response.status_code, 200)
+        self.assertEqual(published_response.status_code, 200)
+        self.assertEqual(industry_response.status_code, 200)
+        self.assertEqual(
+            [item["routed_event_id"] for item in default_response.json()["data"]["items"]],
+            ["evt-routed-oil-001", "evt-routed-runtime-002", "evt-routed-runtime-001"],
+        )
+        self.assertEqual(
+            [item["routed_event_id"] for item in published_response.json()["data"]["items"]],
+            ["evt-routed-runtime-002", "evt-routed-oil-001", "evt-routed-runtime-001"],
+        )
+        self.assertEqual(
+            [item["routed_event_id"] for item in industry_response.json()["data"]["items"]],
+            ["evt-routed-runtime-002", "evt-routed-runtime-001"],
+        )
+
+    def test_events_require_event_inspect_not_runtime_inspect(self) -> None:
+        database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        database_file.close()
+        self.addCleanup(lambda: os.unlink(database_file.name))
+        settings = self._settings(DATABASE_URL=f"sqlite+pysqlite:///{database_file.name}")
+        app = create_app(settings)
+
+        with TestClient(app) as client:
+            Base.metadata.create_all(client.app.state.db_engine)
+            runtime_only = issue_session("local_admin", settings, capabilities=frozenset({RUNTIME_INSPECT_CAPABILITY}))
+            client.cookies.set(settings.AUTH_COOKIE_NAME, runtime_only.value)
+            forbidden_response = client.get("/api/v1/events")
+            event_only = issue_session("local_admin", settings, capabilities=frozenset({EVENT_INSPECT_CAPABILITY}))
+            client.cookies.set(settings.AUTH_COOKIE_NAME, event_only.value)
+            allowed_response = client.get("/api/v1/events")
+
+        self.assertEqual(forbidden_response.status_code, 403)
+        self.assertEqual(allowed_response.status_code, 200)
+
     def test_model_provider_create_masks_key_and_test_connection_records_usage(self) -> None:
         database_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         database_file.close()
@@ -4011,6 +4255,61 @@ class ApiAppTestCase(unittest.TestCase):
                     metadata_json={},
                 ),
             ]
+        )
+
+    def _event_routed_row(
+        self,
+        *,
+        event_id: str,
+        raw_event_id: str,
+        owner_id: str,
+        summary: str,
+        priority: str,
+        target_topics: list[str],
+        created_at: datetime,
+        target_industries: list[str] | None = None,
+    ) -> EventIntakeRoutedEventORM:
+        industries = target_industries or [owner_id]
+        return EventIntakeRoutedEventORM(
+            event_id=event_id,
+            schema_version="event_intake_decision.v2",
+            raw_event_id=raw_event_id,
+            source_message_id=f"evt-source-{event_id}",
+            analysis_request_id=f"evt-analysis-{event_id}",
+            binding_id="binding-runtime-002",
+            owner_type="industry",
+            owner_id=owner_id,
+            request_id=f"req-{event_id}",
+            correlation_id=f"corr-{event_id}",
+            decision="route",
+            discard_reason="not_discarded",
+            status="success",
+            summary=summary,
+            output_json={
+                "schema_version": "event_intake_decision.v2",
+                "decision": "route",
+                "discard_reason": "not_discarded",
+                "quality": {"is_spam": False, "confidence": 0.7, "reason_summary": summary},
+                "industry_relevance": [{"industry_id": owner_id, "relationship": "direct", "relevance_score": 0.7}],
+                "structured_news": {"canonical_title": summary, "short_summary": summary, "event_type": "test"},
+                "routing": {"target_industries": industries, "target_topics": target_topics, "priority": priority},
+                "audit": {"reason_summary": summary, "schema_validation_status": "valid"},
+            },
+            key_fields={
+                "decision": "route",
+                "short_summary": summary,
+                "target_industries": industries,
+                "target_topics": target_topics,
+                "priority": priority,
+                "confidence": 0.7,
+                "relevance": f"{owner_id} / direct / 0.7",
+                "schema_validation_status": "valid",
+            },
+            source_snapshot={},
+            article_snapshot={},
+            provider_invocation_count=1,
+            invocation_metadata={"status": "succeeded"},
+            created_at=created_at,
         )
 
     def _seed_approval(self, client: TestClient, approval_id: str) -> None:

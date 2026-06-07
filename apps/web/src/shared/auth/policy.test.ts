@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   APPROVAL_APPROVE_CAPABILITY,
+  EVENT_INSPECT_CAPABILITY,
   PLUGIN_CONFIGURE_CAPABILITY,
   RUNTIME_INSPECT_CAPABILITY,
   SECRET_MANAGE_CAPABILITY,
@@ -17,11 +18,15 @@ import {
 } from './policy'
 
 describe('capability policy', () => {
-  it('allows runtime routes when runtime.inspect is present', () => {
+  it('separates events business audit from runtime diagnostics capability', () => {
     const capabilities = new Set<string>([RUNTIME_INSPECT_CAPABILITY])
 
-    expect(canAccessWorkspaceRoute(capabilities, '/events')).toMatchObject({
+    expect(canAccessWorkspaceRoute(new Set<string>([EVENT_INSPECT_CAPABILITY]), '/events')).toMatchObject({
       allowed: true,
+    })
+    expect(canAccessWorkspaceRoute(capabilities, '/events')).toEqual({
+      allowed: false,
+      missingAnyOf: [EVENT_INSPECT_CAPABILITY],
     })
     expect(getNavVisibility(capabilities, '/runtime')).toBe('visible')
   })
@@ -31,12 +36,12 @@ describe('capability policy', () => {
 
     expect(canAccessWorkspaceRoute(capabilities, '/events')).toEqual({
       allowed: false,
-      missingAnyOf: [RUNTIME_INSPECT_CAPABILITY],
+      missingAnyOf: [EVENT_INSPECT_CAPABILITY],
     })
   })
 
   it('returns only visible nav items from the shared policy', () => {
-    const capabilities = new Set<string>([RUNTIME_INSPECT_CAPABILITY, APPROVAL_APPROVE_CAPABILITY])
+    const capabilities = new Set<string>([EVENT_INSPECT_CAPABILITY, RUNTIME_INSPECT_CAPABILITY, APPROVAL_APPROVE_CAPABILITY])
 
     expect(listVisibleNavItems(capabilities).map((item) => item.to)).toEqual([
       '/',

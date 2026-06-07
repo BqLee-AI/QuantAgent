@@ -14,8 +14,13 @@ SENSITIVE_KEYWORDS = frozenset(
     {
         "api_key",
         "authorization",
+        "chain_of_thought",
         "cookie",
         "password",
+        "prompt",
+        "provider_raw_response",
+        "raw_response",
+        "reasoning",
         "secret",
         "session",
         "token",
